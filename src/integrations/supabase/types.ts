@@ -14,7 +14,181 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      cluster_events: {
+        Row: {
+          cluster_id: string
+          created_at: string | null
+          details: Json | null
+          event_type: string
+          id: string
+          message: string
+          user_id: string
+        }
+        Insert: {
+          cluster_id: string
+          created_at?: string | null
+          details?: Json | null
+          event_type: string
+          id?: string
+          message: string
+          user_id: string
+        }
+        Update: {
+          cluster_id?: string
+          created_at?: string | null
+          details?: Json | null
+          event_type?: string
+          id?: string
+          message?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cluster_events_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      clusters: {
+        Row: {
+          api_endpoint: string
+          cluster_type: string
+          cpu_usage: number | null
+          created_at: string | null
+          environment: string
+          id: string
+          last_sync: string | null
+          memory_usage: number | null
+          monthly_cost: number | null
+          name: string
+          nodes: number | null
+          pods: number | null
+          provider: string
+          region: string | null
+          status: string
+          storage_used_gb: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          api_endpoint: string
+          cluster_type: string
+          cpu_usage?: number | null
+          created_at?: string | null
+          environment: string
+          id?: string
+          last_sync?: string | null
+          memory_usage?: number | null
+          monthly_cost?: number | null
+          name: string
+          nodes?: number | null
+          pods?: number | null
+          provider: string
+          region?: string | null
+          status?: string
+          storage_used_gb?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          api_endpoint?: string
+          cluster_type?: string
+          cpu_usage?: number | null
+          created_at?: string | null
+          environment?: string
+          id?: string
+          last_sync?: string | null
+          memory_usage?: number | null
+          monthly_cost?: number | null
+          name?: string
+          nodes?: number | null
+          pods?: number | null
+          provider?: string
+          region?: string | null
+          status?: string
+          storage_used_gb?: number | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          company: string | null
+          created_at: string | null
+          email: string
+          full_name: string | null
+          id: string
+          updated_at: string | null
+        }
+        Insert: {
+          company?: string | null
+          created_at?: string | null
+          email: string
+          full_name?: string | null
+          id: string
+          updated_at?: string | null
+        }
+        Update: {
+          company?: string | null
+          created_at?: string | null
+          email?: string
+          full_name?: string | null
+          id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      security_audits: {
+        Row: {
+          category: string
+          cluster_id: string
+          created_at: string | null
+          description: string
+          id: string
+          resolved_at: string | null
+          severity: string
+          status: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          category: string
+          cluster_id: string
+          created_at?: string | null
+          description: string
+          id?: string
+          resolved_at?: string | null
+          severity: string
+          status?: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          cluster_id?: string
+          created_at?: string | null
+          description?: string
+          id?: string
+          resolved_at?: string | null
+          severity?: string
+          status?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "security_audits_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
