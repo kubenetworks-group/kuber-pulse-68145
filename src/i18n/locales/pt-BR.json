@@ -134,7 +134,13 @@
     "total": "Total",
     "downtimePrevention": "Prevenção de Inatividade",
     "resourceOptimization": "Otimização de Recursos",
-    "scaleOptimization": "Otimização de Escala"
+    "scaleOptimization": "Otimização de Escala",
+    "providerCost": "Custo do Provider",
+    "withAI": "com IA",
+    "chartView": "Gráfico",
+    "tableView": "Tabela",
+    "month": "Mês",
+    "savingsPercent": "% Economia"
   },
   "clusters": {
     "title": "Gerenciamento de Clusters",

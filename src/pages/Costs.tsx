@@ -1,19 +1,24 @@
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { CostBreakdownChart } from "@/components/CostBreakdownChart";
+import { CostTableView } from "@/components/CostTableView";
 import { AISavingsCard } from "@/components/AISavingsCard";
 import { Card } from "@/components/ui/card";
-import { DollarSign, TrendingDown, TrendingUp, Sparkles } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { DollarSign, TrendingDown, TrendingUp, Sparkles, BarChart3, Table as TableIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTranslation } from "react-i18next";
 import { useCurrency } from "@/hooks/useCurrency";
+import { useCluster } from "@/contexts/ClusterContext";
 
 const Costs = () => {
   const { user } = useAuth();
   const { t } = useTranslation();
   const { formatCurrency } = useCurrency();
+  const { selectedClusterId } = useCluster();
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<'chart' | 'table'>('chart');
   const [currentMonthCost, setCurrentMonthCost] = useState(0);
   const [lastMonthCost, setLastMonthCost] = useState(0);
   const [savingsThisMonth, setSavingsThisMonth] = useState(0);
@@ -27,10 +32,10 @@ const Costs = () => {
   const [clusterCosts, setClusterCosts] = useState<any[]>([]);
 
   useEffect(() => {
-    if (user) {
+    if (user && selectedClusterId) {
       fetchCostData();
     }
-  }, [user]);
+  }, [user, selectedClusterId]);
 
   const fetchCostData = async () => {
     setLoading(true);
@@ -41,40 +46,44 @@ const Costs = () => {
       const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
       const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59).toISOString();
 
-      // Fetch current month costs
+      // Fetch current month costs for selected cluster
       const { data: currentCosts } = await supabase
         .from('cost_calculations')
         .select('*')
+        .eq('cluster_id', selectedClusterId)
         .gte('calculation_date', startOfMonth)
         .lte('calculation_date', endOfMonth);
 
       const currentTotal = currentCosts?.reduce((sum, c) => sum + Number(c.total_cost), 0) || 0;
       setCurrentMonthCost(currentTotal);
 
-      // Fetch last month costs
+      // Fetch last month costs for selected cluster
       const { data: lastCosts } = await supabase
         .from('cost_calculations')
         .select('*')
+        .eq('cluster_id', selectedClusterId)
         .gte('calculation_date', startOfLastMonth)
         .lte('calculation_date', endOfLastMonth);
 
       const lastTotal = lastCosts?.reduce((sum, c) => sum + Number(c.total_cost), 0) || 0;
       setLastMonthCost(lastTotal);
 
-      // Fetch savings this month
+      // Fetch savings this month for selected cluster
       const { data: currentSavings } = await supabase
         .from('ai_cost_savings')
         .select('*')
+        .eq('cluster_id', selectedClusterId)
         .gte('created_at', startOfMonth)
         .lte('created_at', endOfMonth);
 
       const savingsThisMonthTotal = currentSavings?.reduce((sum, s) => sum + Number(s.estimated_savings), 0) || 0;
       setSavingsThisMonth(savingsThisMonthTotal);
 
-      // Fetch total savings
+      // Fetch total savings for selected cluster
       const { data: allSavings } = await supabase
         .from('ai_cost_savings')
-        .select('*');
+        .select('*')
+        .eq('cluster_id', selectedClusterId);
 
       const totalSavingsAmount = allSavings?.reduce((sum, s) => sum + Number(s.estimated_savings), 0) || 0;
       setTotalSavings(totalSavingsAmount);
@@ -95,17 +104,43 @@ const Costs = () => {
       setSavingsByType(byType);
 
       // Generate chart data (last 6 months)
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
-      const generatedChartData = months.map((month, index) => {
-        const baseCost = 3500 + Math.random() * 1000;
-        const savings = 200 + Math.random() * 400;
-        return {
-          month,
-          cost: Number(baseCost.toFixed(2)),
-          savings: Number(savings.toFixed(2)),
-          net: Number((baseCost - savings).toFixed(2))
-        };
-      });
+      const months = [];
+      for (let i = 5; i >= 0; i--) {
+        const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        months.push({
+          month: date.toLocaleDateString('en-US', { month: 'short' }),
+          startDate: new Date(date.getFullYear(), date.getMonth(), 1).toISOString(),
+          endDate: new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59).toISOString()
+        });
+      }
+
+      const generatedChartData = await Promise.all(
+        months.map(async ({ month, startDate, endDate }) => {
+          const { data: costs } = await supabase
+            .from('cost_calculations')
+            .select('total_cost')
+            .eq('cluster_id', selectedClusterId)
+            .gte('calculation_date', startDate)
+            .lte('calculation_date', endDate);
+
+          const { data: savings } = await supabase
+            .from('ai_cost_savings')
+            .select('estimated_savings')
+            .eq('cluster_id', selectedClusterId)
+            .gte('created_at', startDate)
+            .lte('created_at', endDate);
+
+          const cost = costs?.reduce((sum, c) => sum + Number(c.total_cost), 0) || 0;
+          const saving = savings?.reduce((sum, s) => sum + Number(s.estimated_savings), 0) || 0;
+
+          return {
+            month,
+            cost: Number(cost.toFixed(2)),
+            savings: Number(saving.toFixed(2)),
+            net: Number((cost - saving).toFixed(2))
+          };
+        })
+      );
 
       setChartData(generatedChartData);
 
@@ -150,11 +185,33 @@ const Costs = () => {
   return (
     <DashboardLayout>
       <div className="p-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-            {t('costs.title')}
-          </h1>
-          <p className="text-muted-foreground mt-1">{t('costs.monthlyAnalysis')}</p>
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+              {t('costs.title')}
+            </h1>
+            <p className="text-muted-foreground mt-1">{t('costs.monthlyAnalysis')}</p>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant={viewMode === 'chart' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setViewMode('chart')}
+              className="gap-2"
+            >
+              <BarChart3 className="w-4 h-4" />
+              {t('costs.chartView')}
+            </Button>
+            <Button
+              variant={viewMode === 'table' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setViewMode('table')}
+              className="gap-2"
+            >
+              <TableIcon className="w-4 h-4" />
+              {t('costs.tableView')}
+            </Button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
@@ -223,7 +280,11 @@ const Costs = () => {
           </Card>
         </div>
 
-        <CostBreakdownChart data={chartData} />
+        {viewMode === 'chart' ? (
+          <CostBreakdownChart data={chartData} />
+        ) : (
+          <CostTableView data={chartData} />
+        )}
 
         <Card className="p-6 bg-card border-border shadow-card mt-6 hover:shadow-glow transition-all">
           <h3 className="text-lg font-semibold text-card-foreground mb-4">{t('clusters.monthlyCost')}</h3>
