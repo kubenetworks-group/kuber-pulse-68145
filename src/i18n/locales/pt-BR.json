@@ -140,7 +140,8 @@
     "chartView": "Gráfico",
     "tableView": "Tabela",
     "month": "Mês",
-    "savingsPercent": "% Economia"
+    "savingsPercent": "% Economia",
+    "aiSavingsDetails": "Detalhes de Economia com IA"
   },
   "clusters": {
     "title": "Gerenciamento de Clusters",

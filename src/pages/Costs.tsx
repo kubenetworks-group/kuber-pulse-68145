@@ -4,7 +4,7 @@ import { CostTableView } from "@/components/CostTableView";
 import { AISavingsCard } from "@/components/AISavingsCard";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { DollarSign, TrendingDown, TrendingUp, Sparkles, BarChart3, Table as TableIcon } from "lucide-react";
+import { DollarSign, TrendingDown, TrendingUp, Sparkles, BarChart3, Table as TableIcon, Bot } from "lucide-react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -30,12 +30,75 @@ const Costs = () => {
   });
   const [chartData, setChartData] = useState<any[]>([]);
   const [clusterCosts, setClusterCosts] = useState<any[]>([]);
+  const [aiSavingsDetails, setAiSavingsDetails] = useState<any[]>([]);
 
   useEffect(() => {
     if (user && selectedClusterId) {
       fetchCostData();
+      generateMockAISavings();
     }
   }, [user, selectedClusterId]);
+
+  const generateMockAISavings = () => {
+    const mockSavings = [
+      {
+        id: '1',
+        type: 'downtime_prevention',
+        title: 'Prevenção de Downtime Automática',
+        description: 'IA detectou e corrigiu 12 pods em crash loop, evitando indisponibilidade do serviço',
+        savings: 2400,
+        incidents: 12,
+        date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: '2',
+        type: 'resource_optimization',
+        title: 'Otimização de Recursos',
+        description: 'Ajuste automático de CPU/Memory requests reduziu custos de infraestrutura',
+        savings: 1850,
+        incidents: 8,
+        date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: '3',
+        type: 'scale_optimization',
+        title: 'Escala Inteligente de Pods',
+        description: 'Ajuste automático de replicas baseado em padrões de uso reduziu over-provisioning',
+        savings: 3200,
+        incidents: 15,
+        date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: '4',
+        type: 'storage_optimization',
+        title: 'Otimização de Storage',
+        description: 'Migração automática para storage classes mais econômicas sem perda de performance',
+        savings: 980,
+        incidents: 5,
+        date: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: '5',
+        type: 'downtime_prevention',
+        title: 'Correção de Memory Leaks',
+        description: 'IA identificou e reiniciou pods com memory leak antes de afetar o cluster',
+        savings: 1500,
+        incidents: 6,
+        date: new Date(Date.now() - 12 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: '6',
+        type: 'resource_optimization',
+        title: 'Desligamento de Recursos Ociosos',
+        description: 'Identificação e desligamento de pods em desenvolvimento não utilizados',
+        savings: 1100,
+        incidents: 9,
+        date: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+    ];
+
+    setAiSavingsDetails(mockSavings);
+  };
 
   const fetchCostData = async () => {
     setLoading(true);
@@ -285,6 +348,74 @@ const Costs = () => {
         ) : (
           <CostTableView data={chartData} />
         )}
+
+        {/* AI Savings Details */}
+        <Card className="p-6 bg-gradient-card border-border shadow-card mt-6 hover:shadow-glow transition-all">
+          <div className="flex items-center gap-2 mb-6">
+            <div className="p-2 rounded-lg bg-gradient-success">
+              <Sparkles className="w-5 h-5 text-success-foreground" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-card-foreground">{t('costs.aiSavingsDetails')}</h3>
+              <p className="text-sm text-muted-foreground">Ações automáticas da IA que geraram economia</p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            {aiSavingsDetails.map((saving) => {
+              const savingFormatted = formatCurrency(saving.savings, { sourceCurrency: 'USD' });
+              const typeColors = {
+                downtime_prevention: 'bg-destructive/10 text-destructive border-destructive/20',
+                resource_optimization: 'bg-primary/10 text-primary border-primary/20',
+                scale_optimization: 'bg-accent/10 text-accent border-accent/20',
+                storage_optimization: 'bg-warning/10 text-warning border-warning/20',
+              };
+
+              return (
+                <div
+                  key={saving.id}
+                  className="p-4 rounded-lg border bg-gradient-to-r from-background to-muted/20 hover:shadow-md transition-all"
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className={`px-3 py-1 rounded-full text-xs font-medium border ${typeColors[saving.type as keyof typeof typeColors]}`}>
+                          {saving.type.replace('_', ' ').toUpperCase()}
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(saving.date).toLocaleDateString('pt-BR')}
+                        </span>
+                      </div>
+                      <h4 className="font-semibold text-card-foreground mb-1">{saving.title}</h4>
+                      <p className="text-sm text-muted-foreground">{saving.description}</p>
+                    </div>
+                    <div className="text-right ml-4">
+                      <div className="text-2xl font-bold text-success">{savingFormatted.value}</div>
+                      {savingFormatted.converted && savingFormatted.note && (
+                        <p className="text-xs text-muted-foreground">* {savingFormatted.note}</p>
+                      )}
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {saving.incidents} {saving.incidents === 1 ? 'incidente' : 'incidentes'}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <TrendingDown className="w-3 h-3" />
+                    <span>Economia gerada automaticamente pela IA</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {aiSavingsDetails.length === 0 && (
+            <div className="text-center py-8 text-muted-foreground">
+              <Bot className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>Nenhuma economia registrada ainda</p>
+              <p className="text-xs mt-1">A IA começará a gerar economias automaticamente</p>
+            </div>
+          )}
+        </Card>
 
         <Card className="p-6 bg-card border-border shadow-card mt-6 hover:shadow-glow transition-all">
           <h3 className="text-lg font-semibold text-card-foreground mb-4">{t('clusters.monthlyCost')}</h3>

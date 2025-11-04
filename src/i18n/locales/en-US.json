@@ -140,7 +140,8 @@
     "chartView": "Chart",
     "tableView": "Table",
     "month": "Month",
-    "savingsPercent": "% Savings"
+    "savingsPercent": "% Savings",
+    "aiSavingsDetails": "AI Savings Details"
   },
   "clusters": {
     "title": "Cluster Management",

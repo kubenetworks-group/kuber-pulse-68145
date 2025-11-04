@@ -140,7 +140,8 @@
     "chartView": "Gráfico",
     "tableView": "Tabla",
     "month": "Mes",
-    "savingsPercent": "% Ahorro"
+    "savingsPercent": "% Ahorro",
+    "aiSavingsDetails": "Detalles de Ahorro con IA"
   },
   "clusters": {
     "title": "Gestión de Clústeres",
