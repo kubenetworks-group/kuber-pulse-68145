@@ -377,38 +377,6 @@ const Costs = () => {
             </div>
           )}
         </Card>
-
-        <Card className="p-6 bg-card border-border shadow-card mt-6 hover:shadow-glow transition-all">
-          <h3 className="text-lg font-semibold text-card-foreground mb-4">{t('clusters.monthlyCost')}</h3>
-          <div className="space-y-4">
-            {clusterCosts.length > 0 ? (
-              clusterCosts.map((cluster) => {
-                const clusterCostFormatted = formatCurrency(cluster.cost, { sourceCurrency: 'USD' });
-                return (
-                  <div key={cluster.name} className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-card-foreground font-medium">{cluster.name}</span>
-                      <div className="text-right">
-                        <span className="text-muted-foreground">{clusterCostFormatted.value}</span>
-                        {clusterCostFormatted.converted && clusterCostFormatted.note && (
-                          <p className="text-xs text-muted-foreground">* {clusterCostFormatted.note}</p>
-                        )}
-                      </div>
-                    </div>
-                    <div className="w-full bg-muted rounded-full h-2">
-                      <div
-                        className="bg-primary h-2 rounded-full transition-all"
-                        style={{ width: `${cluster.percentage}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })
-            ) : (
-              <p className="text-center text-muted-foreground py-4">{t('clusters.noclusters')}</p>
-            )}
-          </div>
-        </Card>
       </div>
     </DashboardLayout>
   );
