@@ -23,6 +23,7 @@ const Clusters = () => {
     cluster_type: "kubernetes",
     api_endpoint: "",
     region: "",
+    config_file: "",
   });
 
   useEffect(() => {
@@ -44,6 +45,18 @@ const Clusters = () => {
       setClusters(data || []);
     }
     setLoading(false);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const content = event.target?.result as string;
+        setFormData({ ...formData, config_file: content });
+      };
+      reader.readAsText(file);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -69,6 +82,7 @@ const Clusters = () => {
         cluster_type: "kubernetes",
         api_endpoint: "",
         region: "",
+        config_file: "",
       });
       fetchClusters();
     }
@@ -156,16 +170,35 @@ const Clusters = () => {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="api_endpoint">API Endpoint</Label>
-                  <Input
-                    id="api_endpoint"
-                    required
-                    value={formData.api_endpoint}
-                    onChange={(e) => setFormData({ ...formData, api_endpoint: e.target.value })}
-                    placeholder="https://api.cluster.example.com"
-                  />
-                </div>
+                {formData.cluster_type === "kubernetes" ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="config_file">Kubernetes Config File (YAML)</Label>
+                    <Input
+                      id="config_file"
+                      type="file"
+                      accept=".yml,.yaml"
+                      onChange={handleFileUpload}
+                      required
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Upload your kubeconfig.yml file
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label htmlFor="api_endpoint">Docker Endpoint</Label>
+                    <Input
+                      id="api_endpoint"
+                      required
+                      value={formData.api_endpoint}
+                      onChange={(e) => setFormData({ ...formData, api_endpoint: e.target.value })}
+                      placeholder="unix:///var/run/docker.sock or tcp://host:2375"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Specify where your Docker cluster is located
+                    </p>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="region">Region (Optional)</Label>
                   <Input
