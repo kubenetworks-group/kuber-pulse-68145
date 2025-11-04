@@ -56,6 +56,7 @@ export type Database = {
         Row: {
           api_endpoint: string
           cluster_type: string
+          config_file: string | null
           cpu_usage: number | null
           created_at: string | null
           environment: string
@@ -76,6 +77,7 @@ export type Database = {
         Insert: {
           api_endpoint: string
           cluster_type: string
+          config_file?: string | null
           cpu_usage?: number | null
           created_at?: string | null
           environment: string
@@ -96,6 +98,7 @@ export type Database = {
         Update: {
           api_endpoint?: string
           cluster_type?: string
+          config_file?: string | null
           cpu_usage?: number | null
           created_at?: string | null
           environment?: string
