@@ -7,10 +7,12 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { Database, Loader2 } from "lucide-react";
 
 const Settings = () => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [demoLoading, setDemoLoading] = useState(false);
   const [profile, setProfile] = useState({
     full_name: "",
     company: "",
@@ -36,6 +38,23 @@ const Settings = () => {
         full_name: data.full_name || "",
         company: data.company || "",
       });
+    }
+  };
+
+  const handleGenerateDemoData = async () => {
+    setDemoLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('seed-demo-data');
+
+      if (error) throw error;
+
+      toast.success(`Generated ${data.clusters} clusters and ${data.incidents} AI incidents!`);
+      
+      setTimeout(() => window.location.href = '/', 2000);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to generate demo data");
+    } finally {
+      setDemoLoading(false);
     }
   };
 

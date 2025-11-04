@@ -8,6 +8,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Clusters from "./pages/Clusters";
+import AIMonitor from "./pages/AIMonitor";
 import Security from "./pages/Security";
 import Costs from "./pages/Costs";
 import Settings from "./pages/Settings";
@@ -37,6 +38,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Clusters />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/ai-monitor"
+              element={
+                <ProtectedRoute>
+                  <AIMonitor />
                 </ProtectedRoute>
               }
             />

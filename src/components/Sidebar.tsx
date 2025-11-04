@@ -8,15 +8,17 @@ import {
   Settings,
   LogOut,
   LayoutDashboard,
+  Bot,
 } from "lucide-react";
 
-const navigation = [
-  { name: "Dashboard", href: "/", icon: LayoutDashboard },
-  { name: "Clusters", href: "/clusters", icon: Server },
-  { name: "Security", href: "/security", icon: Shield },
-  { name: "Costs", href: "/costs", icon: DollarSign },
-  { name: "Settings", href: "/settings", icon: Settings },
-];
+  const navigation = [
+    { name: "Dashboard", href: "/", icon: LayoutDashboard },
+    { name: "Clusters", href: "/clusters", icon: Server },
+    { name: "AI Monitor", href: "/ai-monitor", icon: Bot },
+    { name: "Security", href: "/security", icon: Shield },
+    { name: "Costs", href: "/costs", icon: DollarSign },
+    { name: "Settings", href: "/settings", icon: Settings },
+  ];
 
 export const Sidebar = () => {
   const location = useLocation();
