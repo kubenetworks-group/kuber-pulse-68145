@@ -7,7 +7,7 @@ import { Link } from "react-router-dom";
 type Cluster = {
   id: string;
   name: string;
-  status: 'healthy' | 'warning' | 'error' | 'connecting';
+  status: 'healthy' | 'warning' | 'critical' | 'connecting';
   environment: string;
   provider: string;
   nodes: number;
@@ -34,7 +34,7 @@ const statusConfig = {
     pulse: true,
     icon: "text-yellow-400"
   },
-  error: {
+  critical: {
     gradient: "from-red-500/20 to-red-600/20",
     border: "border-red-500/50",
     pulse: true,
