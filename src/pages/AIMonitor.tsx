@@ -137,16 +137,28 @@ export default function AIMonitor() {
 
   const handleExecuteAction = async (incidentId: string) => {
     toast({
-      title: "Executing action...",
-      description: "AI is performing the corrective action"
+      title: "Executando ação...",
+      description: "A IA está realizando a ação corretiva"
     });
     
     // In a real app, this would call an edge function
     // For now, simulate action execution
-    setTimeout(() => {
+    setTimeout(async () => {
+      // Create notification
+      await supabase
+        .from('notifications')
+        .insert({
+          user_id: user?.id,
+          title: '✅ Pod Curado pela IA',
+          message: 'A IA concluiu o processo de cura do pod com sucesso. O incidente foi resolvido automaticamente.',
+          type: 'success',
+          related_entity_type: 'incident',
+          related_entity_id: incidentId
+        });
+
       toast({
-        title: "Action completed",
-        description: "The incident has been resolved",
+        title: "Ação concluída",
+        description: "O incidente foi resolvido",
       });
       fetchData();
     }, 2000);

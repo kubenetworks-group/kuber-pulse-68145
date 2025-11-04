@@ -83,6 +83,28 @@
     "actionTaken": "Action Taken",
     "resolved": "Resolved"
   },
+  "security": {
+    "title": "Security Audit",
+    "description": "Intelligent vulnerability and configuration scanning",
+    "startScan": "Start Scan",
+    "scanning": "Scanning...",
+    "selectCluster": "Select a cluster",
+    "allClusters": "All Clusters",
+    "lastScan": "Last scan",
+    "critical": "Critical",
+    "high": "High",
+    "medium": "Medium",
+    "low": "Low",
+    "passed": "Passed",
+    "specialist": "Specialist",
+    "scanComplete": "Scan Complete",
+    "noScan": "No scan performed",
+    "aiAnalyzing": "AI Analyzing Cluster",
+    "affectedResources": "Affected Resources",
+    "aiRecommendation": "AI Recommendation",
+    "specialistRequired": "Specialist Attention Required",
+    "hireSpecialist": "Hire DevOps Specialist"
+  },
   "settings": {
     "title": "Settings",
     "profile": "Profile",

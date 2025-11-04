@@ -83,6 +83,28 @@
     "actionTaken": "Acción Tomada",
     "resolved": "Resuelto"
   },
+  "security": {
+    "title": "Auditoría de Seguridad",
+    "description": "Escaneo inteligente de vulnerabilidades y configuraciones",
+    "startScan": "Iniciar Escaneo",
+    "scanning": "Escaneando...",
+    "selectCluster": "Seleccionar un cluster",
+    "allClusters": "Todos los Clusters",
+    "lastScan": "Último escaneo",
+    "critical": "Crítico",
+    "high": "Alto",
+    "medium": "Medio",
+    "low": "Bajo",
+    "passed": "OK",
+    "specialist": "Especialista",
+    "scanComplete": "Escaneo Completado",
+    "noScan": "No se realizó ningún escaneo",
+    "aiAnalyzing": "IA Analizando Cluster",
+    "affectedResources": "Recursos Afectados",
+    "aiRecommendation": "Recomendación de la IA",
+    "specialistRequired": "Atención Especializada Necesaria",
+    "hireSpecialist": "Contratar Especialista DevOps"
+  },
   "settings": {
     "title": "Configuración",
     "profile": "Perfil",

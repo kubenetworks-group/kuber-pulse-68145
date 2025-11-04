@@ -83,6 +83,28 @@
     "actionTaken": "Ação Tomada",
     "resolved": "Resolvido"
   },
+  "security": {
+    "title": "Auditoria de Segurança",
+    "description": "Varredura inteligente de vulnerabilidades e configurações",
+    "startScan": "Iniciar Varredura",
+    "scanning": "Analisando...",
+    "selectCluster": "Selecione um cluster",
+    "allClusters": "Todos os Clusters",
+    "lastScan": "Última varredura",
+    "critical": "Crítico",
+    "high": "Alto",
+    "medium": "Médio",
+    "low": "Baixo",
+    "passed": "OK",
+    "specialist": "Especialista",
+    "scanComplete": "Varredura Concluída",
+    "noScan": "Nenhuma varredura realizada",
+    "aiAnalyzing": "IA Analisando Cluster",
+    "affectedResources": "Recursos Afetados",
+    "aiRecommendation": "Recomendação da IA",
+    "specialistRequired": "Atenção Especializada Necessária",
+    "hireSpecialist": "Contratar Especialista DevOps"
+  },
   "settings": {
     "title": "Configurações",
     "profile": "Perfil",
