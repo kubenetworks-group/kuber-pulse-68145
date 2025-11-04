@@ -12,6 +12,7 @@ import AIMonitor from "./pages/AIMonitor";
 import Security from "./pages/Security";
 import Costs from "./pages/Costs";
 import Users from "./pages/Users";
+import Storage from "./pages/Storage";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
@@ -71,6 +72,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Users />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/storage"
+              element={
+                <ProtectedRoute>
+                  <Storage />
                 </ProtectedRoute>
               }
             />

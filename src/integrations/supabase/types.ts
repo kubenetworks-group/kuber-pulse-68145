@@ -188,6 +188,8 @@ export type Database = {
           provider: string
           region: string | null
           status: string
+          storage_available_gb: number | null
+          storage_total_gb: number | null
           storage_used_gb: number | null
           updated_at: string | null
           user_id: string
@@ -210,6 +212,8 @@ export type Database = {
           provider: string
           region?: string | null
           status?: string
+          storage_available_gb?: number | null
+          storage_total_gb?: number | null
           storage_used_gb?: number | null
           updated_at?: string | null
           user_id: string
@@ -232,6 +236,8 @@ export type Database = {
           provider?: string
           region?: string | null
           status?: string
+          storage_available_gb?: number | null
+          storage_total_gb?: number | null
           storage_used_gb?: number | null
           updated_at?: string | null
           user_id?: string
@@ -354,6 +360,59 @@ export type Database = {
         }
         Relationships: []
       }
+      pvcs: {
+        Row: {
+          cluster_id: string
+          created_at: string | null
+          id: string
+          last_sync: string | null
+          name: string
+          namespace: string
+          requested_bytes: number
+          status: string
+          storage_class: string | null
+          updated_at: string | null
+          used_bytes: number
+          user_id: string
+        }
+        Insert: {
+          cluster_id: string
+          created_at?: string | null
+          id?: string
+          last_sync?: string | null
+          name: string
+          namespace: string
+          requested_bytes?: number
+          status?: string
+          storage_class?: string | null
+          updated_at?: string | null
+          used_bytes?: number
+          user_id: string
+        }
+        Update: {
+          cluster_id?: string
+          created_at?: string | null
+          id?: string
+          last_sync?: string | null
+          name?: string
+          namespace?: string
+          requested_bytes?: number
+          status?: string
+          storage_class?: string | null
+          updated_at?: string | null
+          used_bytes?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pvcs_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       security_audits: {
         Row: {
           category: string
@@ -397,6 +456,72 @@ export type Database = {
             columns: ["cluster_id"]
             isOneToOne: false
             referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      storage_recommendations: {
+        Row: {
+          applied_at: string | null
+          cluster_id: string
+          created_at: string | null
+          current_size_gb: number
+          days_analyzed: number | null
+          id: string
+          potential_savings: number | null
+          pvc_id: string
+          reasoning: string
+          recommendation_type: string
+          recommended_size_gb: number
+          status: string | null
+          usage_percentage: number
+          user_id: string
+        }
+        Insert: {
+          applied_at?: string | null
+          cluster_id: string
+          created_at?: string | null
+          current_size_gb: number
+          days_analyzed?: number | null
+          id?: string
+          potential_savings?: number | null
+          pvc_id: string
+          reasoning: string
+          recommendation_type: string
+          recommended_size_gb: number
+          status?: string | null
+          usage_percentage: number
+          user_id: string
+        }
+        Update: {
+          applied_at?: string | null
+          cluster_id?: string
+          created_at?: string | null
+          current_size_gb?: number
+          days_analyzed?: number | null
+          id?: string
+          potential_savings?: number | null
+          pvc_id?: string
+          reasoning?: string
+          recommendation_type?: string
+          recommended_size_gb?: number
+          status?: string | null
+          usage_percentage?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "storage_recommendations_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "storage_recommendations_pvc_id_fkey"
+            columns: ["pvc_id"]
+            isOneToOne: false
+            referencedRelation: "pvcs"
             referencedColumns: ["id"]
           },
         ]

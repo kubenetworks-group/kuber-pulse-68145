@@ -14,6 +14,7 @@ import {
   LayoutDashboard,
   Bot,
   Users,
+  Database,
 } from "lucide-react";
 
 export const Sidebar = () => {
@@ -25,6 +26,7 @@ export const Sidebar = () => {
   const baseNavigation = [
     { name: t('common.dashboard'), href: "/", icon: LayoutDashboard },
     { name: t('common.clusters'), href: "/clusters", icon: Server },
+    { name: t('common.storage'), href: "/storage", icon: Database },
     { name: t('common.aiMonitor'), href: "/ai-monitor", icon: Bot },
     { name: t('common.security'), href: "/security", icon: Shield },
     { name: t('common.costs'), href: "/costs", icon: DollarSign },
