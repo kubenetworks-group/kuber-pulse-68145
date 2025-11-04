@@ -302,11 +302,11 @@ const Clusters = () => {
 
   return (
     <DashboardLayout>
-      <div className="p-8">
-        <div className="flex items-center justify-between mb-8">
+      <div className="p-4 sm:p-6 lg:p-8">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 sm:mb-8 gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Clusters</h1>
-            <p className="text-muted-foreground mt-1">Manage your infrastructure clusters</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Clusters</h1>
+            <p className="text-muted-foreground mt-1 text-sm sm:text-base">Manage your infrastructure clusters</p>
           </div>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>

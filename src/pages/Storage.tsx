@@ -130,13 +130,13 @@ export default function Storage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="p-4 sm:p-6 lg:p-8 space-y-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">{t('storage.title')}</h1>
-            <p className="text-muted-foreground">{t('storage.subtitle')}</p>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{t('storage.title')}</h1>
+            <p className="text-muted-foreground text-sm sm:text-base">{t('storage.subtitle')}</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Select value={selectedClusterId} onValueChange={setSelectedClusterId}>
               <SelectTrigger className="w-[200px]">
                 <SelectValue placeholder={t('storage.selectCluster')} />

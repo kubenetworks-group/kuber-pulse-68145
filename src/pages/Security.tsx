@@ -204,20 +204,20 @@ const Security = () => {
 
   return (
     <DashboardLayout>
-      <div className="p-8 space-y-6">
+      <div className="p-4 sm:p-6 lg:p-8 space-y-6">
         {/* Header */}
-        <div className="flex items-start justify-between">
+        <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
           <div>
-            <h1 className="text-4xl font-bold mb-2 bg-gradient-primary bg-clip-text text-transparent">
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-2 bg-gradient-primary bg-clip-text text-transparent">
               Auditoria de Segurança com IA
             </h1>
-            <p className="text-muted-foreground">
+            <p className="text-muted-foreground text-sm sm:text-base">
               Varredura inteligente de vulnerabilidades e configurações de segurança
             </p>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full sm:w-auto">
             <Select value={selectedCluster} onValueChange={setSelectedCluster}>
-              <SelectTrigger className="w-[250px]">
+              <SelectTrigger className="w-full sm:w-[250px]">
                 <SelectValue placeholder="Selecione um cluster" />
               </SelectTrigger>
               <SelectContent>
@@ -278,7 +278,7 @@ const Security = () => {
 
         {/* Stats Grid */}
         {scanResults.length > 0 && (
-          <div className="grid gap-4 md:grid-cols-6">
+          <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
             <Card className="bg-gradient-to-br from-destructive/10 to-destructive/5 border-destructive/20">
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between">

@@ -136,14 +136,14 @@ export default function Users() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="p-4 sm:p-6 lg:p-8 space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-card-foreground flex items-center gap-2">
-              <UsersIcon className="w-8 h-8" />
+            <h1 className="text-2xl sm:text-3xl font-bold text-card-foreground flex items-center gap-2">
+              <UsersIcon className="w-6 h-6 sm:w-8 sm:h-8" />
               {t("users.title")}
             </h1>
-            <p className="text-muted-foreground mt-2">{t("users.description")}</p>
+            <p className="text-muted-foreground mt-2 text-sm sm:text-base">{t("users.description")}</p>
           </div>
         </div>
 

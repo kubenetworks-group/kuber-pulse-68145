@@ -184,37 +184,37 @@ const Costs = () => {
 
   return (
     <DashboardLayout>
-      <div className="p-8">
-        <div className="mb-8 flex items-center justify-between">
+      <div className="p-4 sm:p-6 lg:p-8">
+        <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+            <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
               {t('costs.title')}
             </h1>
-            <p className="text-muted-foreground mt-1">{t('costs.monthlyAnalysis')}</p>
+            <p className="text-muted-foreground mt-1 text-sm sm:text-base">{t('costs.monthlyAnalysis')}</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 w-full sm:w-auto">
             <Button
               variant={viewMode === 'chart' ? 'default' : 'outline'}
               size="sm"
               onClick={() => setViewMode('chart')}
-              className="gap-2"
+              className="gap-2 flex-1 sm:flex-initial"
             >
               <BarChart3 className="w-4 h-4" />
-              {t('costs.chartView')}
+              <span className="hidden sm:inline">{t('costs.chartView')}</span>
             </Button>
             <Button
               variant={viewMode === 'table' ? 'default' : 'outline'}
               size="sm"
               onClick={() => setViewMode('table')}
-              className="gap-2"
+              className="gap-2 flex-1 sm:flex-initial"
             >
               <TableIcon className="w-4 h-4" />
-              {t('costs.tableView')}
+              <span className="hidden sm:inline">{t('costs.tableView')}</span>
             </Button>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
           <Card className="p-6 bg-gradient-card border-border shadow-card hover:shadow-glow transition-all">
             <div className="flex items-center justify-between mb-4">
               <div>
