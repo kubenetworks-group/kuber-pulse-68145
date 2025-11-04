@@ -17,7 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ClusterCard } from "@/components/ClusterCard";
 import { ClusterLogs } from "@/components/ClusterLogs";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, RefreshCw, Edit } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -27,9 +27,12 @@ const Clusters = () => {
   const [clusters, setClusters] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [selectedClusterId, setSelectedClusterId] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [clusterToDelete, setClusterToDelete] = useState<string | null>(null);
+  const [clusterToEdit, setClusterToEdit] = useState<any | null>(null);
+  const [refreshingCluster, setRefreshingCluster] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     environment: "production",
@@ -83,6 +86,93 @@ const Clusters = () => {
         details: details,
       },
     ]);
+  };
+
+  const handleRefreshConnection = async (cluster: any) => {
+    setRefreshingCluster(cluster.id);
+    toast.info("Refreshing connection...");
+
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (session) {
+      fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/validate-cluster-connection`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          cluster_id: cluster.id,
+          config_file: cluster.config_file,
+          cluster_type: cluster.cluster_type,
+          api_endpoint: cluster.api_endpoint,
+        }),
+      }).then(() => {
+        toast.success("Connection refresh initiated!");
+        fetchClusters();
+      }).catch(err => {
+        console.error('Error calling validation function:', err);
+        toast.error("Failed to refresh connection");
+      }).finally(() => {
+        setRefreshingCluster(null);
+      });
+    }
+  };
+
+  const handleEditCluster = (cluster: any) => {
+    setClusterToEdit(cluster);
+    setFormData({
+      name: cluster.name,
+      environment: cluster.environment,
+      provider: cluster.provider,
+      cluster_type: cluster.cluster_type,
+      api_endpoint: cluster.api_endpoint || "",
+      region: cluster.region || "",
+      config_file: cluster.config_file || "",
+    });
+    setEditDialogOpen(true);
+  };
+
+  const handleUpdateCluster = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!clusterToEdit) return;
+
+    const { error } = await supabase
+      .from("clusters")
+      .update({
+        name: formData.name,
+        environment: formData.environment,
+        provider: formData.provider,
+        cluster_type: formData.cluster_type,
+        api_endpoint: formData.api_endpoint,
+        region: formData.region,
+        config_file: formData.config_file,
+      })
+      .eq("id", clusterToEdit.id);
+
+    if (error) {
+      toast.error("Failed to update cluster");
+      console.error(error);
+    } else {
+      toast.success("Cluster updated successfully!");
+      
+      // Refresh connection after update
+      handleRefreshConnection({ ...clusterToEdit, ...formData });
+      
+      setEditDialogOpen(false);
+      setClusterToEdit(null);
+      setFormData({
+        name: "",
+        environment: "production",
+        provider: "aws",
+        cluster_type: "kubernetes",
+        api_endpoint: "",
+        region: "",
+        config_file: "",
+      });
+      fetchClusters();
+    }
   };
 
   const handleDeleteCluster = async () => {
@@ -229,6 +319,7 @@ const Clusters = () => {
                       <SelectItem value="gcp">Google Cloud</SelectItem>
                       <SelectItem value="azure">Microsoft Azure</SelectItem>
                       <SelectItem value="digitalocean">DigitalOcean</SelectItem>
+                      <SelectItem value="magalu">Magalu Cloud</SelectItem>
                       <SelectItem value="on-premises">On-Premises</SelectItem>
                       <SelectItem value="other">Other</SelectItem>
                     </SelectContent>
@@ -325,18 +416,43 @@ const Clusters = () => {
                       environment={`${cluster.provider.toUpperCase()} - ${cluster.environment}`}
                     />
                   </div>
-                  <Button
-                    variant="destructive"
-                    size="icon"
-                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setClusterToDelete(cluster.id);
-                      setDeleteDialogOpen(true);
-                    }}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
+                  <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      disabled={refreshingCluster === cluster.id}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRefreshConnection(cluster);
+                      }}
+                      title="Refresh connection"
+                    >
+                      <RefreshCw className={`w-4 h-4 ${refreshingCluster === cluster.id ? 'animate-spin' : ''}`} />
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEditCluster(cluster);
+                      }}
+                      title="Edit configuration"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="icon"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setClusterToDelete(cluster.id);
+                        setDeleteDialogOpen(true);
+                      }}
+                      title="Delete cluster"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -346,6 +462,122 @@ const Clusters = () => {
             )}
           </div>
         )}
+
+        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+          <DialogContent className="bg-card">
+            <DialogHeader>
+              <DialogTitle>Edit Cluster Configuration</DialogTitle>
+              <DialogDescription>
+                Update your cluster connection settings
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleUpdateCluster} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-name">Cluster Name</Label>
+                <Input
+                  id="edit-name"
+                  required
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="prod-us-east-1"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-environment">Environment</Label>
+                <Select
+                  value={formData.environment}
+                  onValueChange={(value) => setFormData({ ...formData, environment: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="production">Production</SelectItem>
+                    <SelectItem value="staging">Staging</SelectItem>
+                    <SelectItem value="development">Development</SelectItem>
+                    <SelectItem value="on-premises">On-Premises</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-provider">Cloud Provider</Label>
+                <Select
+                  value={formData.provider}
+                  onValueChange={(value) => setFormData({ ...formData, provider: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="aws">AWS</SelectItem>
+                    <SelectItem value="gcp">Google Cloud</SelectItem>
+                    <SelectItem value="azure">Microsoft Azure</SelectItem>
+                    <SelectItem value="digitalocean">DigitalOcean</SelectItem>
+                    <SelectItem value="magalu">Magalu Cloud</SelectItem>
+                    <SelectItem value="on-premises">On-Premises</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-cluster_type">Cluster Type</Label>
+                <Select
+                  value={formData.cluster_type}
+                  onValueChange={(value) => setFormData({ ...formData, cluster_type: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="kubernetes">Kubernetes</SelectItem>
+                    <SelectItem value="docker">Docker</SelectItem>
+                    <SelectItem value="docker-swarm">Docker Swarm</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {formData.cluster_type === "kubernetes" ? (
+                <div className="space-y-2">
+                  <Label htmlFor="edit-config_file">Kubernetes Config File (YAML)</Label>
+                  <Input
+                    id="edit-config_file"
+                    type="file"
+                    accept=".yml,.yaml"
+                    onChange={handleFileUpload}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Upload new kubeconfig.yml file (leave empty to keep current)
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label htmlFor="edit-api_endpoint">Docker Endpoint</Label>
+                  <Input
+                    id="edit-api_endpoint"
+                    required
+                    value={formData.api_endpoint}
+                    onChange={(e) => setFormData({ ...formData, api_endpoint: e.target.value })}
+                    placeholder="unix:///var/run/docker.sock or tcp://host:2375"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Specify where your Docker cluster is located
+                  </p>
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label htmlFor="edit-region">Region (Optional)</Label>
+                <Input
+                  id="edit-region"
+                  value={formData.region}
+                  onChange={(e) => setFormData({ ...formData, region: e.target.value })}
+                  placeholder="us-east-1"
+                />
+              </div>
+              <Button type="submit" className="w-full">
+                Update Cluster
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
 
         <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
           <AlertDialogContent>
