@@ -7,12 +7,13 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Database, Loader2 } from "lucide-react";
+import { Database, Loader2, Sparkles } from "lucide-react";
 
 const Settings = () => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [demoLoading, setDemoLoading] = useState(false);
+  const [savingsLoading, setSavingsLoading] = useState(false);
   const [profile, setProfile] = useState({
     full_name: "",
     company: "",
@@ -55,6 +56,23 @@ const Settings = () => {
       toast.error(error.message || "Failed to generate demo data");
     } finally {
       setDemoLoading(false);
+    }
+  };
+
+  const handleGenerateAISavings = async () => {
+    setSavingsLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('seed-ai-savings');
+
+      if (error) throw error;
+
+      toast.success(`Generated ${data.savings_created} AI savings records!`);
+      
+      setTimeout(() => window.location.href = '/costs', 2000);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to generate AI savings data");
+    } finally {
+      setSavingsLoading(false);
     }
   };
 
@@ -114,6 +132,40 @@ const Settings = () => {
                 >
                   {demoLoading && <Loader2 className="h-4 w-4 animate-spin" />}
                   {demoLoading ? 'Generating Demo Data...' : 'Generate Demo Data'}
+                </Button>
+              </div>
+            </div>
+          </Card>
+
+          {/* AI Savings Data Generator */}
+          <Card className="p-6 bg-gradient-to-br from-success/5 to-success/10 border-success/20">
+            <div className="flex items-start gap-4">
+              <div className="p-3 rounded-lg bg-success/20">
+                <Sparkles className="h-6 w-6 text-success" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold mb-2">Generate AI Savings Data</h3>
+                <p className="text-muted-foreground mb-4">
+                  Populate the database with realistic AI cost savings data based on your existing clusters.
+                  Creates incidents and corresponding savings records.
+                </p>
+                <div className="bg-background/50 rounded-lg p-3 mb-4 text-sm">
+                  <p className="font-medium mb-1">Generates:</p>
+                  <ul className="list-disc list-inside text-muted-foreground space-y-1">
+                    <li>AI incidents (pod crashes, resource exhaustion, memory leaks)</li>
+                    <li>Cost savings calculations (downtime prevention, optimization)</li>
+                    <li>Realistic monetary values and metrics</li>
+                    <li>Historical data spread over the last 30 days</li>
+                  </ul>
+                </div>
+                <Button 
+                  onClick={handleGenerateAISavings} 
+                  disabled={savingsLoading}
+                  className="gap-2 bg-success hover:bg-success/90"
+                  size="lg"
+                >
+                  {savingsLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {savingsLoading ? 'Generating AI Savings...' : 'Generate AI Savings Data'}
                 </Button>
               </div>
             </div>

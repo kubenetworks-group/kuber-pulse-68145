@@ -35,69 +35,43 @@ const Costs = () => {
   useEffect(() => {
     if (user && selectedClusterId) {
       fetchCostData();
-      generateMockAISavings();
+      fetchAISavingsDetails();
     }
   }, [user, selectedClusterId]);
 
-  const generateMockAISavings = () => {
-    const mockSavings = [
-      {
-        id: '1',
-        type: 'downtime_prevention',
-        title: 'Prevenção de Downtime Automática',
-        description: 'IA detectou e corrigiu 12 pods em crash loop, evitando indisponibilidade do serviço',
-        savings: 2400,
-        incidents: 12,
-        date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-      },
-      {
-        id: '2',
-        type: 'resource_optimization',
-        title: 'Otimização de Recursos',
-        description: 'Ajuste automático de CPU/Memory requests reduziu custos de infraestrutura',
-        savings: 1850,
-        incidents: 8,
-        date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-      },
-      {
-        id: '3',
-        type: 'scale_optimization',
-        title: 'Escala Inteligente de Pods',
-        description: 'Ajuste automático de replicas baseado em padrões de uso reduziu over-provisioning',
-        savings: 3200,
-        incidents: 15,
-        date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-      },
-      {
-        id: '4',
-        type: 'storage_optimization',
-        title: 'Otimização de Storage',
-        description: 'Migração automática para storage classes mais econômicas sem perda de performance',
-        savings: 980,
-        incidents: 5,
-        date: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-      },
-      {
-        id: '5',
-        type: 'downtime_prevention',
-        title: 'Correção de Memory Leaks',
-        description: 'IA identificou e reiniciou pods com memory leak antes de afetar o cluster',
-        savings: 1500,
-        incidents: 6,
-        date: new Date(Date.now() - 12 * 24 * 60 * 60 * 1000).toISOString(),
-      },
-      {
-        id: '6',
-        type: 'resource_optimization',
-        title: 'Desligamento de Recursos Ociosos',
-        description: 'Identificação e desligamento de pods em desenvolvimento não utilizados',
-        savings: 1100,
-        incidents: 9,
-        date: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
-      },
-    ];
+  const fetchAISavingsDetails = async () => {
+    try {
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
-    setAiSavingsDetails(mockSavings);
+      // Fetch AI savings for the current month and selected cluster
+      const { data: savingsData, error: savingsError } = await supabase
+        .from('ai_cost_savings')
+        .select('*, ai_incidents!inner(title, description, created_at)')
+        .eq('cluster_id', selectedClusterId)
+        .gte('created_at', startOfMonth)
+        .order('created_at', { ascending: false });
+
+      if (savingsError) {
+        console.error('Error fetching AI savings:', savingsError);
+        return;
+      }
+
+      // Transform the data
+      const transformedSavings = savingsData?.map(saving => ({
+        id: saving.id,
+        type: saving.saving_type,
+        title: saving.ai_incidents?.title || 'Ação da IA',
+        description: saving.ai_incidents?.description || 'Economia gerada pela IA',
+        savings: Number(saving.estimated_savings),
+        incidents: 1,
+        date: saving.created_at,
+      })) || [];
+
+      setAiSavingsDetails(transformedSavings);
+    } catch (error) {
+      console.error('Error fetching AI savings details:', error);
+    }
   };
 
   const fetchCostData = async () => {
