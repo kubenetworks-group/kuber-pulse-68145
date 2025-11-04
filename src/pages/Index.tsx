@@ -5,44 +5,49 @@ import { CostChart } from "@/components/CostChart";
 import { RecentEvents } from "@/components/RecentEvents";
 import { ClusterHealthMap } from "@/components/ClusterHealthMap";
 import { AIInsightsWidget } from "@/components/AIInsightsWidget";
+import { PodHealthByNamespace } from "@/components/PodHealthByNamespace";
 import { Server, DollarSign, Database, HardDrive, Bot } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCluster } from "@/contexts/ClusterContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 const Index = () => {
   const { user } = useAuth();
+  const { selectedClusterId, clusters } = useCluster();
   const { t } = useTranslation();
-  const [clusters, setClusters] = useState<any[]>([]);
+  const [clusterData, setClusterData] = useState<any>(null);
   const [incidents, setIncidents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (user) {
+    if (user && selectedClusterId) {
       fetchData();
     }
-  }, [user]);
+  }, [user, selectedClusterId]);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Fetch clusters
-      const { data: clustersData, error: clustersError } = await supabase
+      // Fetch selected cluster data
+      const { data: cluster, error: clusterError } = await supabase
         .from('clusters')
         .select('*')
-        .order('created_at', { ascending: false });
+        .eq('id', selectedClusterId)
+        .single();
 
-      if (clustersError) {
-        console.error('Error fetching clusters:', clustersError);
+      if (clusterError) {
+        console.error('Error fetching cluster:', clusterError);
       } else {
-        setClusters(clustersData || []);
+        setClusterData(cluster);
       }
 
-      // Fetch recent AI incidents
+      // Fetch recent AI incidents for selected cluster
       const { data: incidentsData, error: incidentsError } = await supabase
         .from('ai_incidents')
         .select('*')
+        .eq('cluster_id', selectedClusterId)
         .order('created_at', { ascending: false })
         .limit(10);
 
@@ -58,10 +63,6 @@ const Index = () => {
     }
   };
 
-  const totalNodes = clusters.reduce((sum, cluster) => sum + (cluster.nodes || 0), 0);
-  const totalPods = clusters.reduce((sum, cluster) => sum + (cluster.pods || 0), 0);
-  const totalStorage = clusters.reduce((sum, cluster) => sum + (cluster.storage_used_gb || 0), 0);
-  const totalMonthlyCost = clusters.reduce((sum, cluster) => sum + (cluster.monthly_cost || 0), 0);
   const aiActionsToday = incidents.filter(i => {
     const today = new Date().toDateString();
     return new Date(i.created_at).toDateString() === today && i.action_taken;
@@ -87,17 +88,17 @@ const Index = () => {
           />
           <MetricCard
             title={t('dashboard.activeNodes')}
-            value={totalNodes.toString()}
+            value={clusterData?.nodes?.toString() || '0'}
             icon={Server}
           />
           <MetricCard
             title={t('dashboard.runningPods')}
-            value={totalPods.toString()}
+            value={clusterData?.pods?.toString() || '0'}
             icon={Database}
           />
           <MetricCard
             title={t('clusters.storage')}
-            value={`${totalStorage.toFixed(0)} GB`}
+            value={`${clusterData?.storage_used_gb?.toFixed(0) || 0} GB`}
             icon={HardDrive}
           />
           <MetricCard
@@ -112,29 +113,23 @@ const Index = () => {
           <AIInsightsWidget recentIncidents={incidents} />
         )}
 
-        {/* Cluster Health Map */}
-        <div>
-          <h2 className="text-2xl font-bold mb-4">{t('dashboard.clusterHealth')}</h2>
-          <ClusterHealthMap clusters={clusters} loading={loading} />
-        </div>
+        {/* Pod Health by Namespace */}
+        <PodHealthByNamespace />
 
-        {/* Active Clusters */}
-        {!loading && clusters.length > 0 && (
+        {/* Selected Cluster Details */}
+        {!loading && clusterData && (
           <div>
-            <h2 className="text-2xl font-bold mb-4">{t('clusters.title')}</h2>
+            <h2 className="text-2xl font-bold mb-4">{t('dashboard.clusterDetails')}</h2>
             <div className="grid gap-6 md:grid-cols-2">
-              {clusters.slice(0, 4).map((cluster) => (
-                <ClusterCard
-                  key={cluster.id}
-                  name={cluster.name}
-                  status={cluster.status}
-                  pods={cluster.pods}
-                  nodes={cluster.nodes}
-                  cpuUsage={cluster.cpu_usage}
-                  memoryUsage={cluster.memory_usage}
-                  environment={`${cluster.provider} - ${cluster.environment}`}
-                />
-              ))}
+              <ClusterCard
+                name={clusterData.name}
+                status={clusterData.status}
+                pods={clusterData.pods}
+                nodes={clusterData.nodes}
+                cpuUsage={clusterData.cpu_usage}
+                memoryUsage={clusterData.memory_usage}
+                environment={`${clusterData.provider} - ${clusterData.environment}`}
+              />
             </div>
           </div>
         )}

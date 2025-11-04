@@ -22,7 +22,11 @@
     "import": "Importar",
     "refresh": "Atualizar",
     "convertedFrom": "Convertido de {{currency}}",
-    "approximateValue": "Valor aproximado"
+    "approximateValue": "Valor aproximado",
+    "noData": "Nenhum dado disponível",
+    "healthy": "Saudável",
+    "warning": "Alerta",
+    "critical": "Crítico"
   },
   "storage": {
     "title": "Gerenciamento de Storage",
@@ -111,7 +115,9 @@
     "monthlySpend": "Gasto Mensal",
     "recentEvents": "Eventos Recentes",
     "clusterHealth": "Saúde dos Clusters",
-    "viewAll": "Ver Todos"
+    "viewAll": "Ver Todos",
+    "podHealthByNamespace": "Saúde dos Pods por Namespace",
+    "clusterDetails": "Detalhes do Cluster"
   },
   "costs": {
     "title": "Análise de Custos",
@@ -146,7 +152,8 @@
     "healthy": "Saudável",
     "warning": "Aviso",
     "critical": "Crítico",
-    "connecting": "Conectando"
+    "connecting": "Conectando",
+    "selectCluster": "Selecionar Cluster"
   },
   "aiMonitor": {
     "title": "Monitor de IA",

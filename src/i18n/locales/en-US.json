@@ -22,7 +22,11 @@
     "import": "Import",
     "refresh": "Refresh",
     "convertedFrom": "Converted from {{currency}}",
-    "approximateValue": "Approximate value"
+    "approximateValue": "Approximate value",
+    "noData": "No data available",
+    "healthy": "Healthy",
+    "warning": "Warning",
+    "critical": "Critical"
   },
   "storage": {
     "title": "Storage Management",
@@ -111,7 +115,9 @@
     "monthlySpend": "Monthly Spend",
     "recentEvents": "Recent Events",
     "clusterHealth": "Cluster Health",
-    "viewAll": "View All"
+    "viewAll": "View All",
+    "podHealthByNamespace": "Pod Health by Namespace",
+    "clusterDetails": "Cluster Details"
   },
   "costs": {
     "title": "Cost Analysis",
@@ -146,7 +152,8 @@
     "healthy": "Healthy",
     "warning": "Warning",
     "critical": "Critical",
-    "connecting": "Connecting"
+    "connecting": "Connecting",
+    "selectCluster": "Select Cluster"
   },
   "aiMonitor": {
     "title": "AI Monitor",
