@@ -15,6 +15,7 @@ import Costs from "./pages/Costs";
 import Users from "./pages/Users";
 import Storage from "./pages/Storage";
 import Settings from "./pages/Settings";
+import Agents from "./pages/Agents";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -90,6 +91,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Settings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/agents"
+              element={
+                <ProtectedRoute>
+                  <Agents />
                 </ProtectedRoute>
               }
             />

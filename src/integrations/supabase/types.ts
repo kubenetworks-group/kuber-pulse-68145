@@ -14,6 +14,185 @@ export type Database = {
   }
   public: {
     Tables: {
+      agent_anomalies: {
+        Row: {
+          ai_analysis: Json
+          anomaly_type: string
+          auto_heal_applied: boolean | null
+          cluster_id: string
+          created_at: string
+          description: string
+          id: string
+          recommendation: string | null
+          resolved: boolean | null
+          resolved_at: string | null
+          severity: string
+          user_id: string
+        }
+        Insert: {
+          ai_analysis: Json
+          anomaly_type: string
+          auto_heal_applied?: boolean | null
+          cluster_id: string
+          created_at?: string
+          description: string
+          id?: string
+          recommendation?: string | null
+          resolved?: boolean | null
+          resolved_at?: string | null
+          severity: string
+          user_id: string
+        }
+        Update: {
+          ai_analysis?: Json
+          anomaly_type?: string
+          auto_heal_applied?: boolean | null
+          cluster_id?: string
+          created_at?: string
+          description?: string
+          id?: string
+          recommendation?: string | null
+          resolved?: boolean | null
+          resolved_at?: string | null
+          severity?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_anomalies_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agent_api_keys: {
+        Row: {
+          api_key: string
+          cluster_id: string
+          created_at: string
+          id: string
+          is_active: boolean
+          last_seen: string | null
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          api_key: string
+          cluster_id: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_seen?: string | null
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          api_key?: string
+          cluster_id?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_seen?: string | null
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_api_keys_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agent_commands: {
+        Row: {
+          cluster_id: string
+          command_params: Json
+          command_type: string
+          completed_at: string | null
+          created_at: string
+          executed_at: string | null
+          id: string
+          result: Json | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          cluster_id: string
+          command_params: Json
+          command_type: string
+          completed_at?: string | null
+          created_at?: string
+          executed_at?: string | null
+          id?: string
+          result?: Json | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          cluster_id?: string
+          command_params?: Json
+          command_type?: string
+          completed_at?: string | null
+          created_at?: string
+          executed_at?: string | null
+          id?: string
+          result?: Json | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_commands_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agent_metrics: {
+        Row: {
+          cluster_id: string
+          collected_at: string
+          created_at: string
+          id: string
+          metric_data: Json
+          metric_type: string
+        }
+        Insert: {
+          cluster_id: string
+          collected_at: string
+          created_at?: string
+          id?: string
+          metric_data: Json
+          metric_type: string
+        }
+        Update: {
+          cluster_id?: string
+          collected_at?: string
+          created_at?: string
+          id?: string
+          metric_data?: Json
+          metric_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_metrics_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_cost_savings: {
         Row: {
           calculation_details: Json | null
