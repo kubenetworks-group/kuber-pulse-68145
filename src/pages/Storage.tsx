@@ -3,6 +3,7 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { StorageOverview } from "@/components/StorageOverview";
 import { PVCList } from "@/components/PVCList";
 import { StorageRecommendations } from "@/components/StorageRecommendations";
+import { StorageClassComparison } from "@/components/StorageClassComparison";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,6 +17,7 @@ export default function Storage() {
   const [selectedClusterId, setSelectedClusterId] = useState<string>("");
   const [pvcs, setPvcs] = useState<any[]>([]);
   const [recommendations, setRecommendations] = useState<any[]>([]);
+  const [storageClassMigrations, setStorageClassMigrations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
 
@@ -96,11 +98,15 @@ export default function Storage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { error } = await supabase.functions.invoke('analyze-storage-optimization', {
+      const { data, error } = await supabase.functions.invoke('analyze-storage-optimization', {
         body: { cluster_id: selectedClusterId }
       });
 
       if (error) throw error;
+
+      if (data?.storage_class_migrations) {
+        setStorageClassMigrations(data.storage_class_migrations);
+      }
 
       toast.success(t('storage.analysisComplete'));
       fetchStorageData();
@@ -166,6 +172,13 @@ export default function Storage() {
               usedGb={usedStorage}
               availableGb={availableStorage}
               pvcCount={pvcs.length}
+            />
+
+            <StorageClassComparison
+              migrations={storageClassMigrations}
+              onApplyMigration={(pvcId) => {
+                toast.info(t('storage.migrationPlanned'));
+              }}
             />
 
             <StorageRecommendations

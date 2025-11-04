@@ -68,7 +68,15 @@
     "recommendationApplied": "Recommendation applied",
     "recommendationDismissed": "Recommendation dismissed",
     "errorApplying": "Error applying recommendation",
-    "errorDismissing": "Error dismissing recommendation"
+    "errorDismissing": "Error dismissing recommendation",
+    "storageClassComparison": "Storage Class Comparison",
+    "storageClassSubtitle": "Migrate volumes to more suitable classes and save costs",
+    "potentialMonthlySavings": "potential monthly savings",
+    "storageClassReference": "Storage Class Reference",
+    "planMigration": "Plan",
+    "averageIops": "Average IOPS",
+    "savings": "savings",
+    "migrationPlanned": "Migration successfully planned"
   },
   "users": {
     "title": "User Management",

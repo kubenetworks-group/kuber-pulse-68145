@@ -68,7 +68,15 @@
     "recommendationApplied": "Recomendación aplicada",
     "recommendationDismissed": "Recomendación descartada",
     "errorApplying": "Error al aplicar recomendación",
-    "errorDismissing": "Error al descartar recomendación"
+    "errorDismissing": "Error al descartar recomendación",
+    "storageClassComparison": "Comparación de Clases de Almacenamiento",
+    "storageClassSubtitle": "Migre volúmenes a clases más adecuadas y ahorre costos",
+    "potentialMonthlySavings": "ahorro mensual potencial",
+    "storageClassReference": "Referencia de Clases de Almacenamiento",
+    "planMigration": "Planear",
+    "averageIops": "IOPS promedio",
+    "savings": "ahorro",
+    "migrationPlanned": "Migración planificada con éxito"
   },
   "users": {
     "title": "Gestión de Usuarios",
