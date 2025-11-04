@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ClusterCard } from "@/components/ClusterCard";
+import { ClusterLogs } from "@/components/ClusterLogs";
 import { Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -16,6 +17,7 @@ const Clusters = () => {
   const [clusters, setClusters] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [selectedClusterId, setSelectedClusterId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     environment: "production",
@@ -59,21 +61,75 @@ const Clusters = () => {
     }
   };
 
+  const createClusterLog = async (clusterId: string, eventType: string, message: string, details?: any) => {
+    await supabase.from("cluster_events").insert([
+      {
+        cluster_id: clusterId,
+        user_id: user?.id,
+        event_type: eventType,
+        message: message,
+        details: details,
+      },
+    ]);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    const { error } = await supabase.from("clusters").insert([
+    const { data, error } = await supabase.from("clusters").insert([
       {
         ...formData,
         user_id: user?.id,
       },
-    ]);
+    ]).select().single();
 
     if (error) {
       toast.error("Failed to add cluster");
       console.error(error);
     } else {
-      toast.success("Cluster added successfully!");
+      toast.success("Cluster connection initiated!");
+      
+      // Create initial log
+      await createClusterLog(data.id, "info", "Cluster connection initiated", {
+        cluster_type: formData.cluster_type,
+        provider: formData.provider,
+      });
+
+      // Simulate connection validation
+      setTimeout(async () => {
+        if (formData.cluster_type === "kubernetes") {
+          if (!formData.config_file) {
+            await createClusterLog(data.id, "error", "Missing Kubernetes configuration file", {
+              required: "kubeconfig.yml file is required for Kubernetes clusters"
+            });
+            await supabase.from("clusters").update({ status: "error" }).eq("id", data.id);
+          } else {
+            await createClusterLog(data.id, "info", "Validating Kubernetes configuration...");
+            
+            // Simulate validation
+            setTimeout(async () => {
+              await createClusterLog(data.id, "warning", "Configuration validation pending - authentication token may be required", {
+                note: "Please ensure your kubeconfig contains valid authentication tokens"
+              });
+            }, 2000);
+          }
+        } else {
+          // Docker validation
+          if (!formData.api_endpoint) {
+            await createClusterLog(data.id, "error", "Missing Docker endpoint", {
+              required: "Docker endpoint is required (e.g., unix:///var/run/docker.sock)"
+            });
+            await supabase.from("clusters").update({ status: "error" }).eq("id", data.id);
+          } else {
+            await createClusterLog(data.id, "info", "Attempting to connect to Docker endpoint...");
+            
+            setTimeout(async () => {
+              await createClusterLog(data.id, "warning", "Connection pending - verifying endpoint accessibility");
+            }, 2000);
+          }
+        }
+      }, 1000);
+
       setOpen(false);
       setFormData({
         name: "",
@@ -106,6 +162,9 @@ const Clusters = () => {
             <DialogContent className="bg-card">
               <DialogHeader>
                 <DialogTitle>Connect New Cluster</DialogTitle>
+                <DialogDescription>
+                  Configure your cluster connection settings
+                </DialogDescription>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
@@ -230,19 +289,26 @@ const Clusters = () => {
             </Button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {clusters.map((cluster) => (
-              <ClusterCard
-                key={cluster.id}
-                name={cluster.name}
-                status={cluster.status as any}
-                nodes={cluster.nodes}
-                pods={cluster.pods}
-                cpuUsage={Number(cluster.cpu_usage)}
-                memoryUsage={Number(cluster.memory_usage)}
-                environment={`${cluster.provider.toUpperCase()} - ${cluster.environment}`}
-              />
-            ))}
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {clusters.map((cluster) => (
+                <div key={cluster.id} onClick={() => setSelectedClusterId(cluster.id)} className="cursor-pointer">
+                  <ClusterCard
+                    name={cluster.name}
+                    status={cluster.status as any}
+                    nodes={cluster.nodes}
+                    pods={cluster.pods}
+                    cpuUsage={Number(cluster.cpu_usage)}
+                    memoryUsage={Number(cluster.memory_usage)}
+                    environment={`${cluster.provider.toUpperCase()} - ${cluster.environment}`}
+                  />
+                </div>
+              ))}
+            </div>
+            
+            {selectedClusterId && (
+              <ClusterLogs clusterId={selectedClusterId} />
+            )}
           </div>
         )}
       </div>
