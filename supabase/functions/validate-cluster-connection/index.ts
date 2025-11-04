@@ -101,24 +101,18 @@ async function validateKubernetesCluster(
       
       await createLog(supabase, cluster_id, user_id, 'info', `Connecting to ${serverUrl}...`)
       
-      // First try to get certificate info
-      let certData = null
-      if (clusterInfo['certificate-authority-data']) {
-        certData = clusterInfo['certificate-authority-data']
-      }
-      
       // Try different endpoints that Kubernetes exposes
       const endpoints = ['/version', '/livez', '/readyz', '/api/v1']
       let connected = false
       let lastError = null
-      let sslRetryAttempted = false
       
       for (const endpoint of endpoints) {
         try {
           const testUrl = `${serverUrl}${endpoint}`
           await createLog(supabase, cluster_id, user_id, 'info', `Testing endpoint: ${endpoint}`)
           
-          const response = await fetch(testUrl, {
+          // First attempt with normal SSL verification
+          let response = await fetch(testUrl, {
             method: 'GET',
             signal: controller.signal,
             headers: {
@@ -176,61 +170,27 @@ async function validateKubernetesCluster(
         } catch (endpointError: any) {
           lastError = endpointError
           
-          // Check if it's an SSL certificate error and retry once with SSL verification disabled
-          if (!sslRetryAttempted && 
-              (endpointError.message?.includes('certificate') || 
-               endpointError.message?.includes('UnknownIssuer') ||
-               endpointError.message?.includes('self-signed'))) {
-            
-            sslRetryAttempted = true
+          // Check if it's an SSL certificate error
+          const isCertError = endpointError.message?.includes('certificate') || 
+                             endpointError.message?.includes('UnknownIssuer') ||
+                             endpointError.message?.includes('self-signed')
+          
+          if (isCertError) {
             await createLog(supabase, cluster_id, user_id, 'warning', 
-              'SSL certificate verification failed, retrying with SSL verification disabled',
-              { note: 'This cluster may be using self-signed certificates' }
+              'Cluster is using self-signed or untrusted SSL certificates',
+              { 
+                note: 'The cluster is reachable but uses certificates not trusted by default. This is common for internal/on-premises clusters.',
+                endpoint: endpoint,
+                server: serverUrl
+              }
             )
             
-            // Retry this endpoint with SSL verification disabled
-            try {
-              const response = await fetch(`${serverUrl}${endpoint}`, {
-                method: 'GET',
-                signal: controller.signal,
-                headers: {
-                  'Accept': 'application/json',
-                  'User-Agent': 'KubeNetworks-Validator/1.0'
-                }
-                // Note: In Deno, we can't disable SSL verification via fetch options
-                // This would require using native Deno.connect with custom TLS options
-              })
-              
-              if (response.status === 200) {
-                await createLog(supabase, cluster_id, user_id, 'success', 
-                  `Connected to cluster via ${endpoint} (SSL verification bypassed)`,
-                  { 
-                    status: response.status,
-                    endpoint: endpoint,
-                    note: 'Cluster is using self-signed or internal certificates'
-                  }
-                )
-                await updateClusterStatus(supabase, cluster_id, 'healthy')
-                connected = true
-                break
-              } else if (response.status === 401 || response.status === 403) {
-                await createLog(supabase, cluster_id, user_id, 'warning', 
-                  `Cluster is reachable but requires authentication (${endpoint})`,
-                  { 
-                    note: 'Authentication required but cluster is accessible',
-                    status: response.status
-                  }
-                )
-                await updateClusterStatus(supabase, cluster_id, 'warning')
-                connected = true
-                break
-              }
-            } catch (retryError) {
-              // SSL retry failed, continue to next endpoint
-              console.log(`SSL retry failed for ${endpoint}:`, retryError)
-            }
+            // Mark as warning status - cluster is reachable but has cert issues
+            await updateClusterStatus(supabase, cluster_id, 'warning')
+            connected = true
+            break
           }
-          // Continue trying other endpoints
+          // Continue trying other endpoints for non-cert errors
         }
       }
       
