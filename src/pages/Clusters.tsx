@@ -45,6 +45,44 @@ const Clusters = () => {
 
   useEffect(() => {
     fetchClusters();
+
+    // Subscribe to realtime updates for cluster status changes
+    if (!user) return;
+
+    const channel = supabase
+      .channel('clusters-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'clusters',
+          filter: `user_id=eq.${user.id}`
+        },
+        (payload) => {
+          console.log('Cluster updated:', payload);
+          setClusters((current) =>
+            current.map((cluster) =>
+              cluster.id === payload.new.id ? { ...cluster, ...payload.new } : cluster
+            )
+          );
+          
+          // Show toast notification for status changes
+          const newCluster = payload.new as any;
+          if (newCluster.status === 'healthy') {
+            toast.success(`${newCluster.name} connected successfully!`);
+          } else if (newCluster.status === 'error') {
+            toast.error(`${newCluster.name} connection failed`);
+          } else if (newCluster.status === 'warning') {
+            toast.warning(`${newCluster.name} connected with warnings`);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user]);
 
   const fetchClusters = async () => {
@@ -90,32 +128,48 @@ const Clusters = () => {
 
   const handleRefreshConnection = async (cluster: any) => {
     setRefreshingCluster(cluster.id);
+    
+    // Immediately update status to 'connecting'
+    await supabase
+      .from("clusters")
+      .update({ status: 'connecting', last_sync: new Date().toISOString() })
+      .eq("id", cluster.id);
+    
     toast.info("Refreshing connection...");
 
-    const { data: { session } } = await supabase.auth.getSession();
-    
-    if (session) {
-      fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/validate-cluster-connection`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+    try {
+      const { data, error } = await supabase.functions.invoke('validate-cluster-connection', {
+        body: {
           cluster_id: cluster.id,
           config_file: cluster.config_file,
           cluster_type: cluster.cluster_type,
           api_endpoint: cluster.api_endpoint,
-        }),
-      }).then(() => {
-        toast.success("Connection refresh initiated!");
-        fetchClusters();
-      }).catch(err => {
-        console.error('Error calling validation function:', err);
-        toast.error("Failed to refresh connection");
-      }).finally(() => {
-        setRefreshingCluster(null);
+        },
       });
+
+      if (error) {
+        console.error('Error calling validation function:', error);
+        toast.error("Failed to refresh connection");
+        
+        // Update status to error if the function call failed
+        await supabase
+          .from("clusters")
+          .update({ status: 'error' })
+          .eq("id", cluster.id);
+      } else {
+        console.log('Validation response:', data);
+        // Status will be updated by the edge function via realtime
+      }
+    } catch (err) {
+      console.error('Error refreshing connection:', err);
+      toast.error("Failed to refresh connection");
+      
+      await supabase
+        .from("clusters")
+        .update({ status: 'error' })
+        .eq("id", cluster.id);
+    } finally {
+      setRefreshingCluster(null);
     }
   };
 
@@ -221,25 +275,16 @@ const Clusters = () => {
       });
 
       // Call edge function to validate the cluster connection
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (session) {
-        fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/validate-cluster-connection`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${session.access_token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            cluster_id: data.id,
-            config_file: formData.config_file,
-            cluster_type: formData.cluster_type,
-            api_endpoint: formData.api_endpoint,
-          }),
-        }).catch(err => {
-          console.error('Error calling validation function:', err);
-        });
-      }
+      supabase.functions.invoke('validate-cluster-connection', {
+        body: {
+          cluster_id: data.id,
+          config_file: formData.config_file,
+          cluster_type: formData.cluster_type,
+          api_endpoint: formData.api_endpoint,
+        },
+      }).catch(err => {
+        console.error('Error calling validation function:', err);
+      });
 
       setOpen(false);
       setFormData({
@@ -420,14 +465,14 @@ const Clusters = () => {
                     <Button
                       variant="secondary"
                       size="icon"
-                      disabled={refreshingCluster === cluster.id}
+                      disabled={refreshingCluster === cluster.id || cluster.status === 'connecting'}
                       onClick={(e) => {
                         e.stopPropagation();
                         handleRefreshConnection(cluster);
                       }}
                       title="Refresh connection"
                     >
-                      <RefreshCw className={`w-4 h-4 ${refreshingCluster === cluster.id ? 'animate-spin' : ''}`} />
+                      <RefreshCw className={`w-4 h-4 ${refreshingCluster === cluster.id || cluster.status === 'connecting' ? 'animate-spin' : ''}`} />
                     </Button>
                     <Button
                       variant="secondary"

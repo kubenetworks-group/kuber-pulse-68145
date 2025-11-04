@@ -24,7 +24,7 @@ export const ClusterLogs = ({ clusterId }: ClusterLogsProps) => {
   useEffect(() => {
     fetchLogs();
     
-    // Subscribe to realtime updates
+    // Subscribe to realtime updates for new logs
     const channel = supabase
       .channel(`cluster-logs-${clusterId}`)
       .on(
@@ -36,6 +36,7 @@ export const ClusterLogs = ({ clusterId }: ClusterLogsProps) => {
           filter: `cluster_id=eq.${clusterId}`
         },
         (payload) => {
+          console.log('New log received:', payload);
           setLogs((current) => [payload.new as ClusterLog, ...current]);
         }
       )
