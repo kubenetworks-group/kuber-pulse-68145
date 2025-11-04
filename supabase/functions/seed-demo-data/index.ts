@@ -25,7 +25,9 @@ serve(async (req) => {
       });
     }
 
-    // Delete existing demo data
+    // Delete existing demo data (cascade will handle related records)
+    await supabaseClient.from('ai_cost_savings').delete().eq('user_id', user.id);
+    await supabaseClient.from('cost_calculations').delete().eq('user_id', user.id);
     await supabaseClient.from('ai_incidents').delete().eq('user_id', user.id);
     await supabaseClient.from('cluster_events').delete().eq('user_id', user.id);
     await supabaseClient.from('security_audits').delete().eq('user_id', user.id);
@@ -318,12 +320,128 @@ serve(async (req) => {
 
     if (incidentsError) throw incidentsError;
 
+    // Insert cost calculations for each cluster
+    const costCalculations = clusters.map(cluster => {
+      const computePercentage = 0.65;
+      const storagePercentage = 0.25;
+      const networkPercentage = 0.10;
+      
+      return {
+        user_id: user.id,
+        cluster_id: cluster.id,
+        compute_cost: Number((cluster.monthly_cost * computePercentage).toFixed(2)),
+        storage_cost: Number((cluster.monthly_cost * storagePercentage).toFixed(2)),
+        network_cost: Number((cluster.monthly_cost * networkPercentage).toFixed(2)),
+        total_cost: cluster.monthly_cost,
+        calculation_date: new Date().toISOString(),
+        period_start: new Date(Date.now() - 30 * 24 * 3600000).toISOString(),
+        period_end: new Date().toISOString(),
+        pricing_details: {
+          provider: cluster.provider,
+          region: cluster.region,
+          instance_type: 'standard',
+          nodes: cluster.nodes,
+          breakdown: {
+            compute: Number((cluster.monthly_cost * computePercentage).toFixed(2)),
+            storage: Number((cluster.monthly_cost * storagePercentage).toFixed(2)),
+            network: Number((cluster.monthly_cost * networkPercentage).toFixed(2)),
+            total: cluster.monthly_cost
+          }
+        }
+      };
+    });
+
+    const { error: costsError } = await supabaseClient
+      .from('cost_calculations')
+      .insert(costCalculations);
+
+    if (costsError) throw costsError;
+
+    // Insert AI savings for resolved incidents
+    const resolvedIncidents = incidents.filter(inc => inc.action_taken && inc.resolved_at);
+    const aiSavings = resolvedIncidents.map(inc => {
+      const cluster = clusters.find(c => c.id === inc.cluster_id)!;
+      const costPerMinute = cluster.monthly_cost / (30 * 24 * 60);
+      const revenueMultiplier = 10;
+      
+      let savingType: string;
+      let downtimeAvoidedMinutes = 0;
+      let estimatedSavings = 0;
+      let calculationDetails: any = {};
+
+      if (inc.severity === 'critical' || inc.severity === 'high') {
+        // Downtime prevention
+        savingType = 'downtime_prevention';
+        downtimeAvoidedMinutes = inc.severity === 'critical' ? 30 : 15;
+        estimatedSavings = Number((downtimeAvoidedMinutes * costPerMinute * revenueMultiplier).toFixed(2));
+        calculationDetails = {
+          severity: inc.severity,
+          revenue_multiplier: revenueMultiplier,
+          assumption: 'Based on downtime avoided and revenue impact'
+        };
+      } else if (inc.auto_heal_action === 'scale_up') {
+        // Scale optimization
+        savingType = 'scale_optimization';
+        estimatedSavings = Number((cluster.monthly_cost * 0.05).toFixed(2));
+        calculationDetails = {
+          optimization_percent: 0.05,
+          assumption: 'Intelligent scaling vs over-provisioning'
+        };
+      } else {
+        // Resource optimization
+        savingType = 'resource_optimization';
+        const nodesAvoided = 2;
+        const nodeHourlyCost = 0.096;
+        estimatedSavings = Number((nodesAvoided * nodeHourlyCost * 24 * 30).toFixed(2));
+        calculationDetails = {
+          nodes_avoided: nodesAvoided,
+          assumption: 'Avoided unnecessary scale-up'
+        };
+      }
+
+      return {
+        user_id: user.id,
+        incident_id: inc.cluster_id, // This will be replaced with actual incident ID
+        cluster_id: inc.cluster_id,
+        downtime_avoided_minutes: downtimeAvoidedMinutes,
+        cost_per_minute: Number(costPerMinute.toFixed(4)),
+        estimated_savings: estimatedSavings,
+        saving_type: savingType,
+        calculation_details: calculationDetails
+      };
+    });
+
+    // Get inserted incident IDs and update savings with correct incident_id
+    const { data: insertedIncidents } = await supabaseClient
+      .from('ai_incidents')
+      .select('id, cluster_id')
+      .eq('user_id', user.id);
+
+    // Map savings to correct incident IDs
+    const finalSavings = aiSavings.map((saving, index) => {
+      const incident = insertedIncidents?.find((inc, idx) => 
+        inc.cluster_id === saving.cluster_id && resolvedIncidents[index]?.cluster_id === inc.cluster_id
+      );
+      return {
+        ...saving,
+        incident_id: incident?.id || insertedIncidents?.[index]?.id || saving.incident_id
+      };
+    });
+
+    const { error: savingsError } = await supabaseClient
+      .from('ai_cost_savings')
+      .insert(finalSavings);
+
+    if (savingsError) throw savingsError;
+
     return new Response(
       JSON.stringify({ 
         success: true, 
         message: 'Demo data created successfully',
         clusters: clusters.length,
-        incidents: incidents.length
+        incidents: incidents.length,
+        cost_calculations: costCalculations.length,
+        ai_savings: finalSavings.length
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

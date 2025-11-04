@@ -1,1 +1,13 @@
 project_id = "mcqfgnjootzthtizboom"
+
+[functions.validate-cluster-connection]
+verify_jwt = true
+
+[functions.seed-demo-data]
+verify_jwt = true
+
+[functions.calculate-cluster-costs]
+verify_jwt = true
+
+[functions.calculate-ai-savings]
+verify_jwt = true

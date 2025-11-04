@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { AIIncidentCard } from "@/components/AIIncidentCard";
 import { MetricCard } from "@/components/MetricCard";
-import { Bot, Activity, CheckCircle, Clock } from "lucide-react";
+import { Bot, Activity, CheckCircle, Clock, Sparkles } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -37,6 +37,7 @@ export default function AIMonitor() {
   const { user } = useAuth();
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [clusters, setClusters] = useState<Cluster[]>([]);
+  const [savings, setSavings] = useState<Map<string, any>>(new Map());
   const [loading, setLoading] = useState(true);
   const [severityFilter, setSeverityFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -67,6 +68,16 @@ export default function AIMonitor() {
 
       if (clustersError) throw clustersError;
       setClusters(clustersData || []);
+
+      // Fetch AI savings
+      const { data: savingsData, error: savingsError } = await supabase
+        .from('ai_cost_savings')
+        .select('*');
+
+      if (!savingsError && savingsData) {
+        const savingsMap = new Map(savingsData.map(s => [s.incident_id, s]));
+        setSavings(savingsMap);
+      }
     } catch (error) {
       console.error('Error fetching data:', error);
       toast({
@@ -139,10 +150,13 @@ export default function AIMonitor() {
     return true;
   });
 
+  const totalSavingsAmount = Array.from(savings.values()).reduce((sum, s) => sum + Number(s.estimated_savings), 0);
+
   const stats = {
     total: incidents.length,
     actionsExecuted: incidents.filter(i => i.action_taken).length,
     resolved: incidents.filter(i => i.resolved_at).length,
+    totalSavings: totalSavingsAmount,
     avgResolutionTime: incidents.filter(i => i.resolved_at).length > 0
       ? Math.round(
           incidents
@@ -175,9 +189,10 @@ export default function AIMonitor() {
             icon={Bot}
           />
           <MetricCard
-            title="Actions Executed"
-            value={stats.actionsExecuted.toString()}
-            icon={Activity}
+            title="Total Savings"
+            value={`$${stats.totalSavings.toFixed(0)}`}
+            subtitle="All time"
+            icon={Sparkles}
           />
           <MetricCard
             title="Resolved"
@@ -238,6 +253,7 @@ export default function AIMonitor() {
                 key={incident.id}
                 incident={incident}
                 clusterName={clusters.find(c => c.id === incident.cluster_id)?.name}
+                savings={savings.get(incident.id)}
                 onExecuteAction={handleExecuteAction}
               />
             ))

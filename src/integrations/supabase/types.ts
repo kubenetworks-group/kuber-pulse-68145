@@ -14,6 +14,60 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_cost_savings: {
+        Row: {
+          calculation_details: Json | null
+          cluster_id: string
+          cost_per_minute: number
+          created_at: string | null
+          downtime_avoided_minutes: number
+          estimated_savings: number
+          id: string
+          incident_id: string
+          saving_type: string
+          user_id: string
+        }
+        Insert: {
+          calculation_details?: Json | null
+          cluster_id: string
+          cost_per_minute?: number
+          created_at?: string | null
+          downtime_avoided_minutes?: number
+          estimated_savings?: number
+          id?: string
+          incident_id: string
+          saving_type: string
+          user_id: string
+        }
+        Update: {
+          calculation_details?: Json | null
+          cluster_id?: string
+          cost_per_minute?: number
+          created_at?: string | null
+          downtime_avoided_minutes?: number
+          estimated_savings?: number
+          id?: string
+          incident_id?: string
+          saving_type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_cost_savings_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_cost_savings_incident_id_fkey"
+            columns: ["incident_id"]
+            isOneToOne: false
+            referencedRelation: "ai_incidents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_incidents: {
         Row: {
           action_result: Json | null
@@ -124,6 +178,7 @@ export type Database = {
           created_at: string | null
           environment: string
           id: string
+          last_cost_calculation: string | null
           last_sync: string | null
           memory_usage: number | null
           monthly_cost: number | null
@@ -145,6 +200,7 @@ export type Database = {
           created_at?: string | null
           environment: string
           id?: string
+          last_cost_calculation?: string | null
           last_sync?: string | null
           memory_usage?: number | null
           monthly_cost?: number | null
@@ -166,6 +222,7 @@ export type Database = {
           created_at?: string | null
           environment?: string
           id?: string
+          last_cost_calculation?: string | null
           last_sync?: string | null
           memory_usage?: number | null
           monthly_cost?: number | null
@@ -180,6 +237,59 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      cost_calculations: {
+        Row: {
+          calculation_date: string
+          cluster_id: string
+          compute_cost: number
+          created_at: string | null
+          id: string
+          network_cost: number
+          period_end: string
+          period_start: string
+          pricing_details: Json | null
+          storage_cost: number
+          total_cost: number
+          user_id: string
+        }
+        Insert: {
+          calculation_date?: string
+          cluster_id: string
+          compute_cost?: number
+          created_at?: string | null
+          id?: string
+          network_cost?: number
+          period_end: string
+          period_start: string
+          pricing_details?: Json | null
+          storage_cost?: number
+          total_cost?: number
+          user_id: string
+        }
+        Update: {
+          calculation_date?: string
+          cluster_id?: string
+          compute_cost?: number
+          created_at?: string | null
+          id?: string
+          network_cost?: number
+          period_end?: string
+          period_start?: string
+          pricing_details?: Json | null
+          storage_cost?: number
+          total_cost?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cost_calculations_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
