@@ -1,0 +1,70 @@
+import { Link, useLocation } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  Server,
+  Shield,
+  DollarSign,
+  Settings,
+  LogOut,
+  LayoutDashboard,
+} from "lucide-react";
+
+const navigation = [
+  { name: "Dashboard", href: "/", icon: LayoutDashboard },
+  { name: "Clusters", href: "/clusters", icon: Server },
+  { name: "Security", href: "/security", icon: Shield },
+  { name: "Costs", href: "/costs", icon: DollarSign },
+  { name: "Settings", href: "/settings", icon: Settings },
+];
+
+export const Sidebar = () => {
+  const location = useLocation();
+  const { signOut } = useAuth();
+
+  return (
+    <div className="fixed left-0 top-0 bottom-0 w-64 bg-card border-r border-border flex flex-col">
+      <div className="p-6 border-b border-border">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-gradient-primary">
+            <Server className="w-6 h-6 text-primary-foreground" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-foreground">CloudOps</h1>
+            <p className="text-xs text-muted-foreground">Platform</p>
+          </div>
+        </div>
+      </div>
+
+      <nav className="flex-1 p-4 space-y-1">
+        {navigation.map((item) => {
+          const isActive = location.pathname === item.href;
+          const Icon = item.icon;
+          
+          return (
+            <Link key={item.name} to={item.href}>
+              <Button
+                variant={isActive ? "secondary" : "ghost"}
+                className="w-full justify-start gap-3"
+              >
+                <Icon className="w-4 h-4" />
+                {item.name}
+              </Button>
+            </Link>
+          );
+        })}
+      </nav>
+
+      <div className="p-4 border-t border-border">
+        <Button
+          variant="ghost"
+          className="w-full justify-start gap-3 text-destructive hover:text-destructive hover:bg-destructive/10"
+          onClick={signOut}
+        >
+          <LogOut className="w-4 h-4" />
+          Sign Out
+        </Button>
+      </div>
+    </div>
+  );
+};

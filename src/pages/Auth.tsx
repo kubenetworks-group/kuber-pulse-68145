@@ -1,0 +1,177 @@
+import { useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Server } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { useEffect } from "react";
+
+const Auth = () => {
+  const { signIn, signUp, user } = useAuth();
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (user) {
+      navigate("/");
+    }
+  }, [user, navigate]);
+
+  const [signInForm, setSignInForm] = useState({
+    email: "",
+    password: "",
+  });
+
+  const [signUpForm, setSignUpForm] = useState({
+    fullName: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+  });
+
+  const handleSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    await signIn(signInForm.email, signInForm.password);
+    setLoading(false);
+  };
+
+  const handleSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (signUpForm.password !== signUpForm.confirmPassword) {
+      return;
+    }
+
+    setLoading(true);
+    await signUp(signUpForm.email, signUpForm.password, signUpForm.fullName);
+    setLoading(false);
+  };
+
+  return (
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <div className="w-full max-w-md space-y-8">
+        <div className="text-center">
+          <div className="inline-flex p-3 rounded-lg bg-gradient-primary mb-4">
+            <Server className="w-8 h-8 text-primary-foreground" />
+          </div>
+          <h1 className="text-3xl font-bold text-foreground">CloudOps Platform</h1>
+          <p className="text-muted-foreground mt-2">
+            Multi-Cloud Infrastructure Management
+          </p>
+        </div>
+
+        <Card className="p-6 bg-card border-border">
+          <Tabs defaultValue="signin" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="signin">Sign In</TabsTrigger>
+              <TabsTrigger value="signup">Sign Up</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="signin">
+              <form onSubmit={handleSignIn} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="signin-email">Email</Label>
+                  <Input
+                    id="signin-email"
+                    type="email"
+                    placeholder="your@email.com"
+                    required
+                    value={signInForm.email}
+                    onChange={(e) =>
+                      setSignInForm({ ...signInForm, email: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="signin-password">Password</Label>
+                  <Input
+                    id="signin-password"
+                    type="password"
+                    placeholder="••••••••"
+                    required
+                    value={signInForm.password}
+                    onChange={(e) =>
+                      setSignInForm({ ...signInForm, password: e.target.value })
+                    }
+                  />
+                </div>
+                <Button type="submit" className="w-full" disabled={loading}>
+                  {loading ? "Signing in..." : "Sign In"}
+                </Button>
+              </form>
+            </TabsContent>
+
+            <TabsContent value="signup">
+              <form onSubmit={handleSignUp} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="signup-name">Full Name</Label>
+                  <Input
+                    id="signup-name"
+                    type="text"
+                    placeholder="John Doe"
+                    required
+                    value={signUpForm.fullName}
+                    onChange={(e) =>
+                      setSignUpForm({ ...signUpForm, fullName: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="signup-email">Email</Label>
+                  <Input
+                    id="signup-email"
+                    type="email"
+                    placeholder="your@email.com"
+                    required
+                    value={signUpForm.email}
+                    onChange={(e) =>
+                      setSignUpForm({ ...signUpForm, email: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="signup-password">Password</Label>
+                  <Input
+                    id="signup-password"
+                    type="password"
+                    placeholder="••••••••"
+                    required
+                    minLength={6}
+                    value={signUpForm.password}
+                    onChange={(e) =>
+                      setSignUpForm({ ...signUpForm, password: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="signup-confirm">Confirm Password</Label>
+                  <Input
+                    id="signup-confirm"
+                    type="password"
+                    placeholder="••••••••"
+                    required
+                    minLength={6}
+                    value={signUpForm.confirmPassword}
+                    onChange={(e) =>
+                      setSignUpForm({ ...signUpForm, confirmPassword: e.target.value })
+                    }
+                  />
+                </div>
+                <Button type="submit" className="w-full" disabled={loading}>
+                  {loading ? "Creating account..." : "Create Account"}
+                </Button>
+              </form>
+            </TabsContent>
+          </Tabs>
+        </Card>
+      </div>
+    </div>
+  );
+};
+
+export default Auth;
