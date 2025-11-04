@@ -20,7 +20,7 @@ export const MetricCard = ({
   trend,
 }: MetricCardProps) => {
   return (
-    <Card className="p-6 bg-gradient-card border-border">
+    <Card className="p-6 bg-gradient-card border-border shadow-card hover:shadow-glow transition-all">
       <div className="flex items-start justify-between">
         <div className="flex-1">
           <p className="text-sm text-muted-foreground mb-1">{title}</p>
@@ -41,7 +41,7 @@ export const MetricCard = ({
             </div>
           )}
         </div>
-        <div className="p-3 rounded-lg bg-primary/10">
+        <div className="p-3 rounded-xl bg-primary/10">
           <Icon className="w-6 h-6 text-primary" />
         </div>
       </div>

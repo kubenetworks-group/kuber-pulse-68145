@@ -31,7 +31,7 @@ export const AISavingsCard = ({
     totalByType > 0 ? Math.round((value / totalByType) * 100) : 0;
 
   return (
-    <Card className="p-6 bg-gradient-to-br from-success/10 to-success/5 border-success/20">
+    <Card className="p-6 bg-gradient-to-br from-success/10 via-success/5 to-transparent border-success/20 shadow-card hover:shadow-glow transition-all">
       <div className="flex items-start justify-between mb-4">
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-2">

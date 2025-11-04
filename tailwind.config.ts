@@ -66,9 +66,11 @@ export default {
       backgroundImage: {
         "gradient-primary": "var(--gradient-primary)",
         "gradient-card": "var(--gradient-card)",
+        "gradient-success": "var(--gradient-success)",
       },
       boxShadow: {
         glow: "var(--shadow-glow)",
+        card: "var(--shadow-card)",
       },
       borderRadius: {
         lg: "var(--radius)",

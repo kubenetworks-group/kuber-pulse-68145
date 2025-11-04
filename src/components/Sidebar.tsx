@@ -1,6 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import {
   Server,
   Shield,
@@ -25,15 +26,17 @@ export const Sidebar = () => {
   const { signOut } = useAuth();
 
   return (
-    <div className="fixed left-0 top-0 bottom-0 w-64 bg-card border-r border-border flex flex-col">
+    <div className="fixed left-0 top-0 bottom-0 w-64 bg-card/80 backdrop-blur-xl border-r border-border flex flex-col">
       <div className="p-6 border-b border-border">
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-gradient-primary">
+          <div className="p-2 rounded-xl bg-gradient-primary shadow-glow">
             <Server className="w-6 h-6 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-foreground">CloudOps</h1>
-            <p className="text-xs text-muted-foreground">Platform</p>
+            <h1 className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+              CloudOps
+            </h1>
+            <p className="text-xs text-muted-foreground">AI-Powered Platform</p>
           </div>
         </div>
       </div>
@@ -47,7 +50,9 @@ export const Sidebar = () => {
             <Link key={item.name} to={item.href}>
               <Button
                 variant={isActive ? "secondary" : "ghost"}
-                className="w-full justify-start gap-3"
+                className={`w-full justify-start gap-3 transition-all ${
+                  isActive ? "shadow-sm" : "hover:translate-x-1"
+                }`}
               >
                 <Icon className="w-4 h-4" />
                 {item.name}
@@ -57,7 +62,11 @@ export const Sidebar = () => {
         })}
       </nav>
 
-      <div className="p-4 border-t border-border">
+      <div className="p-4 border-t border-border space-y-2">
+        <div className="flex items-center justify-between px-2 mb-2">
+          <span className="text-xs text-muted-foreground">Theme</span>
+          <ThemeToggle />
+        </div>
         <Button
           variant="ghost"
           className="w-full justify-start gap-3 text-destructive hover:text-destructive hover:bg-destructive/10"

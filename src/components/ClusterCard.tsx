@@ -28,10 +28,10 @@ export const ClusterCard = ({
   };
 
   return (
-    <Card className="p-6 hover:shadow-glow transition-all duration-300 border-border bg-card">
+    <Card className="p-6 hover:shadow-glow transition-all duration-300 border-border bg-gradient-card shadow-card">
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-primary/10">
+          <div className="p-2 rounded-xl bg-primary/10">
             <Server className="w-5 h-5 text-primary" />
           </div>
           <div>

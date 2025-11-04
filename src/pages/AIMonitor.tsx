@@ -175,7 +175,9 @@ export default function AIMonitor() {
       <div className="p-8 space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-4xl font-bold mb-2">AI Monitor</h1>
+          <h1 className="text-4xl font-bold mb-2 bg-gradient-primary bg-clip-text text-transparent">
+            AI Monitor
+          </h1>
           <p className="text-muted-foreground">
             AI-powered incident detection and auto-healing system
           </p>

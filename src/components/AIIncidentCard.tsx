@@ -101,9 +101,9 @@ export const AIIncidentCard = ({ incident, clusterName, savings, onExecuteAction
 
   return (
     <Card className={cn(
-      "overflow-hidden border transition-all hover:shadow-lg",
+      "overflow-hidden border transition-all hover:shadow-glow",
       config.border,
-      "bg-gradient-to-br",
+      "bg-gradient-to-br shadow-card",
       config.gradient
     )}>
       <div className="p-6">

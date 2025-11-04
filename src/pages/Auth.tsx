@@ -53,19 +53,21 @@ const Auth = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20 flex items-center justify-center p-4">
       <div className="w-full max-w-md space-y-8">
         <div className="text-center">
-          <div className="inline-flex p-3 rounded-lg bg-gradient-primary mb-4">
+          <div className="inline-flex p-3 rounded-2xl bg-gradient-primary shadow-glow mb-4">
             <Server className="w-8 h-8 text-primary-foreground" />
           </div>
-          <h1 className="text-3xl font-bold text-foreground">CloudOps Platform</h1>
+          <h1 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+            CloudOps Platform
+          </h1>
           <p className="text-muted-foreground mt-2">
-            Multi-Cloud Infrastructure Management
+            AI-Powered Multi-Cloud Infrastructure Management
           </p>
         </div>
 
-        <Card className="p-6 bg-card border-border">
+        <Card className="p-6 bg-card/80 backdrop-blur-xl border-border shadow-card">
           <Tabs defaultValue="signin" className="w-full">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="signin">Sign In</TabsTrigger>

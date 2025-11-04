@@ -12,7 +12,7 @@ interface CostBreakdownChartProps {
 
 export const CostBreakdownChart = ({ data }: CostBreakdownChartProps) => {
   return (
-    <Card className="p-6 bg-card border-border">
+    <Card className="p-6 bg-card border-border shadow-card hover:shadow-glow transition-all">
       <div className="mb-6">
         <h3 className="text-lg font-semibold text-card-foreground">Cost vs. AI Savings</h3>
         <p className="text-sm text-muted-foreground mt-1">Monthly infrastructure costs and AI-driven savings</p>

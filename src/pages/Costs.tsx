@@ -143,18 +143,20 @@ const Costs = () => {
     <DashboardLayout>
       <div className="p-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-foreground">Cost Analysis</h1>
+          <h1 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+            Cost Analysis
+          </h1>
           <p className="text-muted-foreground mt-1">Monitor and optimize infrastructure spending</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <Card className="p-6 bg-gradient-card border-border">
+          <Card className="p-6 bg-gradient-card border-border shadow-card hover:shadow-glow transition-all">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <p className="text-sm text-muted-foreground mb-1">Current Month</p>
                 <h3 className="text-3xl font-bold text-card-foreground">${currentMonthCost.toFixed(2)}</h3>
               </div>
-              <div className="p-3 rounded-lg bg-primary/10">
+              <div className="p-3 rounded-xl bg-primary/10">
                 <DollarSign className="w-6 h-6 text-primary" />
               </div>
             </div>
@@ -180,36 +182,36 @@ const Costs = () => {
             trend={{ value: 15, isPositive: true }}
           />
 
-          <Card className="p-6 bg-gradient-card border-border">
+          <Card className="p-6 bg-gradient-card border-border shadow-card hover:shadow-glow transition-all">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <p className="text-sm text-muted-foreground mb-1">Net Cost</p>
                 <h3 className="text-3xl font-bold text-card-foreground">${netCost.toFixed(2)}</h3>
               </div>
-              <div className="p-3 rounded-lg bg-accent/10">
+              <div className="p-3 rounded-xl bg-accent/10">
                 <DollarSign className="w-6 h-6 text-accent" />
               </div>
             </div>
             <p className="text-sm text-muted-foreground">After AI savings</p>
           </Card>
 
-          <Card className="p-6 bg-gradient-card border-border">
+          <Card className="p-6 bg-gradient-success border-success/20 shadow-card hover:shadow-glow transition-all">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <p className="text-sm text-muted-foreground mb-1">ROI</p>
-                <h3 className="text-3xl font-bold text-success">{roi.toFixed(1)}%</h3>
+                <p className="text-sm text-success-foreground/80 mb-1">ROI</p>
+                <h3 className="text-3xl font-bold text-success-foreground">{roi.toFixed(1)}%</h3>
               </div>
-              <div className="p-3 rounded-lg bg-success/10">
-                <Sparkles className="w-6 h-6 text-success" />
+              <div className="p-3 rounded-xl bg-success-foreground/10">
+                <Sparkles className="w-6 h-6 text-success-foreground" />
               </div>
             </div>
-            <p className="text-sm text-muted-foreground">AI savings impact</p>
+            <p className="text-sm text-success-foreground/70">AI savings impact</p>
           </Card>
         </div>
 
         <CostBreakdownChart data={chartData} />
 
-        <Card className="p-6 bg-card border-border mt-6">
+        <Card className="p-6 bg-card border-border shadow-card mt-6 hover:shadow-glow transition-all">
           <h3 className="text-lg font-semibold text-card-foreground mb-4">Cost by Cluster</h3>
           <div className="space-y-4">
             {clusterCosts.length > 0 ? (
