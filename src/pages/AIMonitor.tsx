@@ -41,7 +41,7 @@ type Cluster = {
 
 export default function AIMonitor() {
   const { user } = useAuth();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { formatCurrency } = useCurrency();
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [clusters, setClusters] = useState<Cluster[]>([]);
@@ -219,18 +219,18 @@ export default function AIMonitor() {
               {t('aiMonitor.title')}
             </h1>
             <p className="text-muted-foreground">
-              Sistema de detecção e correção automática de incidentes com IA
+              {t('aiMonitor.description')}
             </p>
           </div>
           <Select value={selectedCluster} onValueChange={setSelectedCluster}>
             <SelectTrigger className="w-[250px]">
-              <SelectValue placeholder="Selecione um cluster" />
+              <SelectValue placeholder={t('aiMonitor.selectCluster')} />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">
                 <div className="flex items-center gap-2">
                   <Activity className="h-4 w-4" />
-                  Todos os Clusters
+                  {t('aiMonitor.allClusters')}
                 </div>
               </SelectItem>
               {clusters.map(cluster => (
@@ -248,13 +248,13 @@ export default function AIMonitor() {
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
                 <Bot className="h-4 w-4 text-primary" />
-                IAs Ativas
+                {t('aiMonitor.activeAIs')}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-primary">{stats.activeAgents}</div>
               <p className="text-xs text-muted-foreground mt-1">
-                Trabalhando neste cluster agora
+                {t('aiMonitor.workingNow')}
               </p>
             </CardContent>
           </Card>
@@ -263,14 +263,14 @@ export default function AIMonitor() {
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
                 <CheckCircle className="h-4 w-4 text-success" />
-                Taxa de Sucesso
+                {t('aiMonitor.successRate')}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-success">{successRate}%</div>
               <Progress value={successRate} className="mt-2 h-2" />
               <p className="text-xs text-muted-foreground mt-1">
-                {stats.resolved} de {stats.total} incidentes resolvidos
+                {t('aiMonitor.incidentsResolved', { resolved: stats.resolved, total: stats.total })}
               </p>
             </CardContent>
           </Card>
@@ -279,7 +279,7 @@ export default function AIMonitor() {
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-accent" />
-                Economia Total
+                {t('aiMonitor.totalSavings')}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -287,7 +287,7 @@ export default function AIMonitor() {
                 {formatCurrency(stats.totalSavings, { sourceCurrency: 'USD' }).value}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Economizado até agora
+                {t('aiMonitor.savedSoFar')}
               </p>
             </CardContent>
           </Card>
@@ -296,13 +296,13 @@ export default function AIMonitor() {
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
                 <Shield className="h-4 w-4 text-warning" />
-                Tempo Evitado
+                {t('aiMonitor.preventedTime')}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-warning">{stats.preventedDowntime}m</div>
               <p className="text-xs text-muted-foreground mt-1">
-                Downtime prevenido pela IA
+                {t('aiMonitor.downtimePrevented')}
               </p>
             </CardContent>
           </Card>
@@ -313,10 +313,10 @@ export default function AIMonitor() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Zap className="h-5 w-5 text-primary" />
-              Ações Executadas pela IA
+              {t('aiMonitor.actionsExecuted')}
             </CardTitle>
             <CardDescription>
-              Detalhamento das ações automáticas realizadas
+              {t('aiMonitor.actionsDetail')}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -325,14 +325,14 @@ export default function AIMonitor() {
                 <Target className="h-8 w-8 text-primary" />
                 <div>
                   <div className="text-2xl font-bold">{stats.actionsExecuted}</div>
-                  <div className="text-sm text-muted-foreground">Ações Totais</div>
+                  <div className="text-sm text-muted-foreground">{t('aiMonitor.totalActions')}</div>
                 </div>
               </div>
               <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/50">
                 <Clock className="h-8 w-8 text-accent" />
                 <div>
                   <div className="text-2xl font-bold">{stats.avgResolutionTime}m</div>
-                  <div className="text-sm text-muted-foreground">Tempo Médio</div>
+                  <div className="text-sm text-muted-foreground">{t('aiMonitor.avgTime')}</div>
                 </div>
               </div>
               <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/50">
@@ -341,7 +341,7 @@ export default function AIMonitor() {
                   <div className="text-2xl font-bold">
                     {stats.total > 0 ? Math.round((stats.actionsExecuted / stats.total) * 100) : 0}%
                   </div>
-                  <div className="text-sm text-muted-foreground">Auto-corrigidos</div>
+                  <div className="text-sm text-muted-foreground">{t('aiMonitor.autoCorrected')}</div>
                 </div>
               </div>
             </div>
@@ -353,11 +353,11 @@ export default function AIMonitor() {
           <TabsList>
             <TabsTrigger value="incidents" className="flex items-center gap-2">
               <AlertCircle className="h-4 w-4" />
-              Incidentes
+              {t('aiMonitor.incidents')}
             </TabsTrigger>
             <TabsTrigger value="actions" className="flex items-center gap-2">
               <Activity className="h-4 w-4" />
-              Ações Detalhadas
+              {t('aiMonitor.detailedActions')}
             </TabsTrigger>
           </TabsList>
 
@@ -366,25 +366,25 @@ export default function AIMonitor() {
             <div className="flex gap-4">
               <Select value={severityFilter} onValueChange={setSeverityFilter}>
                 <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Severidade" />
+                  <SelectValue placeholder={t('aiMonitor.severity')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todas Severidades</SelectItem>
-                  <SelectItem value="critical">Crítico</SelectItem>
-                  <SelectItem value="high">Alto</SelectItem>
-                  <SelectItem value="medium">Médio</SelectItem>
-                  <SelectItem value="low">Baixo</SelectItem>
+                  <SelectItem value="all">{t('aiMonitor.allSeverities')}</SelectItem>
+                  <SelectItem value="critical">{t('aiMonitor.critical')}</SelectItem>
+                  <SelectItem value="high">{t('aiMonitor.high')}</SelectItem>
+                  <SelectItem value="medium">{t('aiMonitor.medium')}</SelectItem>
+                  <SelectItem value="low">{t('aiMonitor.low')}</SelectItem>
                 </SelectContent>
               </Select>
 
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Status" />
+                  <SelectValue placeholder={t('aiMonitor.status')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todos Status</SelectItem>
-                  <SelectItem value="pending">Pendente</SelectItem>
-                  <SelectItem value="resolved">Resolvido</SelectItem>
+                  <SelectItem value="all">{t('aiMonitor.allStatus')}</SelectItem>
+                  <SelectItem value="pending">{t('aiMonitor.pending')}</SelectItem>
+                  <SelectItem value="resolved">{t('aiMonitor.resolved')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -393,14 +393,14 @@ export default function AIMonitor() {
             <div className="space-y-4">
               {loading ? (
                 <div className="text-center py-12 text-muted-foreground">
-                  Carregando incidentes...
+                  {t('aiMonitor.loadingIncidents')}
                 </div>
               ) : filteredIncidents.length === 0 ? (
                 <div className="text-center py-12">
                   <Bot className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
-                  <h3 className="text-lg font-semibold mb-2">Nenhum incidente detectado</h3>
+                  <h3 className="text-lg font-semibold mb-2">{t('aiMonitor.noIncidentsDetected')}</h3>
                   <p className="text-muted-foreground">
-                    A IA está monitorando seus clusters. Incidentes aparecerão aqui quando detectados.
+                    {t('aiMonitor.aiMonitoring')}
                   </p>
                 </div>
               ) : (
@@ -420,9 +420,9 @@ export default function AIMonitor() {
           <TabsContent value="actions" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Histórico de Ações da IA</CardTitle>
+                <CardTitle>{t('aiMonitor.actionHistory')}</CardTitle>
                 <CardDescription>
-                  Veja em detalhes o que a IA fez para resolver cada problema
+                  {t('aiMonitor.actionHistoryDetail')}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -438,7 +438,7 @@ export default function AIMonitor() {
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-2">
                               <Badge variant={incident.resolved_at ? "default" : "secondary"}>
-                                {incident.resolved_at ? "Resolvido" : "Em Andamento"}
+                                {incident.resolved_at ? t('aiMonitor.resolved') : t('aiMonitor.inProgress')}
                               </Badge>
                               <Badge variant="outline">{incident.severity}</Badge>
                               <span className="text-sm text-muted-foreground">
@@ -454,27 +454,27 @@ export default function AIMonitor() {
                             <div className="bg-primary/5 border border-primary/10 rounded-lg p-3 space-y-2">
                               <div className="flex items-center gap-2 mb-2">
                                 <Bot className="h-4 w-4 text-primary" />
-                                <span className="text-sm font-medium">O que a IA fez:</span>
+                                <span className="text-sm font-medium">{t('aiMonitor.whatAIDid')}</span>
                               </div>
                               <div className="text-sm space-y-2">
                                 <div>
-                                  <span className="font-medium text-primary">Causa Raiz: </span>
+                                  <span className="font-medium text-primary">{t('aiMonitor.rootCause')} </span>
                                   <span>{incident.ai_analysis.root_cause}</span>
                                 </div>
                                 <div>
-                                  <span className="font-medium text-primary">Ação Tomada: </span>
-                                  <span>{incident.auto_heal_action || "Análise em andamento"}</span>
+                                  <span className="font-medium text-primary">{t('aiMonitor.actionTaken')} </span>
+                                  <span>{incident.auto_heal_action || t('aiMonitor.analysisInProgress')}</span>
                                 </div>
                                 {incident.action_result && (
                                   <div>
-                                    <span className="font-medium text-primary">Resultado: </span>
+                                    <span className="font-medium text-primary">{t('aiMonitor.result')} </span>
                                     <span className="text-success">
                                       {JSON.stringify(incident.action_result)}
                                     </span>
                                   </div>
                                 )}
                                 <div>
-                                  <span className="font-medium text-primary">Recomendação: </span>
+                                  <span className="font-medium text-primary">{t('aiMonitor.recommendation')} </span>
                                   <span>{incident.ai_analysis.recommendation}</span>
                                 </div>
                               </div>
@@ -485,11 +485,11 @@ export default function AIMonitor() {
                         {/* Timeline */}
                         <div className="flex items-center gap-4 text-xs text-muted-foreground pt-2 border-t">
                           <span>
-                            Detectado: {new Date(incident.created_at).toLocaleString('pt-BR')}
+                            {t('aiMonitor.detected')} {new Date(incident.created_at).toLocaleString(i18n.language)}
                           </span>
                           {incident.resolved_at && (
                             <span>
-                              Resolvido: {new Date(incident.resolved_at).toLocaleString('pt-BR')}
+                              {t('aiMonitor.resolvedAt')} {new Date(incident.resolved_at).toLocaleString(i18n.language)}
                             </span>
                           )}
                         </div>
