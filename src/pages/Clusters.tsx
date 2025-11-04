@@ -130,40 +130,26 @@ const Clusters = () => {
         provider: formData.provider,
       });
 
-      // Simulate connection validation
-      setTimeout(async () => {
-        if (formData.cluster_type === "kubernetes") {
-          if (!formData.config_file) {
-            await createClusterLog(data.id, "error", "Missing Kubernetes configuration file", {
-              required: "kubeconfig.yml file is required for Kubernetes clusters"
-            });
-            await supabase.from("clusters").update({ status: "error" }).eq("id", data.id);
-          } else {
-            await createClusterLog(data.id, "info", "Validating Kubernetes configuration...");
-            
-            // Simulate validation
-            setTimeout(async () => {
-              await createClusterLog(data.id, "warning", "Configuration validation pending - authentication token may be required", {
-                note: "Please ensure your kubeconfig contains valid authentication tokens"
-              });
-            }, 2000);
-          }
-        } else {
-          // Docker validation
-          if (!formData.api_endpoint) {
-            await createClusterLog(data.id, "error", "Missing Docker endpoint", {
-              required: "Docker endpoint is required (e.g., unix:///var/run/docker.sock)"
-            });
-            await supabase.from("clusters").update({ status: "error" }).eq("id", data.id);
-          } else {
-            await createClusterLog(data.id, "info", "Attempting to connect to Docker endpoint...");
-            
-            setTimeout(async () => {
-              await createClusterLog(data.id, "warning", "Connection pending - verifying endpoint accessibility");
-            }, 2000);
-          }
-        }
-      }, 1000);
+      // Call edge function to validate the cluster connection
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session) {
+        fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/validate-cluster-connection`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            cluster_id: data.id,
+            config_file: formData.config_file,
+            cluster_type: formData.cluster_type,
+            api_endpoint: formData.api_endpoint,
+          }),
+        }).catch(err => {
+          console.error('Error calling validation function:', err);
+        });
+      }
 
       setOpen(false);
       setFormData({
