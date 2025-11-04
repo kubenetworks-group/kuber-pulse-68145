@@ -81,69 +81,142 @@ async function validateKubernetesCluster(
     // Check if it's a local/private IP
     const isPrivateIP = isPrivateIPAddress(serverUrl)
     if (isPrivateIP) {
-      await createLog(supabase, cluster_id, user_id, 'warning', 
-        'Cluster uses a private IP address. This cluster may not be accessible from the cloud.',
+      await createLog(supabase, cluster_id, user_id, 'error', 
+        'Cluster uses a private IP address and cannot be accessed from the cloud',
         { 
           note: 'Private networks require direct access. Consider using a VPN or exposing the cluster through a public endpoint.',
           server: serverUrl
         }
       )
-      await updateClusterStatus(supabase, cluster_id, 'warning')
+      await updateClusterStatus(supabase, cluster_id, 'error')
       return
     }
 
-    // Try to reach the server
-    try {
-      await createLog(supabase, cluster_id, user_id, 'info', 'Attempting to connect to cluster...')
-      
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 10000)
-      
-      const response = await fetch(`${serverUrl}/version`, {
-        method: 'GET',
-        signal: controller.signal,
-        headers: {
-          'Accept': 'application/json'
-        }
-      })
-      
-      clearTimeout(timeoutId)
+    await createLog(supabase, cluster_id, user_id, 'info', 'Cluster endpoint is public, attempting connection...')
 
-      if (response.ok) {
-        const version = await response.json()
-        await createLog(supabase, cluster_id, user_id, 'success', 
-          `Successfully connected to Kubernetes cluster`,
-          { version: version.gitVersion }
-        )
-        await updateClusterStatus(supabase, cluster_id, 'healthy')
-      } else if (response.status === 401 || response.status === 403) {
-        await createLog(supabase, cluster_id, user_id, 'warning', 
-          'Cluster endpoint is reachable but authentication failed',
-          { 
-            note: 'Please ensure your kubeconfig contains valid authentication tokens',
-            status: response.status
+    // Try to reach the server with proper certificates handling
+    try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 15000)
+      
+      await createLog(supabase, cluster_id, user_id, 'info', `Connecting to ${serverUrl}...`)
+      
+      // First try to get certificate info
+      let certData = null
+      if (clusterInfo['certificate-authority-data']) {
+        certData = clusterInfo['certificate-authority-data']
+      }
+      
+      // Try different endpoints that Kubernetes exposes
+      const endpoints = ['/version', '/livez', '/readyz', '/api/v1']
+      let connected = false
+      let lastError = null
+      
+      for (const endpoint of endpoints) {
+        try {
+          const testUrl = `${serverUrl}${endpoint}`
+          await createLog(supabase, cluster_id, user_id, 'info', `Testing endpoint: ${endpoint}`)
+          
+          const response = await fetch(testUrl, {
+            method: 'GET',
+            signal: controller.signal,
+            headers: {
+              'Accept': 'application/json',
+              'User-Agent': 'KubeNetworks-Validator/1.0'
+            }
+          })
+          
+          clearTimeout(timeoutId)
+          
+          // Any response means the server is reachable
+          if (response.status === 200) {
+            try {
+              const data = await response.json()
+              await createLog(supabase, cluster_id, user_id, 'success', 
+                `Successfully connected to Kubernetes cluster via ${endpoint}`,
+                { 
+                  status: response.status,
+                  endpoint: endpoint,
+                  responseData: JSON.stringify(data).substring(0, 200)
+                }
+              )
+              await updateClusterStatus(supabase, cluster_id, 'healthy')
+              connected = true
+              break
+            } catch {
+              await createLog(supabase, cluster_id, user_id, 'success', 
+                `Cluster is reachable via ${endpoint} (non-JSON response)`,
+                { status: response.status, endpoint: endpoint }
+              )
+              await updateClusterStatus(supabase, cluster_id, 'healthy')
+              connected = true
+              break
+            }
+          } else if (response.status === 401 || response.status === 403) {
+            await createLog(supabase, cluster_id, user_id, 'warning', 
+              `Cluster is reachable but requires authentication (${endpoint})`,
+              { 
+                note: 'Authentication is required. Your cluster is accessible but credentials need to be configured.',
+                status: response.status,
+                endpoint: endpoint
+              }
+            )
+            await updateClusterStatus(supabase, cluster_id, 'warning')
+            connected = true
+            break
+          } else if (response.status >= 200 && response.status < 500) {
+            // Server responded, which means it's reachable
+            await createLog(supabase, cluster_id, user_id, 'info', 
+              `Cluster responded with status ${response.status} on ${endpoint}`,
+              { status: response.status, endpoint: endpoint }
+            )
+            // Continue trying other endpoints
           }
-        )
-        await updateClusterStatus(supabase, cluster_id, 'warning')
-      } else {
-        await createLog(supabase, cluster_id, user_id, 'error', 
-          `Failed to connect: HTTP ${response.status}`,
-          { status: response.status, statusText: response.statusText }
-        )
+        } catch (endpointError: any) {
+          lastError = endpointError
+          // Continue trying other endpoints
+        }
+      }
+      
+      if (!connected) {
+        if (lastError) {
+          if (lastError.name === 'AbortError') {
+            await createLog(supabase, cluster_id, user_id, 'error', 
+              'Connection timeout: Cluster did not respond within 15 seconds',
+              { 
+                note: 'The cluster endpoint may be behind a firewall or not accessible from the internet',
+                server: serverUrl
+              }
+            )
+          } else {
+            await createLog(supabase, cluster_id, user_id, 'error', 
+              `Connection failed: ${lastError.message}`,
+              { 
+                error: lastError.toString(),
+                note: 'Check if the cluster endpoint is accessible and the URL is correct',
+                server: serverUrl
+              }
+            )
+          }
+        } else {
+          await createLog(supabase, cluster_id, user_id, 'error', 
+            'Could not connect to any Kubernetes API endpoint',
+            { 
+              note: 'The cluster may be offline or the endpoint URL is incorrect',
+              server: serverUrl,
+              testedEndpoints: endpoints
+            }
+          )
+        }
         await updateClusterStatus(supabase, cluster_id, 'error')
       }
+      
+      clearTimeout(timeoutId)
     } catch (fetchError: any) {
-      if (fetchError.name === 'AbortError') {
-        await createLog(supabase, cluster_id, user_id, 'error', 
-          'Connection timeout: Could not reach cluster within 10 seconds',
-          { note: 'Check if the cluster endpoint is accessible from the internet' }
-        )
-      } else {
-        await createLog(supabase, cluster_id, user_id, 'error', 
-          `Connection failed: ${fetchError.message}`,
-          { error: fetchError.toString() }
-        )
-      }
+      await createLog(supabase, cluster_id, user_id, 'error', 
+        `Unexpected error during connection: ${fetchError.message}`,
+        { error: fetchError.toString() }
+      )
       await updateClusterStatus(supabase, cluster_id, 'error')
     }
   } catch (error: any) {
