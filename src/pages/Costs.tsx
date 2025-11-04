@@ -251,7 +251,7 @@ const Costs = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
           <Card className="p-6 bg-gradient-card border-border shadow-card hover:shadow-glow transition-all">
             <div className="flex items-center justify-between mb-4">
               <div>
@@ -301,19 +301,6 @@ const Costs = () => {
               </div>
             </div>
             <p className="text-sm text-muted-foreground">{t('costs.aiPoweredSavings')}</p>
-          </Card>
-
-          <Card className="p-6 bg-gradient-success border-success/20 shadow-card hover:shadow-glow transition-all">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <p className="text-sm text-success-foreground/80 mb-1">ROI</p>
-                <h3 className="text-3xl font-bold text-success-foreground">{roi.toFixed(1)}%</h3>
-              </div>
-              <div className="p-3 rounded-xl bg-success-foreground/10">
-                <Sparkles className="w-6 h-6 text-success-foreground" />
-              </div>
-            </div>
-            <p className="text-sm text-success-foreground/70">{t('costs.aiPoweredSavings')}</p>
           </Card>
         </div>
 
