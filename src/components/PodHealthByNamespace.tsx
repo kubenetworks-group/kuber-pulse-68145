@@ -100,8 +100,14 @@ export const PodHealthByNamespace = () => {
   }
 
   return (
-    <Card className="p-6">
-      <h3 className="text-lg font-semibold mb-4">{t('dashboard.podHealthByNamespace')}</h3>
+    <Card className="p-6 bg-gradient-to-br from-card to-card/50 border-border/50 hover:border-primary/50 transition-all duration-300">
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-lg font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+          {t('dashboard.podHealthByNamespace')}
+        </h3>
+        <div className="h-2 w-2 rounded-full bg-success animate-pulse" />
+      </div>
+      
       <ResponsiveContainer width="100%" height={300}>
         <PieChart>
           <Pie
@@ -109,19 +115,51 @@ export const PodHealthByNamespace = () => {
             cx="50%"
             cy="50%"
             labelLine={false}
-            label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-            outerRadius={80}
+            label={({ name, percent }) => `${(percent * 100).toFixed(0)}%`}
+            outerRadius={90}
+            innerRadius={60}
             fill="#8884d8"
             dataKey="value"
+            animationBegin={0}
+            animationDuration={800}
           >
             {pieData.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={STATUS_COLORS[entry.status as keyof typeof STATUS_COLORS]} />
+              <Cell 
+                key={`cell-${index}`} 
+                fill={STATUS_COLORS[entry.status as keyof typeof STATUS_COLORS]}
+                className="hover:opacity-80 transition-opacity cursor-pointer"
+              />
             ))}
           </Pie>
-          <Tooltip />
-          <Legend />
+          <Tooltip 
+            contentStyle={{
+              backgroundColor: 'hsl(var(--card))',
+              border: '1px solid hsl(var(--border))',
+              borderRadius: '8px',
+              padding: '8px 12px'
+            }}
+          />
+          <Legend 
+            verticalAlign="bottom" 
+            height={36}
+            iconType="circle"
+            wrapperStyle={{
+              fontSize: '12px',
+              paddingTop: '16px'
+            }}
+          />
         </PieChart>
       </ResponsiveContainer>
+      
+      {/* Stats Summary */}
+      <div className="mt-4 grid grid-cols-3 gap-4 pt-4 border-t border-border/50">
+        {namespaceData.slice(0, 3).map((ns) => (
+          <div key={ns.namespace} className="text-center">
+            <div className="text-xs text-muted-foreground mb-1">{ns.namespace}</div>
+            <div className="text-sm font-bold text-foreground">{ns.total} pods</div>
+          </div>
+        ))}
+      </div>
     </Card>
   );
 };

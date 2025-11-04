@@ -70,73 +70,97 @@ const Index = () => {
 
   return (
     <DashboardLayout>
-      <div className="p-8 space-y-8">
-        <div>
-          <h1 className="text-4xl font-bold mb-2 bg-gradient-primary bg-clip-text text-transparent">
-            {t('dashboard.title')}
-          </h1>
-          <p className="text-muted-foreground">
-            {t('dashboard.overview')}
-          </p>
+      <div className="p-8 space-y-6 animate-fade-in">
+        {/* Header Section */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-primary via-primary/80 to-primary/60 bg-clip-text text-transparent">
+              {t('dashboard.title')}
+            </h1>
+            <p className="text-muted-foreground text-lg">
+              {clusterData ? `${clusterData.name} - ${clusterData.environment}` : t('dashboard.overview')}
+            </p>
+          </div>
         </div>
 
+        {/* Metrics Cards */}
         <div className="grid gap-4 md:grid-cols-5">
           <MetricCard
             title={t('dashboard.totalClusters')}
             value={clusters.length.toString()}
             icon={Server}
+            trend={{ value: 12, isPositive: true }}
           />
           <MetricCard
             title={t('dashboard.activeNodes')}
             value={clusterData?.nodes?.toString() || '0'}
             icon={Server}
+            trend={{ value: 8, isPositive: true }}
           />
           <MetricCard
             title={t('dashboard.runningPods')}
             value={clusterData?.pods?.toString() || '0'}
             icon={Database}
+            trend={{ value: 15, isPositive: true }}
           />
           <MetricCard
             title={t('clusters.storage')}
             value={`${clusterData?.storage_used_gb?.toFixed(0) || 0} GB`}
             icon={HardDrive}
+            trend={{ value: 5, isPositive: false }}
           />
           <MetricCard
             title={t('aiMonitor.title')}
             value={aiActionsToday.toString()}
             icon={Bot}
+            trend={{ value: 23, isPositive: true }}
           />
         </div>
 
-        {/* AI Insights Widget */}
-        {incidents.length > 0 && (
-          <AIInsightsWidget recentIncidents={incidents} />
-        )}
+        {/* Main Content Grid */}
+        <div className="grid gap-6 lg:grid-cols-3">
+          {/* Left Column - 2 columns wide */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* AI Insights Widget */}
+            {incidents.length > 0 && (
+              <div className="animate-scale-in">
+                <AIInsightsWidget recentIncidents={incidents} />
+              </div>
+            )}
 
-        {/* Pod Health by Namespace */}
-        <PodHealthByNamespace />
+            {/* Selected Cluster Details */}
+            {!loading && clusterData && (
+              <div className="animate-scale-in">
+                <ClusterCard
+                  name={clusterData.name}
+                  status={clusterData.status}
+                  pods={clusterData.pods}
+                  nodes={clusterData.nodes}
+                  cpuUsage={clusterData.cpu_usage}
+                  memoryUsage={clusterData.memory_usage}
+                  environment={`${clusterData.provider} - ${clusterData.environment}`}
+                />
+              </div>
+            )}
 
-        {/* Selected Cluster Details */}
-        {!loading && clusterData && (
-          <div>
-            <h2 className="text-2xl font-bold mb-4">{t('dashboard.clusterDetails')}</h2>
-            <div className="grid gap-6 md:grid-cols-2">
-              <ClusterCard
-                name={clusterData.name}
-                status={clusterData.status}
-                pods={clusterData.pods}
-                nodes={clusterData.nodes}
-                cpuUsage={clusterData.cpu_usage}
-                memoryUsage={clusterData.memory_usage}
-                environment={`${clusterData.provider} - ${clusterData.environment}`}
-              />
+            {/* Cost Chart */}
+            <div className="animate-scale-in">
+              <CostChart />
             </div>
           </div>
-        )}
 
-        <div className="grid gap-6 md:grid-cols-2">
-          <CostChart />
-          <RecentEvents />
+          {/* Right Column - 1 column wide */}
+          <div className="space-y-6">
+            {/* Pod Health by Namespace */}
+            <div className="animate-scale-in">
+              <PodHealthByNamespace />
+            </div>
+
+            {/* Recent Events */}
+            <div className="animate-scale-in">
+              <RecentEvents />
+            </div>
+          </div>
         </div>
       </div>
     </DashboardLayout>

@@ -57,22 +57,46 @@ const eventColors = {
 
 export const RecentEvents = () => {
   return (
-    <Card className="p-6 bg-card border-border">
-      <h3 className="text-lg font-semibold text-card-foreground mb-4">Recent Events</h3>
-      <div className="space-y-4">
-        {mockEvents.map((event) => {
+    <Card className="p-6 bg-gradient-to-br from-card to-card/50 border-border/50 hover:border-primary/50 transition-all duration-300">
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-lg font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+          Recent Events
+        </h3>
+        <div className="h-2 w-2 rounded-full bg-success animate-pulse" />
+      </div>
+      
+      <div className="space-y-3">
+        {mockEvents.map((event, index) => {
           const Icon = eventIcons[event.type];
           return (
-            <div key={event.id} className="flex items-start gap-3 pb-4 border-b border-border last:border-0 last:pb-0">
-              <Icon className={`w-5 h-5 mt-0.5 ${eventColors[event.type]}`} />
+            <div 
+              key={event.id} 
+              className="group flex items-start gap-3 p-3 rounded-lg hover:bg-accent/50 transition-all duration-200 border border-transparent hover:border-border/50"
+              style={{ animationDelay: `${index * 100}ms` }}
+            >
+              <div className={`p-2 rounded-lg ${
+                event.type === 'success' ? 'bg-success/10' :
+                event.type === 'warning' ? 'bg-warning/10' :
+                event.type === 'error' ? 'bg-destructive/10' :
+                'bg-primary/10'
+              }`}>
+                <Icon className={`w-4 h-4 ${eventColors[event.type]}`} />
+              </div>
+              
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-card-foreground">{event.message}</p>
-                <div className="flex items-center gap-2 mt-1">
-                  <Badge variant="secondary" className="text-xs">
+                <p className="text-sm font-medium text-foreground leading-tight mb-2">
+                  {event.message}
+                </p>
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary" className="text-xs font-medium">
                     {event.cluster}
                   </Badge>
                   <span className="text-xs text-muted-foreground">{event.timestamp}</span>
                 </div>
+              </div>
+              
+              <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                <button className="text-xs text-primary hover:text-primary/80">View</button>
               </div>
             </div>
           );

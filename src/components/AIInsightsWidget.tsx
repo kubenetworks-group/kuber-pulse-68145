@@ -24,67 +24,79 @@ export const AIInsightsWidget = ({ recentIncidents }: AIInsightsWidgetProps) => 
   }).length;
 
   return (
-    <Card className="p-6 bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
-      <div className="flex items-center gap-3 mb-4">
-        <div className="p-2 rounded-lg bg-primary/20">
-          <Bot className="h-5 w-5 text-primary" />
+    <Card className="group relative overflow-hidden p-6 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border-primary/30 hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary/20">
+      {/* Animated background effect */}
+      <div className="absolute -top-24 -right-24 w-48 h-48 bg-primary/10 rounded-full blur-3xl group-hover:scale-150 transition-transform duration-700" />
+      
+      <div className="relative">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="p-3 rounded-xl bg-gradient-to-br from-primary/20 to-primary/10 group-hover:scale-110 transition-transform duration-300">
+            <Bot className="h-6 w-6 text-primary" />
+          </div>
+          <div className="flex-1">
+            <h3 className="font-bold text-xl bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+              AI Insights
+            </h3>
+            <p className="text-sm text-muted-foreground flex items-center gap-2">
+              <span className="inline-block w-2 h-2 rounded-full bg-success animate-pulse" />
+              {actionsToday} auto-healing actions today
+            </p>
+          </div>
+          <Sparkles className="h-5 w-5 text-primary animate-pulse" />
         </div>
-        <div className="flex-1">
-          <h3 className="font-semibold text-lg">AI Insights</h3>
-          <p className="text-sm text-muted-foreground">
-            {actionsToday} auto-healing actions executed today
-          </p>
-        </div>
-        <Sparkles className="h-5 w-5 text-primary animate-pulse" />
-      </div>
 
-      {topIncidents.length === 0 ? (
-        <div className="text-center py-8 text-muted-foreground">
-          <p className="text-sm">All systems healthy! No incidents detected.</p>
-        </div>
-      ) : (
-        <div className="space-y-3 mb-4">
-          {topIncidents.map((incident) => (
-            <div
-              key={incident.id}
-              className="p-3 rounded-lg bg-background/80 border border-border/50 hover:bg-background transition-colors"
-            >
-              <div className="flex items-start gap-3">
-                <Badge
-                  variant="outline"
-                  className={
-                    incident.severity === 'critical'
-                      ? 'bg-red-500/20 text-red-400 border-red-500/30'
-                      : incident.severity === 'high'
-                      ? 'bg-orange-500/20 text-orange-400 border-orange-500/30'
-                      : 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
-                  }
-                >
-                  {incident.severity}
-                </Badge>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{incident.title}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {new Date(incident.created_at).toLocaleString()}
-                  </p>
-                </div>
-                {incident.action_taken && (
-                  <Badge variant="outline" className="bg-green-500/20 text-green-400 text-xs">
-                    Fixed
-                  </Badge>
-                )}
-              </div>
+        {topIncidents.length === 0 ? (
+          <div className="text-center py-8 px-4 rounded-lg bg-gradient-to-br from-success/5 to-success/10 border border-success/20">
+            <div className="w-12 h-12 rounded-full bg-success/20 mx-auto mb-3 flex items-center justify-center">
+              <Sparkles className="h-6 w-6 text-success" />
             </div>
-          ))}
-        </div>
-      )}
+            <p className="text-sm font-medium text-foreground">All systems healthy!</p>
+            <p className="text-xs text-muted-foreground mt-1">No incidents detected</p>
+          </div>
+        ) : (
+          <div className="space-y-3 mb-4">
+            {topIncidents.map((incident, index) => (
+              <div
+                key={incident.id}
+                className="p-4 rounded-xl bg-card/80 backdrop-blur-sm border border-border/50 hover:bg-card hover:border-border transition-all duration-200 hover:scale-[1.02] cursor-pointer"
+                style={{ animationDelay: `${index * 100}ms` }}
+              >
+                <div className="flex items-start gap-3">
+                  <Badge
+                    variant="outline"
+                    className={`
+                      ${incident.severity === 'critical' ? 'bg-destructive/20 text-destructive border-destructive/30' : ''}
+                      ${incident.severity === 'high' ? 'bg-warning/20 text-warning border-warning/30' : ''}
+                      ${incident.severity === 'medium' ? 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 border-yellow-500/30' : ''}
+                      font-semibold
+                    `}
+                  >
+                    {incident.severity}
+                  </Badge>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-foreground leading-tight">{incident.title}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {new Date(incident.created_at).toLocaleString()}
+                    </p>
+                  </div>
+                  {incident.action_taken && (
+                    <Badge className="bg-success/20 text-success border-success/30 text-xs font-semibold">
+                      ✓ Fixed
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
-      <Link to="/ai-monitor">
-        <Button variant="outline" className="w-full gap-2">
-          View All Incidents
-          <ArrowRight className="h-4 w-4" />
-        </Button>
-      </Link>
+        <Link to="/ai-monitor">
+          <Button variant="outline" className="w-full gap-2 group/btn hover:bg-primary/10 hover:border-primary/50">
+            <span>View All Incidents</span>
+            <ArrowRight className="h-4 w-4 group-hover/btn:translate-x-1 transition-transform" />
+          </Button>
+        </Link>
+      </div>
     </Card>
   );
 };
