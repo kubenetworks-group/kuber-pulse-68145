@@ -1,13 +1,23 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ClusterCard } from "@/components/ClusterCard";
 import { ClusterLogs } from "@/components/ClusterLogs";
-import { Plus } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -18,6 +28,8 @@ const Clusters = () => {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [selectedClusterId, setSelectedClusterId] = useState<string | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [clusterToDelete, setClusterToDelete] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     environment: "production",
@@ -71,6 +83,29 @@ const Clusters = () => {
         details: details,
       },
     ]);
+  };
+
+  const handleDeleteCluster = async () => {
+    if (!clusterToDelete) return;
+
+    const { error } = await supabase
+      .from("clusters")
+      .delete()
+      .eq("id", clusterToDelete);
+
+    if (error) {
+      toast.error("Failed to delete cluster");
+      console.error(error);
+    } else {
+      toast.success("Cluster deleted successfully!");
+      setClusters(clusters.filter((c) => c.id !== clusterToDelete));
+      if (selectedClusterId === clusterToDelete) {
+        setSelectedClusterId(null);
+      }
+    }
+
+    setDeleteDialogOpen(false);
+    setClusterToDelete(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -292,16 +327,30 @@ const Clusters = () => {
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {clusters.map((cluster) => (
-                <div key={cluster.id} onClick={() => setSelectedClusterId(cluster.id)} className="cursor-pointer">
-                  <ClusterCard
-                    name={cluster.name}
-                    status={cluster.status as any}
-                    nodes={cluster.nodes}
-                    pods={cluster.pods}
-                    cpuUsage={Number(cluster.cpu_usage)}
-                    memoryUsage={Number(cluster.memory_usage)}
-                    environment={`${cluster.provider.toUpperCase()} - ${cluster.environment}`}
-                  />
+                <div key={cluster.id} className="relative group">
+                  <div onClick={() => setSelectedClusterId(cluster.id)} className="cursor-pointer">
+                    <ClusterCard
+                      name={cluster.name}
+                      status={cluster.status as any}
+                      nodes={cluster.nodes}
+                      pods={cluster.pods}
+                      cpuUsage={Number(cluster.cpu_usage)}
+                      memoryUsage={Number(cluster.memory_usage)}
+                      environment={`${cluster.provider.toUpperCase()} - ${cluster.environment}`}
+                    />
+                  </div>
+                  <Button
+                    variant="destructive"
+                    size="icon"
+                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setClusterToDelete(cluster.id);
+                      setDeleteDialogOpen(true);
+                    }}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
                 </div>
               ))}
             </div>
@@ -311,6 +360,23 @@ const Clusters = () => {
             )}
           </div>
         )}
+
+        <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Cluster</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete this cluster? This action cannot be undone and will remove all associated data and logs.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDeleteCluster} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </DashboardLayout>
   );
