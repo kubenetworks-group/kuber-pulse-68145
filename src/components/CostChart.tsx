@@ -1,5 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { useTranslation } from "react-i18next";
+import { useCurrency } from "@/hooks/useCurrency";
 
 const data = [
   { month: "Jan", cost: 2400 },
@@ -11,16 +13,19 @@ const data = [
 ];
 
 export const CostChart = () => {
+  const { t } = useTranslation();
+  const { formatCurrency } = useCurrency();
+
   return (
     <Card className="p-6 bg-card border-border">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h3 className="text-lg font-semibold text-card-foreground">Infrastructure Costs</h3>
-          <p className="text-sm text-muted-foreground mt-1">Monthly spending analysis</p>
+          <h3 className="text-lg font-semibold text-card-foreground">{t('costs.infrastructureCosts')}</h3>
+          <p className="text-sm text-muted-foreground mt-1">{t('costs.monthlyAnalysis')}</p>
         </div>
         <div className="text-right">
-          <p className="text-2xl font-bold text-card-foreground">$3,800</p>
-          <p className="text-xs text-success">↓ 12% vs last month</p>
+          <p className="text-2xl font-bold text-card-foreground">{formatCurrency(3800, { sourceCurrency: 'USD' }).value}</p>
+          <p className="text-xs text-success">↓ 12% {t('costs.vsLastMonth')}</p>
         </div>
       </div>
       <ResponsiveContainer width="100%" height={200}>
@@ -34,6 +39,7 @@ export const CostChart = () => {
           <YAxis 
             stroke="hsl(var(--muted-foreground))"
             style={{ fontSize: '12px' }}
+            tickFormatter={(value) => formatCurrency(value, { sourceCurrency: 'USD', showConversion: false }).value}
           />
           <Tooltip 
             contentStyle={{
@@ -42,6 +48,7 @@ export const CostChart = () => {
               borderRadius: "var(--radius)",
             }}
             labelStyle={{ color: "hsl(var(--card-foreground))" }}
+            formatter={(value: number) => formatCurrency(value, { sourceCurrency: 'USD' }).value}
           />
           <Bar dataKey="cost" fill="hsl(var(--primary))" radius={[8, 8, 0, 0]} />
         </BarChart>

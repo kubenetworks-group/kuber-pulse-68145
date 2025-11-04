@@ -1,5 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Line, ComposedChart } from "recharts";
+import { useTranslation } from "react-i18next";
+import { useCurrency } from "@/hooks/useCurrency";
 
 interface CostBreakdownChartProps {
   data: Array<{
@@ -11,11 +13,14 @@ interface CostBreakdownChartProps {
 }
 
 export const CostBreakdownChart = ({ data }: CostBreakdownChartProps) => {
+  const { t } = useTranslation();
+  const { formatCurrency } = useCurrency();
+
   return (
     <Card className="p-6 bg-card border-border shadow-card hover:shadow-glow transition-all">
       <div className="mb-6">
-        <h3 className="text-lg font-semibold text-card-foreground">Cost vs. AI Savings</h3>
-        <p className="text-sm text-muted-foreground mt-1">Monthly infrastructure costs and AI-driven savings</p>
+        <h3 className="text-lg font-semibold text-card-foreground">{t('costs.costVsSavings')}</h3>
+        <p className="text-sm text-muted-foreground mt-1">{t('costs.monthlyCostsAndSavings')}</p>
       </div>
       <ResponsiveContainer width="100%" height={250}>
         <ComposedChart data={data}>
@@ -28,7 +33,7 @@ export const CostBreakdownChart = ({ data }: CostBreakdownChartProps) => {
           <YAxis 
             stroke="hsl(var(--muted-foreground))"
             style={{ fontSize: '12px' }}
-            tickFormatter={(value) => `$${value}`}
+            tickFormatter={(value) => formatCurrency(value, { sourceCurrency: 'USD', showConversion: false }).value}
           />
           <Tooltip 
             contentStyle={{
@@ -37,7 +42,7 @@ export const CostBreakdownChart = ({ data }: CostBreakdownChartProps) => {
               borderRadius: "var(--radius)",
             }}
             labelStyle={{ color: "hsl(var(--card-foreground))" }}
-            formatter={(value: number) => `$${value.toFixed(2)}`}
+            formatter={(value: number) => formatCurrency(value, { sourceCurrency: 'USD' }).value}
           />
           <Legend 
             wrapperStyle={{ fontSize: '12px' }}
@@ -47,13 +52,13 @@ export const CostBreakdownChart = ({ data }: CostBreakdownChartProps) => {
             dataKey="cost" 
             fill="hsl(var(--primary))" 
             radius={[8, 8, 0, 0]} 
-            name="Infrastructure Cost"
+            name={t('costs.infrastructureCost')}
           />
           <Bar 
             dataKey="savings" 
             fill="hsl(var(--success))" 
             radius={[8, 8, 0, 0]} 
-            name="AI Savings"
+            name={t('costs.aiSavings')}
           />
           <Line 
             type="monotone" 
@@ -61,7 +66,7 @@ export const CostBreakdownChart = ({ data }: CostBreakdownChartProps) => {
             stroke="hsl(var(--accent))" 
             strokeWidth={2}
             dot={{ fill: "hsl(var(--accent))", r: 4 }}
-            name="Net Cost"
+            name={t('costs.netCost')}
           />
         </ComposedChart>
       </ResponsiveContainer>

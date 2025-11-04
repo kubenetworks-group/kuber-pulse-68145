@@ -6,9 +6,13 @@ import { DollarSign, TrendingDown, TrendingUp, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTranslation } from "react-i18next";
+import { useCurrency } from "@/hooks/useCurrency";
 
 const Costs = () => {
   const { user } = useAuth();
+  const { t } = useTranslation();
+  const { formatCurrency } = useCurrency();
   const [loading, setLoading] = useState(true);
   const [currentMonthCost, setCurrentMonthCost] = useState(0);
   const [lastMonthCost, setLastMonthCost] = useState(0);
@@ -133,28 +137,35 @@ const Costs = () => {
     return (
       <DashboardLayout>
         <div className="p-8">
-          <div className="text-center py-12">Loading cost data...</div>
+          <div className="text-center py-12">{t('common.loading')}</div>
         </div>
       </DashboardLayout>
     );
   }
+
+  const currentMonthFormatted = formatCurrency(currentMonthCost, { sourceCurrency: 'USD' });
+  const savingsFormatted = formatCurrency(savingsThisMonth, { sourceCurrency: 'USD' });
+  const netCostFormatted = formatCurrency(netCost, { sourceCurrency: 'USD' });
 
   return (
     <DashboardLayout>
       <div className="p-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-            Cost Analysis
+            {t('costs.title')}
           </h1>
-          <p className="text-muted-foreground mt-1">Monitor and optimize infrastructure spending</p>
+          <p className="text-muted-foreground mt-1">{t('costs.monthlyAnalysis')}</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <Card className="p-6 bg-gradient-card border-border shadow-card hover:shadow-glow transition-all">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <p className="text-sm text-muted-foreground mb-1">Current Month</p>
-                <h3 className="text-3xl font-bold text-card-foreground">${currentMonthCost.toFixed(2)}</h3>
+                <p className="text-sm text-muted-foreground mb-1">{t('costs.thisMonth')}</p>
+                <h3 className="text-3xl font-bold text-card-foreground">{currentMonthFormatted.value}</h3>
+                {currentMonthFormatted.converted && currentMonthFormatted.note && (
+                  <p className="text-xs text-muted-foreground mt-1">* {currentMonthFormatted.note}</p>
+                )}
               </div>
               <div className="p-3 rounded-xl bg-primary/10">
                 <DollarSign className="w-6 h-6 text-primary" />
@@ -164,12 +175,12 @@ const Costs = () => {
               {costChange < 0 ? (
                 <>
                   <TrendingDown className="w-4 h-4 text-success" />
-                  <span className="text-sm text-success font-medium">{Math.abs(costChange).toFixed(1)}% decrease</span>
+                  <span className="text-sm text-success font-medium">{Math.abs(costChange).toFixed(1)}% {t('costs.vsLastMonth')}</span>
                 </>
               ) : (
                 <>
                   <TrendingUp className="w-4 h-4 text-destructive" />
-                  <span className="text-sm text-destructive font-medium">{costChange.toFixed(1)}% increase</span>
+                  <span className="text-sm text-destructive font-medium">{costChange.toFixed(1)}% {t('costs.vsLastMonth')}</span>
                 </>
               )}
             </div>
@@ -185,14 +196,17 @@ const Costs = () => {
           <Card className="p-6 bg-gradient-card border-border shadow-card hover:shadow-glow transition-all">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <p className="text-sm text-muted-foreground mb-1">Net Cost</p>
-                <h3 className="text-3xl font-bold text-card-foreground">${netCost.toFixed(2)}</h3>
+                <p className="text-sm text-muted-foreground mb-1">{t('costs.netCost')}</p>
+                <h3 className="text-3xl font-bold text-card-foreground">{netCostFormatted.value}</h3>
+                {netCostFormatted.converted && netCostFormatted.note && (
+                  <p className="text-xs text-muted-foreground mt-1">* {netCostFormatted.note}</p>
+                )}
               </div>
               <div className="p-3 rounded-xl bg-accent/10">
                 <DollarSign className="w-6 h-6 text-accent" />
               </div>
             </div>
-            <p className="text-sm text-muted-foreground">After AI savings</p>
+            <p className="text-sm text-muted-foreground">{t('costs.aiPoweredSavings')}</p>
           </Card>
 
           <Card className="p-6 bg-gradient-success border-success/20 shadow-card hover:shadow-glow transition-all">
@@ -205,32 +219,40 @@ const Costs = () => {
                 <Sparkles className="w-6 h-6 text-success-foreground" />
               </div>
             </div>
-            <p className="text-sm text-success-foreground/70">AI savings impact</p>
+            <p className="text-sm text-success-foreground/70">{t('costs.aiPoweredSavings')}</p>
           </Card>
         </div>
 
         <CostBreakdownChart data={chartData} />
 
         <Card className="p-6 bg-card border-border shadow-card mt-6 hover:shadow-glow transition-all">
-          <h3 className="text-lg font-semibold text-card-foreground mb-4">Cost by Cluster</h3>
+          <h3 className="text-lg font-semibold text-card-foreground mb-4">{t('clusters.monthlyCost')}</h3>
           <div className="space-y-4">
             {clusterCosts.length > 0 ? (
-              clusterCosts.map((cluster) => (
-                <div key={cluster.name} className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-card-foreground font-medium">{cluster.name}</span>
-                    <span className="text-muted-foreground">${cluster.cost.toFixed(2)}</span>
+              clusterCosts.map((cluster) => {
+                const clusterCostFormatted = formatCurrency(cluster.cost, { sourceCurrency: 'USD' });
+                return (
+                  <div key={cluster.name} className="space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-card-foreground font-medium">{cluster.name}</span>
+                      <div className="text-right">
+                        <span className="text-muted-foreground">{clusterCostFormatted.value}</span>
+                        {clusterCostFormatted.converted && clusterCostFormatted.note && (
+                          <p className="text-xs text-muted-foreground">* {clusterCostFormatted.note}</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="w-full bg-muted rounded-full h-2">
+                      <div
+                        className="bg-primary h-2 rounded-full transition-all"
+                        style={{ width: `${cluster.percentage}%` }}
+                      />
+                    </div>
                   </div>
-                  <div className="w-full bg-muted rounded-full h-2">
-                    <div
-                      className="bg-primary h-2 rounded-full transition-all"
-                      style={{ width: `${cluster.percentage}%` }}
-                    />
-                  </div>
-                </div>
-              ))
+                );
+              })
             ) : (
-              <p className="text-center text-muted-foreground py-4">No cluster cost data available</p>
+              <p className="text-center text-muted-foreground py-4">{t('clusters.noclusters')}</p>
             )}
           </div>
         </Card>

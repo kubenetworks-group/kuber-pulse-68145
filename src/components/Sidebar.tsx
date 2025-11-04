@@ -2,6 +2,8 @@ import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { LanguageSelector } from "@/components/LanguageSelector";
+import { useTranslation } from "react-i18next";
 import {
   Server,
   Shield,
@@ -12,18 +14,19 @@ import {
   Bot,
 } from "lucide-react";
 
-  const navigation = [
-    { name: "Dashboard", href: "/", icon: LayoutDashboard },
-    { name: "Clusters", href: "/clusters", icon: Server },
-    { name: "AI Monitor", href: "/ai-monitor", icon: Bot },
-    { name: "Security", href: "/security", icon: Shield },
-    { name: "Costs", href: "/costs", icon: DollarSign },
-    { name: "Settings", href: "/settings", icon: Settings },
-  ];
-
 export const Sidebar = () => {
   const location = useLocation();
   const { signOut } = useAuth();
+  const { t } = useTranslation();
+
+  const navigation = [
+    { name: t('common.dashboard'), href: "/", icon: LayoutDashboard },
+    { name: t('common.clusters'), href: "/clusters", icon: Server },
+    { name: t('common.aiMonitor'), href: "/ai-monitor", icon: Bot },
+    { name: t('common.security'), href: "/security", icon: Shield },
+    { name: t('common.costs'), href: "/costs", icon: DollarSign },
+    { name: t('common.settings'), href: "/settings", icon: Settings },
+  ];
 
   return (
     <div className="fixed left-0 top-0 bottom-0 w-64 bg-card/80 backdrop-blur-xl border-r border-border flex flex-col">
@@ -64,8 +67,11 @@ export const Sidebar = () => {
 
       <div className="p-4 border-t border-border space-y-2">
         <div className="flex items-center justify-between px-2 mb-2">
-          <span className="text-xs text-muted-foreground">Theme</span>
+          <span className="text-xs text-muted-foreground">{t('settings.theme')}</span>
           <ThemeToggle />
+        </div>
+        <div className="px-2 mb-2">
+          <LanguageSelector />
         </div>
         <Button
           variant="ghost"
@@ -73,7 +79,7 @@ export const Sidebar = () => {
           onClick={signOut}
         >
           <LogOut className="w-4 h-4" />
-          Sign Out
+          {t('common.signOut')}
         </Button>
       </div>
     </div>

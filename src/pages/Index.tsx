@@ -9,9 +9,11 @@ import { Server, DollarSign, Database, HardDrive, Bot } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 const Index = () => {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const [clusters, setClusters] = useState<any[]>([]);
   const [incidents, setIncidents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,36 +72,36 @@ const Index = () => {
       <div className="p-8 space-y-8">
         <div>
           <h1 className="text-4xl font-bold mb-2 bg-gradient-primary bg-clip-text text-transparent">
-            Dashboard
+            {t('dashboard.title')}
           </h1>
           <p className="text-muted-foreground">
-            Real-time overview of your CloudOps infrastructure
+            {t('dashboard.overview')}
           </p>
         </div>
 
         <div className="grid gap-4 md:grid-cols-5">
           <MetricCard
-            title="Total Clusters"
+            title={t('dashboard.totalClusters')}
             value={clusters.length.toString()}
             icon={Server}
           />
           <MetricCard
-            title="Total Nodes"
+            title={t('dashboard.activeNodes')}
             value={totalNodes.toString()}
             icon={Server}
           />
           <MetricCard
-            title="Total Pods"
+            title={t('dashboard.runningPods')}
             value={totalPods.toString()}
             icon={Database}
           />
           <MetricCard
-            title="Total Storage"
+            title={t('clusters.storage')}
             value={`${totalStorage.toFixed(0)} GB`}
             icon={HardDrive}
           />
           <MetricCard
-            title="AI Actions Today"
+            title={t('aiMonitor.title')}
             value={aiActionsToday.toString()}
             icon={Bot}
           />
@@ -112,14 +114,14 @@ const Index = () => {
 
         {/* Cluster Health Map */}
         <div>
-          <h2 className="text-2xl font-bold mb-4">Cluster Health Map</h2>
+          <h2 className="text-2xl font-bold mb-4">{t('dashboard.clusterHealth')}</h2>
           <ClusterHealthMap clusters={clusters} loading={loading} />
         </div>
 
         {/* Active Clusters */}
         {!loading && clusters.length > 0 && (
           <div>
-            <h2 className="text-2xl font-bold mb-4">Active Clusters</h2>
+            <h2 className="text-2xl font-bold mb-4">{t('clusters.title')}</h2>
             <div className="grid gap-6 md:grid-cols-2">
               {clusters.slice(0, 4).map((cluster) => (
                 <ClusterCard
