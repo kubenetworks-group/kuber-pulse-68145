@@ -31,6 +31,8 @@ serve(async (req) => {
     await supabaseClient.from('ai_incidents').delete().eq('user_id', user.id);
     await supabaseClient.from('cluster_events').delete().eq('user_id', user.id);
     await supabaseClient.from('security_audits').delete().eq('user_id', user.id);
+    await supabaseClient.from('storage_recommendations').delete().eq('user_id', user.id);
+    await supabaseClient.from('pvcs').delete().eq('user_id', user.id);
     await supabaseClient.from('clusters').delete().eq('user_id', user.id);
 
     // Insert 8 demo clusters
@@ -50,6 +52,8 @@ serve(async (req) => {
         cpu_usage: 65.2,
         memory_usage: 72.5,
         storage_used_gb: 450.5,
+        storage_total_gb: 1200.0,
+        storage_available_gb: 749.5,
         monthly_cost: 2850.00,
         last_sync: new Date(Date.now() - 5 * 60000).toISOString(),
         created_at: new Date(Date.now() - 30 * 24 * 3600000).toISOString()
@@ -69,6 +73,8 @@ serve(async (req) => {
         cpu_usage: 87.8,
         memory_usage: 68.3,
         storage_used_gb: 380.2,
+        storage_total_gb: 800.0,
+        storage_available_gb: 419.8,
         monthly_cost: 2100.00,
         last_sync: new Date(Date.now() - 2 * 60000).toISOString(),
         created_at: new Date(Date.now() - 45 * 24 * 3600000).toISOString()
@@ -88,6 +94,8 @@ serve(async (req) => {
         cpu_usage: 45.5,
         memory_usage: 58.2,
         storage_used_gb: 320.8,
+        storage_total_gb: 600.0,
+        storage_available_gb: 279.2,
         monthly_cost: 1950.00,
         last_sync: new Date(Date.now() - 8 * 60000).toISOString(),
         created_at: new Date(Date.now() - 60 * 24 * 3600000).toISOString()
@@ -107,6 +115,8 @@ serve(async (req) => {
         cpu_usage: 62.3,
         memory_usage: 94.7,
         storage_used_gb: 280.5,
+        storage_total_gb: 500.0,
+        storage_available_gb: 219.5,
         monthly_cost: 1650.00,
         last_sync: new Date(Date.now() - 1 * 60000).toISOString(),
         created_at: new Date(Date.now() - 55 * 24 * 3600000).toISOString()
@@ -126,6 +136,8 @@ serve(async (req) => {
         cpu_usage: 38.5,
         memory_usage: 42.8,
         storage_used_gb: 180.3,
+        storage_total_gb: 400.0,
+        storage_available_gb: 219.7,
         monthly_cost: 850.00,
         last_sync: new Date(Date.now() - 10 * 60000).toISOString(),
         created_at: new Date(Date.now() - 20 * 24 * 3600000).toISOString()
@@ -145,6 +157,8 @@ serve(async (req) => {
         cpu_usage: 42.1,
         memory_usage: 51.5,
         storage_used_gb: 120.5,
+        storage_total_gb: 300.0,
+        storage_available_gb: 179.5,
         monthly_cost: 450.00,
         last_sync: new Date(Date.now() - 15 * 60000).toISOString(),
         created_at: new Date(Date.now() - 15 * 24 * 3600000).toISOString()
@@ -164,6 +178,8 @@ serve(async (req) => {
         cpu_usage: 25.3,
         memory_usage: 32.8,
         storage_used_gb: 85.2,
+        storage_total_gb: 200.0,
+        storage_available_gb: 114.8,
         monthly_cost: 280.00,
         last_sync: new Date(Date.now() - 3 * 60000).toISOString(),
         created_at: new Date(Date.now() - 10 * 24 * 3600000).toISOString()
@@ -183,6 +199,8 @@ serve(async (req) => {
         cpu_usage: 52.8,
         memory_usage: 48.5,
         storage_used_gb: 95.8,
+        storage_total_gb: 250.0,
+        storage_available_gb: 154.2,
         monthly_cost: 320.00,
         last_sync: new Date(Date.now() - 1 * 60000).toISOString(),
         created_at: new Date(Date.now() - 5 * 24 * 3600000).toISOString()
@@ -434,6 +452,109 @@ serve(async (req) => {
 
     if (savingsError) throw savingsError;
 
+    // Insert PVCs for each cluster
+    const storageClasses = ['gp3', 'gp2', 'io1', 'io2', 'standard', 'fast-ssd', 'ssd', 'hdd'];
+    const namespaces = ['default', 'production', 'staging', 'monitoring', 'logging', 'database'];
+    const pvcNames = ['data', 'logs', 'backups', 'cache', 'uploads', 'temp', 'postgres', 'mongodb', 'elasticsearch', 'redis'];
+    
+    const allPvcs: any[] = [];
+    
+    clusters.forEach(cluster => {
+      const numPvcs = Math.floor(Math.random() * 5) + 3; // 3-7 PVCs per cluster
+      
+      for (let i = 0; i < numPvcs; i++) {
+        const requestedGb = [10, 20, 50, 100, 200, 500][Math.floor(Math.random() * 6)];
+        const requestedBytes = requestedGb * 1024 * 1024 * 1024;
+        const usagePercent = Math.random() * 100;
+        const usedBytes = Math.floor(requestedBytes * (usagePercent / 100));
+        
+        allPvcs.push({
+          id: crypto.randomUUID(),
+          cluster_id: cluster.id,
+          user_id: user.id,
+          name: `${pvcNames[i % pvcNames.length]}-${cluster.environment}-${Math.floor(Math.random() * 100)}`,
+          namespace: namespaces[Math.floor(Math.random() * namespaces.length)],
+          storage_class: storageClasses[Math.floor(Math.random() * storageClasses.length)],
+          requested_bytes: requestedBytes,
+          used_bytes: usedBytes,
+          status: Math.random() > 0.9 ? 'pending' : 'bound',
+          created_at: new Date(Date.now() - Math.random() * 30 * 24 * 3600000).toISOString(),
+          last_sync: new Date(Date.now() - Math.random() * 60 * 60000).toISOString()
+        });
+      }
+    });
+
+    const { error: pvcsError } = await supabaseClient
+      .from('pvcs')
+      .insert(allPvcs);
+
+    if (pvcsError) throw pvcsError;
+
+    // Insert storage recommendations
+    const storageRecommendations: any[] = [];
+    
+    // Get some PVCs to create recommendations for
+    const pvcSample = allPvcs.filter((_, index) => index % 2 === 0).slice(0, 8);
+    
+    pvcSample.forEach((pvc, index) => {
+      const usagePercent = (pvc.used_bytes / pvc.requested_bytes) * 100;
+      const requestedGb = pvc.requested_bytes / (1024 ** 3);
+      const usedGb = pvc.used_bytes / (1024 ** 3);
+      
+      let recommendationType: string;
+      let recommendedSizeGb: number;
+      let reasoning: string;
+      let potentialSavings: number;
+      
+      if (usagePercent < 20) {
+        // Underutilized - recommend downsizing
+        recommendationType = 'resize_down';
+        recommendedSizeGb = Math.ceil(usedGb * 1.5); // 50% buffer
+        const storagePrice = pvc.storage_class.includes('io') ? 0.125 : 0.10; // $/GB/month
+        potentialSavings = (requestedGb - recommendedSizeGb) * storagePrice;
+        reasoning = `Volume usa apenas ${usagePercent.toFixed(1)}% dos ${requestedGb}GB provisionados. Reduzir para ${recommendedSizeGb}GB mantém 50% de buffer e economiza ${potentialSavings.toFixed(2)}$/mês.`;
+      } else if (usagePercent > 85) {
+        // Near capacity - recommend upsizing
+        recommendationType = 'resize_up';
+        recommendedSizeGb = Math.ceil(requestedGb * 1.3); // 30% increase
+        potentialSavings = 0;
+        reasoning = `Volume está em ${usagePercent.toFixed(1)}% de uso (${usedGb.toFixed(1)}GB de ${requestedGb}GB). Risco de volume cheio. Aumentar para ${recommendedSizeGb}GB previne falhas de I/O.`;
+      } else if (usagePercent < 40) {
+        // Moderately underutilized
+        recommendationType = 'underutilized';
+        recommendedSizeGb = Math.ceil(usedGb * 2); // 100% buffer
+        const storagePrice = 0.10;
+        potentialSavings = (requestedGb - recommendedSizeGb) * storagePrice;
+        reasoning = `Volume subutilizado (${usagePercent.toFixed(1)}% de uso). Ajustar para ${recommendedSizeGb}GB pode economizar ${potentialSavings.toFixed(2)}$/mês sem comprometer operação.`;
+      } else {
+        // Well utilized - skip
+        return;
+      }
+      
+      storageRecommendations.push({
+        id: crypto.randomUUID(),
+        user_id: user.id,
+        cluster_id: pvc.cluster_id,
+        pvc_id: pvc.id,
+        recommendation_type: recommendationType,
+        current_size_gb: requestedGb,
+        recommended_size_gb: recommendedSizeGb,
+        potential_savings: potentialSavings,
+        usage_percentage: usagePercent,
+        reasoning: reasoning,
+        status: index < 2 ? 'applied' : index < 4 ? 'dismissed' : 'pending',
+        days_analyzed: 7,
+        created_at: new Date(Date.now() - Math.random() * 7 * 24 * 3600000).toISOString(),
+        applied_at: index < 2 ? new Date(Date.now() - Math.random() * 2 * 24 * 3600000).toISOString() : null
+      });
+    });
+
+    const { error: recommendationsError } = await supabaseClient
+      .from('storage_recommendations')
+      .insert(storageRecommendations);
+
+    if (recommendationsError) throw recommendationsError;
+
     return new Response(
       JSON.stringify({ 
         success: true, 
@@ -441,7 +562,9 @@ serve(async (req) => {
         clusters: clusters.length,
         incidents: incidents.length,
         cost_calculations: costCalculations.length,
-        ai_savings: finalSavings.length
+        ai_savings: finalSavings.length,
+        pvcs: allPvcs.length,
+        storage_recommendations: storageRecommendations.length
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
