@@ -4,17 +4,16 @@ import { StorageOverview } from "@/components/StorageOverview";
 import { PVCList } from "@/components/PVCList";
 import { StorageRecommendations } from "@/components/StorageRecommendations";
 import { StorageClassComparison } from "@/components/StorageClassComparison";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { Loader2, RefreshCw } from "lucide-react";
+import { useCluster } from "@/contexts/ClusterContext";
 
 export default function Storage() {
   const { t } = useTranslation();
-  const [clusters, setClusters] = useState<any[]>([]);
-  const [selectedClusterId, setSelectedClusterId] = useState<string>("");
+  const { selectedClusterId, clusters } = useCluster();
   const [pvcs, setPvcs] = useState<any[]>([]);
   const [recommendations, setRecommendations] = useState<any[]>([]);
   const [storageClassMigrations, setStorageClassMigrations] = useState<any[]>([]);
@@ -22,37 +21,10 @@ export default function Storage() {
   const [analyzing, setAnalyzing] = useState(false);
 
   useEffect(() => {
-    fetchClusters();
-  }, []);
-
-  useEffect(() => {
     if (selectedClusterId) {
       fetchStorageData();
     }
   }, [selectedClusterId]);
-
-  const fetchClusters = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data, error } = await supabase
-        .from('clusters')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('name');
-
-      if (error) throw error;
-
-      setClusters(data || []);
-      if (data && data.length > 0 && !selectedClusterId) {
-        setSelectedClusterId(data[0].id);
-      }
-    } catch (error) {
-      console.error('Error fetching clusters:', error);
-      toast.error(t('storage.errorFetchingClusters'));
-    }
-  };
 
   const fetchStorageData = async () => {
     setLoading(true);
@@ -137,18 +109,6 @@ export default function Storage() {
             <p className="text-muted-foreground text-sm sm:text-base">{t('storage.subtitle')}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Select value={selectedClusterId} onValueChange={setSelectedClusterId}>
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder={t('storage.selectCluster')} />
-              </SelectTrigger>
-              <SelectContent>
-                {clusters.map((cluster) => (
-                  <SelectItem key={cluster.id} value={cluster.id}>
-                    {cluster.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
             <Button onClick={fetchStorageData} variant="outline" size="icon">
               <RefreshCw className="h-4 w-4" />
             </Button>

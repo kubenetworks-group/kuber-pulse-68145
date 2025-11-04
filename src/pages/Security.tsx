@@ -3,7 +3,6 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { SecurityScanCard } from "@/components/SecurityScanCard";
 import { AlertCircle, CheckCircle, AlertTriangle, XCircle, Bot, Scan, Shield, Loader2 } from "lucide-react";
@@ -11,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
 import { useTranslation } from "react-i18next";
+import { useCluster } from "@/contexts/ClusterContext";
 
 type ScanResult = {
   id: string;
@@ -31,37 +31,17 @@ type Cluster = {
 const Security = () => {
   const { user } = useAuth();
   const { t } = useTranslation();
-  const [clusters, setClusters] = useState<Cluster[]>([]);
-  const [selectedCluster, setSelectedCluster] = useState<string>("all");
+  const { selectedClusterId } = useCluster();
   const [scanResults, setScanResults] = useState<ScanResult[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
   const [lastScanDate, setLastScanDate] = useState<Date | null>(null);
 
-  useEffect(() => {
-    if (user) {
-      fetchClusters();
-    }
-  }, [user]);
-
-  const fetchClusters = async () => {
-    const { data, error } = await supabase
-      .from('clusters')
-      .select('id, name');
-
-    if (error) {
-      console.error('Error fetching clusters:', error);
-      return;
-    }
-
-    setClusters(data || []);
-  };
-
   const startAIScan = async () => {
-    if (!selectedCluster || selectedCluster === "all") {
+    if (!selectedClusterId) {
       toast({
         title: "Selecione um cluster",
-        description: "Por favor, selecione um cluster específico para iniciar a varredura.",
+        description: "Por favor, selecione um cluster para iniciar a varredura.",
         variant: "destructive"
       });
       return;
@@ -183,7 +163,7 @@ const Security = () => {
           message: `A IA terminou a análise do cluster. Encontrados ${mockResults.filter(r => r.severity !== 'passed').length} problemas que precisam de atenção.`,
           type: 'info',
           related_entity_type: 'cluster',
-          related_entity_id: selectedCluster
+          related_entity_id: selectedClusterId
         });
 
       toast({
@@ -215,39 +195,24 @@ const Security = () => {
               Varredura inteligente de vulnerabilidades e configurações de segurança
             </p>
           </div>
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full sm:w-auto">
-            <Select value={selectedCluster} onValueChange={setSelectedCluster}>
-              <SelectTrigger className="w-full sm:w-[250px]">
-                <SelectValue placeholder="Selecione um cluster" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os Clusters</SelectItem>
-                {clusters.map(cluster => (
-                  <SelectItem key={cluster.id} value={cluster.id}>
-                    {cluster.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button 
-              onClick={startAIScan} 
-              disabled={isScanning || selectedCluster === "all"}
-              size="lg"
-              className="gap-2"
-            >
-              {isScanning ? (
-                <>
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  Analisando...
-                </>
-              ) : (
-                <>
-                  <Scan className="h-5 w-5" />
-                  Iniciar Varredura
-                </>
-              )}
-            </Button>
-          </div>
+          <Button 
+            onClick={startAIScan} 
+            disabled={isScanning || !selectedClusterId}
+            size="lg"
+            className="gap-2"
+          >
+            {isScanning ? (
+              <>
+                <Loader2 className="h-5 w-5 animate-spin" />
+                Analisando...
+              </>
+            ) : (
+              <>
+                <Scan className="h-5 w-5" />
+                Iniciar Varredura
+              </>
+            )}
+          </Button>
         </div>
 
         {/* Scan Progress */}

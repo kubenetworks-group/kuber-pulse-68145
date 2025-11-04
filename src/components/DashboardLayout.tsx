@@ -1,6 +1,7 @@
 import { Sidebar } from "./Sidebar";
 import { NotificationBell } from "./NotificationBell";
 import { ClusterSelector } from "./ClusterSelector";
+import { Footer } from "./Footer";
 import { useState } from "react";
 import { Menu } from "lucide-react";
 import { Button } from "./ui/button";
@@ -27,7 +28,7 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
       </div>
 
       {/* Main content */}
-      <div className="lg:ml-64">
+      <div className="lg:ml-64 flex flex-col min-h-screen">
         {/* Top bar with cluster selector and notifications */}
         <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
           <div className="flex justify-between items-center px-4 sm:px-6 lg:px-8 py-3 gap-2">
@@ -45,7 +46,10 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
             <NotificationBell />
           </div>
         </div>
-        {children}
+        <div className="flex-1">
+          {children}
+        </div>
+        <Footer />
       </div>
     </div>
   );
