@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { LanguageSelector } from "@/components/LanguageSelector";
 import { useTranslation } from "react-i18next";
+import { useRole } from "@/hooks/useRole";
 import {
   Server,
   Shield,
@@ -12,20 +13,35 @@ import {
   LogOut,
   LayoutDashboard,
   Bot,
+  Users,
 } from "lucide-react";
 
 export const Sidebar = () => {
   const location = useLocation();
   const { signOut } = useAuth();
   const { t } = useTranslation();
+  const { isAdmin } = useRole();
 
-  const navigation = [
+  const baseNavigation = [
     { name: t('common.dashboard'), href: "/", icon: LayoutDashboard },
     { name: t('common.clusters'), href: "/clusters", icon: Server },
     { name: t('common.aiMonitor'), href: "/ai-monitor", icon: Bot },
     { name: t('common.security'), href: "/security", icon: Shield },
     { name: t('common.costs'), href: "/costs", icon: DollarSign },
+  ];
+
+  const adminNavigation = [
+    { name: t('common.users'), href: "/users", icon: Users },
+  ];
+
+  const settingsNavigation = [
     { name: t('common.settings'), href: "/settings", icon: Settings },
+  ];
+
+  const navigation = [
+    ...baseNavigation,
+    ...(isAdmin() ? adminNavigation : []),
+    ...settingsNavigation,
   ];
 
   return (

@@ -5,6 +5,7 @@
     "aiMonitor": "Monitor IA",
     "costs": "Custos",
     "security": "Segurança",
+    "users": "Usuários",
     "settings": "Configurações",
     "signOut": "Sair",
     "loading": "Carregando...",
@@ -21,6 +22,29 @@
     "refresh": "Atualizar",
     "convertedFrom": "Convertido de {{currency}}",
     "approximateValue": "Valor aproximado"
+  },
+  "users": {
+    "title": "Gerenciamento de Usuários",
+    "description": "Gerencie usuários e suas permissões no sistema",
+    "accessDenied": "Acesso negado. Apenas administradores podem acessar esta página.",
+    "fetchError": "Erro ao carregar usuários",
+    "noUsers": "Nenhum usuário cadastrado",
+    "noUsersDescription": "Novos usuários aparecerão aqui quando se registrarem no sistema",
+    "noName": "Sem nome",
+    "noRoles": "Sem permissões atribuídas",
+    "addRole": "Adicionar permissão",
+    "roleAdded": "Permissão adicionada com sucesso",
+    "roleRemoved": "Permissão removida com sucesso",
+    "roleExists": "Usuário já possui esta permissão",
+    "roleAddError": "Erro ao adicionar permissão",
+    "roleRemoveError": "Erro ao remover permissão",
+    "roles": {
+      "admin": "Administrador",
+      "dev": "Desenvolvedor",
+      "sre": "SRE",
+      "gestor": "Gestor",
+      "finops": "FinOps"
+    }
   },
   "dashboard": {
     "title": "Dashboard de Kubernetes",

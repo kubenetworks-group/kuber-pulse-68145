@@ -5,6 +5,7 @@
     "aiMonitor": "AI Monitor",
     "costs": "Costs",
     "security": "Security",
+    "users": "Users",
     "settings": "Settings",
     "signOut": "Sign Out",
     "loading": "Loading...",
@@ -21,6 +22,29 @@
     "refresh": "Refresh",
     "convertedFrom": "Converted from {{currency}}",
     "approximateValue": "Approximate value"
+  },
+  "users": {
+    "title": "User Management",
+    "description": "Manage users and their permissions in the system",
+    "accessDenied": "Access denied. Only administrators can access this page.",
+    "fetchError": "Error loading users",
+    "noUsers": "No registered users",
+    "noUsersDescription": "New users will appear here when they register in the system",
+    "noName": "No name",
+    "noRoles": "No permissions assigned",
+    "addRole": "Add permission",
+    "roleAdded": "Permission added successfully",
+    "roleRemoved": "Permission removed successfully",
+    "roleExists": "User already has this permission",
+    "roleAddError": "Error adding permission",
+    "roleRemoveError": "Error removing permission",
+    "roles": {
+      "admin": "Administrator",
+      "dev": "Developer",
+      "sre": "SRE",
+      "gestor": "Manager",
+      "finops": "FinOps"
+    }
   },
   "dashboard": {
     "title": "Kubernetes Dashboard",
