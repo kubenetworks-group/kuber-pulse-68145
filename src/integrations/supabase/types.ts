@@ -14,6 +14,69 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_incidents: {
+        Row: {
+          action_result: Json | null
+          action_taken: boolean | null
+          ai_analysis: Json
+          auto_heal_action: string | null
+          cluster_id: string
+          created_at: string | null
+          description: string
+          id: string
+          incident_type: string
+          resolved_at: string | null
+          severity: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          action_result?: Json | null
+          action_taken?: boolean | null
+          ai_analysis: Json
+          auto_heal_action?: string | null
+          cluster_id: string
+          created_at?: string | null
+          description: string
+          id?: string
+          incident_type: string
+          resolved_at?: string | null
+          severity: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          action_result?: Json | null
+          action_taken?: boolean | null
+          ai_analysis?: Json
+          auto_heal_action?: string | null
+          cluster_id?: string
+          created_at?: string | null
+          description?: string
+          id?: string
+          incident_type?: string
+          resolved_at?: string | null
+          severity?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_incidents_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_incidents_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cluster_events: {
         Row: {
           cluster_id: string
