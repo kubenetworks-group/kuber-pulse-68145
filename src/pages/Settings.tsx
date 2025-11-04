@@ -85,6 +85,40 @@ const Settings = () => {
         </div>
 
         <div className="max-w-2xl space-y-6">
+          {/* Demo Data Card */}
+          <Card className="p-6 bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
+            <div className="flex items-start gap-4">
+              <div className="p-3 rounded-lg bg-primary/20">
+                <Database className="h-6 w-6 text-primary" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold mb-2">Generate Demo Data</h3>
+                <p className="text-muted-foreground mb-4">
+                  Populate your CloudOps platform with realistic demo data including 8 clusters across multiple providers,
+                  AI-detected incidents with auto-healing actions, and detailed events to see how it works in production.
+                </p>
+                <div className="bg-background/50 rounded-lg p-3 mb-4 text-sm">
+                  <p className="font-medium mb-1">Demo data includes:</p>
+                  <ul className="list-disc list-inside text-muted-foreground space-y-1">
+                    <li>8 clusters (AWS, GCP, Azure, DigitalOcean, Magalu)</li>
+                    <li>15 AI incidents (critical, high, medium, low severity)</li>
+                    <li>Auto-healing actions with detailed results</li>
+                    <li>Realistic metrics and resource usage</li>
+                  </ul>
+                </div>
+                <Button 
+                  onClick={handleGenerateDemoData} 
+                  disabled={demoLoading}
+                  className="gap-2"
+                  size="lg"
+                >
+                  {demoLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {demoLoading ? 'Generating Demo Data...' : 'Generate Demo Data'}
+                </Button>
+              </div>
+            </div>
+          </Card>
+
           <Card className="p-6 bg-card border-border">
             <h3 className="text-lg font-semibold text-card-foreground mb-4">Profile Information</h3>
             <form onSubmit={handleSubmit} className="space-y-4">
