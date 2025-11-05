@@ -55,7 +55,7 @@ export const Sidebar = () => {
           </div>
           <div>
             <h1 className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-              CloudOps
+              Kodo
             </h1>
             <p className="text-xs text-muted-foreground">AI-Powered Platform</p>
           </div>
