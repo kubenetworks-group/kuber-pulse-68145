@@ -60,7 +60,7 @@ const Auth = () => {
             <Server className="w-8 h-8 text-primary-foreground" />
           </div>
           <h1 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-            CloudOps Platform
+            Kodo
           </h1>
           <p className="text-muted-foreground mt-2">
             AI-Powered Multi-Cloud Infrastructure Management
