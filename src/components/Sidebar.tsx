@@ -5,8 +5,17 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { LanguageSelector } from "@/components/LanguageSelector";
 import { useTranslation } from "react-i18next";
 import { useRole } from "@/hooks/useRole";
-import { Server, Shield, DollarSign, Settings, LogOut, LayoutDashboard, Bot, Users, Database } from "lucide-react";
-import kodoLogo from "@/assets/kodo-logo.png";
+import {
+  Server,
+  Shield,
+  DollarSign,
+  Settings,
+  LogOut,
+  LayoutDashboard,
+  Bot,
+  Users,
+  Database,
+} from "lucide-react";
 
 export const Sidebar = () => {
   const location = useLocation();
@@ -15,27 +24,39 @@ export const Sidebar = () => {
   const { isAdmin } = useRole();
 
   const baseNavigation = [
-    { name: t("common.dashboard"), href: "/", icon: LayoutDashboard },
-    { name: t("common.clusters"), href: "/clusters", icon: Server },
-    { name: t("common.storage"), href: "/storage", icon: Database },
-    { name: t("common.aiMonitor"), href: "/ai-monitor", icon: Bot },
-    { name: t("common.security"), href: "/security", icon: Shield },
-    { name: t("common.costs"), href: "/costs", icon: DollarSign },
+    { name: t('common.dashboard'), href: "/", icon: LayoutDashboard },
+    { name: t('common.clusters'), href: "/clusters", icon: Server },
+    { name: t('common.storage'), href: "/storage", icon: Database },
+    { name: t('common.aiMonitor'), href: "/ai-monitor", icon: Bot },
+    { name: t('common.security'), href: "/security", icon: Shield },
+    { name: t('common.costs'), href: "/costs", icon: DollarSign },
   ];
 
-  const adminNavigation = [{ name: t("common.users"), href: "/users", icon: Users }];
+  const adminNavigation = [
+    { name: t('common.users'), href: "/users", icon: Users },
+  ];
 
-  const settingsNavigation = [{ name: t("common.settings"), href: "/settings", icon: Settings }];
+  const settingsNavigation = [
+    { name: t('common.settings'), href: "/settings", icon: Settings },
+  ];
 
-  const navigation = [...baseNavigation, ...(isAdmin() ? adminNavigation : []), ...settingsNavigation];
+  const navigation = [
+    ...baseNavigation,
+    ...(isAdmin() ? adminNavigation : []),
+    ...settingsNavigation,
+  ];
 
   return (
     <div className="fixed left-0 top-0 bottom-0 w-64 bg-card/80 backdrop-blur-xl border-r border-border flex flex-col">
       <div className="p-6 border-b border-border">
         <div className="flex items-center gap-3">
-          <img src={kodoLogo} alt="Kodo" className="w-20 h-20" />
+          <div className="p-2 rounded-xl bg-gradient-primary shadow-glow">
+            <Server className="w-6 h-6 text-primary-foreground" />
+          </div>
           <div>
-            <h1 className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent">Kodo</h1>
+            <h1 className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+              Kodo
+            </h1>
             <p className="text-xs text-muted-foreground">AI-Powered Platform</p>
           </div>
         </div>
@@ -45,7 +66,7 @@ export const Sidebar = () => {
         {navigation.map((item) => {
           const isActive = location.pathname === item.href;
           const Icon = item.icon;
-
+          
           return (
             <Link key={item.name} to={item.href}>
               <Button
@@ -64,7 +85,7 @@ export const Sidebar = () => {
 
       <div className="p-4 border-t border-border space-y-2">
         <div className="flex items-center justify-between px-2 mb-2">
-          <span className="text-xs text-muted-foreground">{t("settings.theme")}</span>
+          <span className="text-xs text-muted-foreground">{t('settings.theme')}</span>
           <ThemeToggle />
         </div>
         <div className="px-2 mb-2">
@@ -76,7 +97,7 @@ export const Sidebar = () => {
           onClick={signOut}
         >
           <LogOut className="w-4 h-4" />
-          {t("common.signOut")}
+          {t('common.signOut')}
         </Button>
       </div>
     </div>

@@ -8,7 +8,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Server } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useEffect } from "react";
-import kodoLogo from "@/assets/kodo-logo.png";
 
 const Auth = () => {
   const { signIn, signUp, user } = useAuth();
@@ -43,7 +42,7 @@ const Auth = () => {
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-
+    
     if (signUpForm.password !== signUpForm.confirmPassword) {
       return;
     }
@@ -57,9 +56,15 @@ const Auth = () => {
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20 flex items-center justify-center p-4">
       <div className="w-full max-w-md space-y-8">
         <div className="text-center">
-          <img src={kodoLogo} alt="Kodo" className="w-24 h-24 mx-auto mb-4" />
-          <h1 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">Kodo</h1>
-          <p className="text-muted-foreground mt-2">AI-Powered Multi-Cloud Infrastructure Management</p>
+          <div className="inline-flex p-3 rounded-2xl bg-gradient-primary shadow-glow mb-4">
+            <Server className="w-8 h-8 text-primary-foreground" />
+          </div>
+          <h1 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+            Kodo
+          </h1>
+          <p className="text-muted-foreground mt-2">
+            AI-Powered Multi-Cloud Infrastructure Management
+          </p>
         </div>
 
         <Card className="p-6 bg-card/80 backdrop-blur-xl border-border shadow-card">
@@ -79,7 +84,9 @@ const Auth = () => {
                     placeholder="your@email.com"
                     required
                     value={signInForm.email}
-                    onChange={(e) => setSignInForm({ ...signInForm, email: e.target.value })}
+                    onChange={(e) =>
+                      setSignInForm({ ...signInForm, email: e.target.value })
+                    }
                   />
                 </div>
                 <div className="space-y-2">
@@ -90,7 +97,9 @@ const Auth = () => {
                     placeholder="••••••••"
                     required
                     value={signInForm.password}
-                    onChange={(e) => setSignInForm({ ...signInForm, password: e.target.value })}
+                    onChange={(e) =>
+                      setSignInForm({ ...signInForm, password: e.target.value })
+                    }
                   />
                 </div>
                 <Button type="submit" className="w-full" disabled={loading}>
@@ -109,7 +118,9 @@ const Auth = () => {
                     placeholder="John Doe"
                     required
                     value={signUpForm.fullName}
-                    onChange={(e) => setSignUpForm({ ...signUpForm, fullName: e.target.value })}
+                    onChange={(e) =>
+                      setSignUpForm({ ...signUpForm, fullName: e.target.value })
+                    }
                   />
                 </div>
                 <div className="space-y-2">
@@ -120,7 +131,9 @@ const Auth = () => {
                     placeholder="your@email.com"
                     required
                     value={signUpForm.email}
-                    onChange={(e) => setSignUpForm({ ...signUpForm, email: e.target.value })}
+                    onChange={(e) =>
+                      setSignUpForm({ ...signUpForm, email: e.target.value })
+                    }
                   />
                 </div>
                 <div className="space-y-2">
@@ -132,7 +145,9 @@ const Auth = () => {
                     required
                     minLength={6}
                     value={signUpForm.password}
-                    onChange={(e) => setSignUpForm({ ...signUpForm, password: e.target.value })}
+                    onChange={(e) =>
+                      setSignUpForm({ ...signUpForm, password: e.target.value })
+                    }
                   />
                 </div>
                 <div className="space-y-2">
@@ -144,7 +159,9 @@ const Auth = () => {
                     required
                     minLength={6}
                     value={signUpForm.confirmPassword}
-                    onChange={(e) => setSignUpForm({ ...signUpForm, confirmPassword: e.target.value })}
+                    onChange={(e) =>
+                      setSignUpForm({ ...signUpForm, confirmPassword: e.target.value })
+                    }
                   />
                 </div>
                 <Button type="submit" className="w-full" disabled={loading}>
