@@ -57,9 +57,7 @@ const Auth = () => {
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20 flex items-center justify-center p-4">
       <div className="w-full max-w-md space-y-8">
         <div className="text-center">
-          <div className="inline-flex p-3 rounded-2xl bg-gradient-primary shadow-glow mb-4">
-            <img src={kodoLogo} alt="Kodo" className="w-12 h-12" />
-          </div>
+          <img src={kodoLogo} alt="Kodo" className="w-24 h-24 mx-auto mb-4" />
           <h1 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
             Kodo
           </h1>

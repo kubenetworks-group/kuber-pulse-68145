@@ -51,9 +51,7 @@ export const Sidebar = () => {
     <div className="fixed left-0 top-0 bottom-0 w-64 bg-card/80 backdrop-blur-xl border-r border-border flex flex-col">
       <div className="p-6 border-b border-border">
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-xl bg-gradient-primary shadow-glow">
-            <img src={kodoLogo} alt="Kodo" className="w-8 h-8" />
-          </div>
+          <img src={kodoLogo} alt="Kodo" className="w-12 h-12" />
           <div>
             <h1 className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent">
               Kodo
