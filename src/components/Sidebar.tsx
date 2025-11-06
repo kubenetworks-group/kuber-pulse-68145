@@ -16,6 +16,7 @@ import {
   Users,
   Database,
 } from "lucide-react";
+import kodoLogo from "@/assets/kodo-logo.png";
 
 export const Sidebar = () => {
   const location = useLocation();
@@ -51,7 +52,7 @@ export const Sidebar = () => {
       <div className="p-6 border-b border-border">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-xl bg-gradient-primary shadow-glow">
-            <Server className="w-6 h-6 text-primary-foreground" />
+            <img src={kodoLogo} alt="Kodo" className="w-8 h-8" />
           </div>
           <div>
             <h1 className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent">
