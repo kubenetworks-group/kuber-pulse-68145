@@ -73,55 +73,51 @@ export const PodHealthByNamespace = () => {
     }
   };
 
-  const pieData = namespaceData.flatMap(ns => [
+  const totalPods = namespaceData.reduce((sum, ns) => sum + ns.total, 0);
+  const healthyPods = namespaceData.reduce((sum, ns) => sum + ns.healthy, 0);
+  const warningPods = namespaceData.reduce((sum, ns) => sum + ns.warning, 0);
+  const criticalPods = namespaceData.reduce((sum, ns) => sum + ns.critical, 0);
+
+  const pieData = [
     { 
-      name: `${ns.namespace}`,
-      fullName: `${ns.namespace} (${t('common.healthy')})`,
-      value: ns.healthy, 
+      name: t('common.healthy'),
+      value: healthyPods, 
       status: 'healthy',
-      namespace: ns.namespace,
-      total: ns.total
+      percentage: ((healthyPods / totalPods) * 100).toFixed(1)
     },
     { 
-      name: `${ns.namespace}`,
-      fullName: `${ns.namespace} (${t('common.warning')})`,
-      value: ns.warning, 
+      name: t('common.warning'),
+      value: warningPods, 
       status: 'warning',
-      namespace: ns.namespace,
-      total: ns.total
+      percentage: ((warningPods / totalPods) * 100).toFixed(1)
     },
     { 
-      name: `${ns.namespace}`,
-      fullName: `${ns.namespace} (${t('common.critical')})`,
-      value: ns.critical, 
+      name: t('common.critical'),
+      value: criticalPods, 
       status: 'critical',
-      namespace: ns.namespace,
-      total: ns.total
+      percentage: ((criticalPods / totalPods) * 100).toFixed(1)
     },
-  ]).filter(item => item.value > 0);
+  ].filter(item => item.value > 0);
 
   const renderActiveShape = (props: any) => {
     const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill, payload, value } = props;
     
     return (
       <g>
-        <text x={cx} y={cy - 20} textAnchor="middle" className="fill-foreground font-bold text-xl">
-          {payload.namespace}
-        </text>
-        <text x={cx} y={cy} textAnchor="middle" className="fill-foreground text-3xl font-bold">
+        <text x={cx} y={cy - 10} textAnchor="middle" className="fill-foreground font-bold text-2xl">
           {value}
         </text>
-        <text x={cx} y={cy + 20} textAnchor="middle" className="fill-muted-foreground text-sm">
-          {t(`common.${payload.status}`)} pods
+        <text x={cx} y={cy + 15} textAnchor="middle" className="fill-muted-foreground text-sm">
+          {payload.name}
         </text>
-        <text x={cx} y={cy + 38} textAnchor="middle" className="fill-muted-foreground text-xs">
-          {((value / payload.total) * 100).toFixed(1)}% do total
+        <text x={cx} y={cy + 32} textAnchor="middle" className="fill-muted-foreground text-xs">
+          {payload.percentage}% do total
         </text>
         <Sector
           cx={cx}
           cy={cy}
           innerRadius={innerRadius}
-          outerRadius={outerRadius + 8}
+          outerRadius={outerRadius + 10}
           startAngle={startAngle}
           endAngle={endAngle}
           fill={fill}
@@ -132,8 +128,8 @@ export const PodHealthByNamespace = () => {
           cy={cy}
           startAngle={startAngle}
           endAngle={endAngle}
-          innerRadius={outerRadius + 10}
-          outerRadius={outerRadius + 14}
+          innerRadius={outerRadius + 12}
+          outerRadius={outerRadius + 16}
           fill={fill}
           opacity={0.3}
         />
@@ -179,10 +175,6 @@ export const PodHealthByNamespace = () => {
     );
   }
 
-  const totalPods = namespaceData.reduce((sum, ns) => sum + ns.total, 0);
-  const healthyPods = namespaceData.reduce((sum, ns) => sum + ns.healthy, 0);
-  const warningPods = namespaceData.reduce((sum, ns) => sum + ns.warning, 0);
-  const criticalPods = namespaceData.reduce((sum, ns) => sum + ns.critical, 0);
 
   return (
     <Card className="group relative overflow-hidden p-6 bg-gradient-to-br from-card to-card/50 border-border/50 hover:border-primary/50 transition-all duration-300">
