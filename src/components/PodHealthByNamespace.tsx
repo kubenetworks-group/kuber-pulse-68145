@@ -2,7 +2,7 @@ import { Card } from "@/components/ui/card";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCluster } from "@/contexts/ClusterContext";
-import { PieChart, Pie, Cell, ResponsiveContainer, Sector } from "recharts";
+import { BarChart, Bar, Cell, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend } from "recharts";
 import { useTranslation } from "react-i18next";
 import { Activity } from "lucide-react";
 
@@ -25,7 +25,6 @@ export const PodHealthByNamespace = () => {
   const { selectedClusterId } = useCluster();
   const [namespaceData, setNamespaceData] = useState<NamespaceHealth[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeIndex, setActiveIndex] = useState<number | undefined>(undefined);
 
   useEffect(() => {
     if (selectedClusterId) {
@@ -73,76 +72,46 @@ export const PodHealthByNamespace = () => {
     }
   };
 
-  const totalPods = namespaceData.reduce((sum, ns) => sum + ns.total, 0);
-  const healthyPods = namespaceData.reduce((sum, ns) => sum + ns.healthy, 0);
-  const warningPods = namespaceData.reduce((sum, ns) => sum + ns.warning, 0);
-  const criticalPods = namespaceData.reduce((sum, ns) => sum + ns.critical, 0);
+  const chartData = namespaceData.map(ns => ({
+    namespace: ns.namespace,
+    healthy: ns.healthy,
+    warning: ns.warning,
+    critical: ns.critical,
+    total: ns.total
+  }));
 
-  const pieData = [
-    { 
-      name: t('common.healthy'),
-      value: healthyPods, 
-      status: 'healthy',
-      percentage: ((healthyPods / totalPods) * 100).toFixed(1)
-    },
-    { 
-      name: t('common.warning'),
-      value: warningPods, 
-      status: 'warning',
-      percentage: ((warningPods / totalPods) * 100).toFixed(1)
-    },
-    { 
-      name: t('common.critical'),
-      value: criticalPods, 
-      status: 'critical',
-      percentage: ((criticalPods / totalPods) * 100).toFixed(1)
-    },
-  ].filter(item => item.value > 0);
-
-  const renderActiveShape = (props: any) => {
-    const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill, payload, value } = props;
-    
-    return (
-      <g>
-        <text x={cx} y={cy - 10} textAnchor="middle" className="fill-foreground font-bold text-2xl">
-          {value}
-        </text>
-        <text x={cx} y={cy + 15} textAnchor="middle" className="fill-muted-foreground text-sm">
-          {payload.name}
-        </text>
-        <text x={cx} y={cy + 32} textAnchor="middle" className="fill-muted-foreground text-xs">
-          {payload.percentage}% do total
-        </text>
-        <Sector
-          cx={cx}
-          cy={cy}
-          innerRadius={innerRadius}
-          outerRadius={outerRadius + 10}
-          startAngle={startAngle}
-          endAngle={endAngle}
-          fill={fill}
-          className="drop-shadow-lg"
-        />
-        <Sector
-          cx={cx}
-          cy={cy}
-          startAngle={startAngle}
-          endAngle={endAngle}
-          innerRadius={outerRadius + 12}
-          outerRadius={outerRadius + 16}
-          fill={fill}
-          opacity={0.3}
-        />
-      </g>
-    );
-  };
-
-  const onPieEnter = (_: any, index: number) => {
-    setActiveIndex(index);
-  };
-
-  const onPieLeave = () => {
-    setActiveIndex(undefined);
+  const CustomTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      return (
+        <div className="bg-card/95 backdrop-blur-xl border border-border rounded-lg p-3 shadow-lg">
+          <p className="font-semibold text-foreground mb-2">{data.namespace}</p>
+          <div className="space-y-1">
+            <p className="text-xs flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full bg-success inline-block" />
+              <span className="text-muted-foreground">{t('common.healthy')}:</span>
+              <span className="font-medium text-foreground">{data.healthy}</span>
+            </p>
+            <p className="text-xs flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full bg-warning inline-block" />
+              <span className="text-muted-foreground">{t('common.warning')}:</span>
+              <span className="font-medium text-foreground">{data.warning}</span>
+            </p>
+            <p className="text-xs flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full bg-destructive inline-block" />
+              <span className="text-muted-foreground">{t('common.critical')}:</span>
+              <span className="font-medium text-foreground">{data.critical}</span>
+            </p>
+            <div className="pt-1 mt-1 border-t border-border/50">
+              <p className="text-xs text-muted-foreground">
+                Total: <span className="font-medium text-foreground">{data.total}</span> pods
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return null;
   };
 
   if (loading) {
@@ -159,7 +128,7 @@ export const PodHealthByNamespace = () => {
     );
   }
 
-  if (pieData.length === 0) {
+  if (chartData.length === 0) {
     return (
       <Card className="p-6 bg-gradient-to-br from-card to-card/50 border-border/50">
         <h3 className="text-lg font-semibold mb-4">{t('dashboard.podHealthByNamespace')}</h3>
@@ -175,6 +144,10 @@ export const PodHealthByNamespace = () => {
     );
   }
 
+  const totalPods = namespaceData.reduce((sum, ns) => sum + ns.total, 0);
+  const healthyPods = namespaceData.reduce((sum, ns) => sum + ns.healthy, 0);
+  const warningPods = namespaceData.reduce((sum, ns) => sum + ns.warning, 0);
+  const criticalPods = namespaceData.reduce((sum, ns) => sum + ns.critical, 0);
 
   return (
     <Card className="group relative overflow-hidden p-6 bg-gradient-to-br from-card to-card/50 border-border/50 hover:border-primary/50 transition-all duration-300">
@@ -198,45 +171,47 @@ export const PodHealthByNamespace = () => {
         </div>
         
         <div className="relative">
-          <ResponsiveContainer width="100%" height={340}>
-            <PieChart>
-              <Pie
-                activeIndex={activeIndex}
-                activeShape={renderActiveShape}
-                data={pieData}
-                cx="50%"
-                cy="50%"
-                innerRadius={75}
-                outerRadius={105}
-                fill="#8884d8"
-                dataKey="value"
-                animationBegin={0}
-                animationDuration={800}
-                onMouseEnter={onPieEnter}
-                onMouseLeave={onPieLeave}
-                paddingAngle={2}
-              >
-                {pieData.map((entry, index) => (
-                  <Cell 
-                    key={`cell-${index}`} 
-                    fill={STATUS_COLORS[entry.status as keyof typeof STATUS_COLORS]}
-                    className="cursor-pointer transition-all duration-300"
-                    style={{
-                      filter: activeIndex === index ? 'brightness(1.2)' : 'brightness(1)',
-                    }}
-                  />
-                ))}
-              </Pie>
-            </PieChart>
+          <ResponsiveContainer width="100%" height={Math.max(300, chartData.length * 60)}>
+            <BarChart
+              data={chartData}
+              layout="vertical"
+              margin={{ top: 5, right: 30, left: 100, bottom: 5 }}
+            >
+              <XAxis type="number" stroke="hsl(var(--muted-foreground))" />
+              <YAxis 
+                type="category" 
+                dataKey="namespace" 
+                stroke="hsl(var(--muted-foreground))"
+                width={90}
+              />
+              <Tooltip content={<CustomTooltip />} cursor={{ fill: 'hsl(var(--accent))' }} />
+              <Legend 
+                wrapperStyle={{ paddingTop: '20px' }}
+                iconType="circle"
+              />
+              <Bar 
+                dataKey="healthy" 
+                stackId="a" 
+                fill={STATUS_COLORS.healthy}
+                name={t('common.healthy')}
+                radius={[0, 0, 0, 0]}
+              />
+              <Bar 
+                dataKey="warning" 
+                stackId="a" 
+                fill={STATUS_COLORS.warning}
+                name={t('common.warning')}
+                radius={[0, 0, 0, 0]}
+              />
+              <Bar 
+                dataKey="critical" 
+                stackId="a" 
+                fill={STATUS_COLORS.critical}
+                name={t('common.critical')}
+                radius={[0, 4, 4, 0]}
+              />
+            </BarChart>
           </ResponsiveContainer>
-          
-          {/* Center info when not hovering */}
-          {activeIndex === undefined && (
-            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
-              <div className="text-4xl font-bold text-foreground">{totalPods}</div>
-              <div className="text-sm text-muted-foreground mt-1">Total Pods</div>
-            </div>
-          )}
         </div>
         
         {/* Stats Summary */}
