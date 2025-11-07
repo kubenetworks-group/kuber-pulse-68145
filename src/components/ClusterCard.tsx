@@ -42,7 +42,7 @@ export const ClusterCard = ({
     },
   };
 
-  const config = statusConfig[status];
+  const config = statusConfig[status] || statusConfig.healthy;
 
   return (
     <Card className={`group relative overflow-hidden p-6 bg-gradient-to-br from-card to-card/50 ${config.border} hover:border-opacity-60 transition-all duration-300 hover:shadow-lg hover:-translate-y-1`}>
