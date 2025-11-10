@@ -4,7 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, TestTube } from "lucide-react";
 import { useState } from "react";
 
-export const DemoClusterButton = ({ onSuccess }: { onSuccess?: () => void }) => {
+export const DemoClusterButton = ({ onSuccess }: { onSuccess?: (cluster: any, validation: any) => void }) => {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
@@ -20,8 +20,15 @@ export const DemoClusterButton = ({ onSuccess }: { onSuccess?: () => void }) => 
         description: data.message,
       });
 
+      // Fetch validation result
+      const { data: validation } = await supabase
+        .from('cluster_validation_results')
+        .select('*')
+        .eq('cluster_id', data.cluster.id)
+        .single();
+
       if (onSuccess) {
-        onSuccess();
+        onSuccess(data.cluster, validation);
       }
     } catch (error: any) {
       console.error('Error creating demo cluster:', error);

@@ -58,6 +58,23 @@ export default function Onboarding() {
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
   const [clusterId, setClusterId] = useState<string | null>(null);
 
+  const handleDemoClusterSuccess = (cluster: any, validation: any) => {
+    setClusterId(cluster.id);
+    
+    // Format validation result to match expected structure
+    const formattedResult: ValidationResult = {
+      has_storage: validation.has_storage,
+      has_monitoring: validation.has_monitoring,
+      has_ingress: validation.has_ingress,
+      available_features: validation.available_features?.storage || [],
+      recommendations: validation.recommendations,
+      validation_status: validation.validation_status === 'completed' ? 'success' : validation.validation_status
+    };
+    
+    setValidationResult(formattedResult);
+    setStep(3);
+  };
+
   const handleStep1Next = async () => {
     if (!companyName.trim()) {
       toast.error("Por favor, informe o nome da empresa");
@@ -339,7 +356,7 @@ export default function Onboarding() {
                   Não tem um cluster ainda? Crie um cluster de teste para explorar o sistema
                 </p>
               </div>
-              <DemoClusterButton onSuccess={() => window.location.reload()} />
+              <DemoClusterButton onSuccess={handleDemoClusterSuccess} />
             </div>
 
             <div className="flex gap-4">
