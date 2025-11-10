@@ -57,6 +57,10 @@ export default function Onboarding() {
   // Step 3: Validation Results
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
   const [clusterId, setClusterId] = useState<string | null>(null);
+  
+  // Step 4: Configuration Progress
+  const [configStep, setConfigStep] = useState(0);
+  const [configMessage, setConfigMessage] = useState("");
 
   const handleDemoClusterSuccess = (cluster: any, validation: any) => {
     setClusterId(cluster.id);
@@ -154,14 +158,29 @@ export default function Onboarding() {
 
   const handleFinish = async () => {
     setLoading(true);
+    setStep(4); // Go to configuration step
+    
+    // Simulate configuration steps with progress
+    const configSteps = [
+      { message: "Inicializando ambiente...", delay: 800 },
+      { message: "Configurando permissões de acesso...", delay: 1000 },
+      { message: "Carregando métricas do cluster...", delay: 1200 },
+      { message: "Ativando monitoramento em tempo real...", delay: 1000 },
+      { message: "Preparando dashboard...", delay: 800 }
+    ];
+
+    for (let i = 0; i < configSteps.length; i++) {
+      setConfigStep(i);
+      setConfigMessage(configSteps[i].message);
+      await new Promise(resolve => setTimeout(resolve, configSteps[i].delay));
+    }
+
     try {
       await completeOnboarding();
-      toast.success("Configuração concluída com sucesso!");
       navigate('/');
     } catch (error) {
       console.error('Error completing onboarding:', error);
       toast.error("Erro ao finalizar configuração");
-    } finally {
       setLoading(false);
     }
   };
@@ -171,7 +190,7 @@ export default function Onboarding() {
       <Card className="w-full max-w-3xl p-8">
         {/* Progress Steps */}
         <div className="flex items-center justify-between mb-8">
-          {[1, 2, 3].map((s) => (
+          {[1, 2, 3, 4].map((s) => (
             <div key={s} className="flex items-center flex-1">
               <div
                 className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all ${
@@ -184,7 +203,7 @@ export default function Onboarding() {
               >
                 {s < step ? <CheckCircle2 className="w-5 h-5" /> : s}
               </div>
-              {s < 3 && (
+              {s < 4 && (
                 <div
                   className={`h-1 flex-1 mx-2 rounded transition-all ${
                     s < step ? "bg-primary" : "bg-muted"
@@ -505,6 +524,63 @@ export default function Onboarding() {
                 "Concluir e Acessar Dashboard"
               )}
             </Button>
+          </div>
+        )}
+
+        {/* Step 4: Configuration Progress */}
+        {step === 4 && (
+          <div className="space-y-6 animate-fade-in">
+            <div className="text-center space-y-2 mb-8">
+              <Sparkles className="w-12 h-12 mx-auto text-primary animate-pulse" />
+              <h2 className="text-2xl font-bold">Configurando Dashboard</h2>
+              <p className="text-muted-foreground">
+                Aguarde enquanto preparamos tudo para você
+              </p>
+            </div>
+
+            {/* Progress Bar */}
+            <div className="space-y-4">
+              <div className="w-full bg-muted rounded-full h-3 overflow-hidden">
+                <div 
+                  className="h-full bg-gradient-to-r from-primary to-primary/60 transition-all duration-500 ease-out"
+                  style={{ width: `${((configStep + 1) / 5) * 100}%` }}
+                />
+              </div>
+
+              {/* Current Step Message */}
+              <div className="text-center">
+                <p className="text-sm text-muted-foreground animate-fade-in">
+                  {configMessage}
+                </p>
+              </div>
+
+              {/* Configuration Steps */}
+              <div className="space-y-3 mt-6">
+                {[
+                  "Inicializando ambiente",
+                  "Configurando permissões",
+                  "Carregando métricas",
+                  "Ativando monitoramento",
+                  "Preparando dashboard"
+                ].map((label, index) => (
+                  <div key={index} className="flex items-center gap-3">
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                      index < configStep ? 'bg-green-500' : 
+                      index === configStep ? 'bg-primary animate-pulse' :
+                      'bg-muted'
+                    }`}>
+                      {index < configStep && <CheckCircle2 className="w-4 h-4 text-white" />}
+                      {index === configStep && <Loader2 className="w-4 h-4 text-white animate-spin" />}
+                    </div>
+                    <span className={`text-sm ${
+                      index <= configStep ? 'text-foreground font-medium' : 'text-muted-foreground'
+                    }`}>
+                      {label}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
       </Card>
