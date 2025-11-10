@@ -47,72 +47,72 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
-            <Route
-              path="/clusters"
-              element={
-                <ProtectedRoute>
-                  <Clusters />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/ai-monitor"
-              element={
-                <ProtectedRoute>
-                  <AIMonitor />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/security"
-              element={
-                <ProtectedRoute>
-                  <Security />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/costs"
-              element={
-                <ProtectedRoute>
-                  <Costs />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/users"
-              element={
-                <ProtectedRoute>
-                  <Users />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/storage"
-              element={
-                <ProtectedRoute>
-                  <Storage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/settings"
-              element={
-                <ProtectedRoute>
-                  <Settings />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/agents"
-              element={
-                <ProtectedRoute>
-                  <Agents />
-                </ProtectedRoute>
-              }
-            />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
+              <Route
+                path="/clusters"
+                element={
+                  <ProtectedRoute>
+                    <Clusters />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/ai-monitor"
+                element={
+                  <ProtectedRoute>
+                    <AIMonitor />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/security"
+                element={
+                  <ProtectedRoute>
+                    <Security />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/costs"
+                element={
+                  <ProtectedRoute>
+                    <Costs />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/users"
+                element={
+                  <ProtectedRoute>
+                    <Users />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/storage"
+                element={
+                  <ProtectedRoute>
+                    <Storage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/settings"
+                element={
+                  <ProtectedRoute>
+                    <Settings />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/agents"
+                element={
+                  <ProtectedRoute>
+                    <Agents />
+                  </ProtectedRoute>
+                }
+              />
+              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+              <Route path="*" element={<NotFound />} />
             </Routes>
           </ClusterProvider>
         </AuthProvider>
