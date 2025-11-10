@@ -32,3 +32,6 @@ verify_jwt = true
 
 [functions.seed-ai-savings]
 verify_jwt = true
+
+[functions.validate-cluster-setup]
+verify_jwt = true

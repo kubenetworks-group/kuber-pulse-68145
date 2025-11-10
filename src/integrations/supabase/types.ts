@@ -348,6 +348,50 @@ export type Database = {
           },
         ]
       }
+      cluster_validation_results: {
+        Row: {
+          available_features: Json | null
+          cluster_id: string
+          created_at: string
+          has_ingress: boolean
+          has_monitoring: boolean
+          has_storage: boolean
+          id: string
+          recommendations: string | null
+          validation_status: string
+        }
+        Insert: {
+          available_features?: Json | null
+          cluster_id: string
+          created_at?: string
+          has_ingress?: boolean
+          has_monitoring?: boolean
+          has_storage?: boolean
+          id?: string
+          recommendations?: string | null
+          validation_status?: string
+        }
+        Update: {
+          available_features?: Json | null
+          cluster_id?: string
+          created_at?: string
+          has_ingress?: boolean
+          has_monitoring?: boolean
+          has_storage?: boolean
+          id?: string
+          recommendations?: string | null
+          validation_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cluster_validation_results_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clusters: {
         Row: {
           api_endpoint: string
@@ -508,6 +552,36 @@ export type Database = {
           related_entity_type?: string | null
           title?: string
           type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      organizations: {
+        Row: {
+          cnpj: string | null
+          company_name: string
+          created_at: string
+          id: string
+          onboarding_completed: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cnpj?: string | null
+          company_name: string
+          created_at?: string
+          id?: string
+          onboarding_completed?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cnpj?: string | null
+          company_name?: string
+          created_at?: string
+          id?: string
+          onboarding_completed?: boolean
+          updated_at?: string
           user_id?: string
         }
         Relationships: []

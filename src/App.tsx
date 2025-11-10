@@ -8,6 +8,7 @@ import { ClusterProvider } from "@/contexts/ClusterContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
+import Onboarding from "./pages/Onboarding";
 import Clusters from "./pages/Clusters";
 import AIMonitor from "./pages/AIMonitor";
 import Security from "./pages/Security";
@@ -30,14 +31,22 @@ const App = () => (
           <ClusterProvider>
             <Routes>
               <Route path="/auth" element={<Auth />} />
-            <Route
-              path="/"
-              element={
-                <ProtectedRoute>
-                  <Index />
-                </ProtectedRoute>
-              }
-            />
+              <Route
+                path="/onboarding"
+                element={
+                  <ProtectedRoute>
+                    <Onboarding />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/"
+                element={
+                  <ProtectedRoute>
+                    <Index />
+                  </ProtectedRoute>
+                }
+              />
             <Route
               path="/clusters"
               element={

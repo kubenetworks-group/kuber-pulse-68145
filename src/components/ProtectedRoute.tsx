@@ -1,10 +1,13 @@
 import { useAuth } from "@/contexts/AuthContext";
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
+import { useOnboarding } from "@/hooks/useOnboarding";
 
 export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
+  const { needsOnboarding, loading: onboardingLoading } = useOnboarding();
+  const location = useLocation();
 
-  if (loading) {
+  if (loading || onboardingLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
@@ -17,6 +20,16 @@ export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
   if (!user) {
     return <Navigate to="/auth" replace />;
+  }
+
+  // Redirect to onboarding if needed, but not if already on onboarding page
+  if (needsOnboarding && location.pathname !== '/onboarding') {
+    return <Navigate to="/onboarding" replace />;
+  }
+
+  // Redirect to home if on onboarding but already completed
+  if (!needsOnboarding && location.pathname === '/onboarding') {
+    return <Navigate to="/" replace />;
   }
 
   return <>{children}</>;
