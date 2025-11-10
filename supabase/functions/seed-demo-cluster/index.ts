@@ -29,21 +29,18 @@ serve(async (req) => {
       });
     }
 
-    // Create demo organization
-    const { data: org, error: orgError } = await supabaseClient
+    // Create or update demo organization
+    const { error: orgError } = await supabaseClient
       .from('organizations')
-      .insert({
+      .upsert({
         user_id: user.id,
         company_name: 'Empresa Demo Ltda',
         cnpj: '12.345.678/0001-90',
         onboarding_completed: false,
-      })
-      .select()
-      .single();
-
-    if (orgError && orgError.code !== '23505') { // Ignore duplicate key error
-      console.error('Error creating organization:', orgError);
-    }
+      }, {
+        onConflict: 'user_id',
+        ignoreDuplicates: false
+      });
 
     // Create demo cluster with test configuration
     const demoConfig = {
