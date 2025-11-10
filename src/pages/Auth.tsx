@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Server } from "lucide-react";
+import kodoLogo from "@/assets/kodo-logo.png";
 import { useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 
@@ -56,8 +56,12 @@ const Auth = () => {
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20 flex items-center justify-center p-4">
       <div className="w-full max-w-md space-y-8">
         <div className="text-center">
-          <div className="inline-flex p-3 rounded-2xl bg-gradient-primary shadow-glow mb-4">
-            <Server className="w-8 h-8 text-primary-foreground" />
+          <div className="inline-flex mb-4">
+            <img 
+              src={kodoLogo} 
+              alt="Kodo Logo" 
+              className="w-24 h-24 object-contain"
+            />
           </div>
           <h1 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
             Kodo

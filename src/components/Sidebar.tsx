@@ -5,6 +5,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { LanguageSelector } from "@/components/LanguageSelector";
 import { useTranslation } from "react-i18next";
 import { useRole } from "@/hooks/useRole";
+import kodoLogo from "@/assets/kodo-logo.png";
 import {
   Server,
   Shield,
@@ -50,9 +51,11 @@ export const Sidebar = () => {
     <div className="fixed left-0 top-0 bottom-0 w-64 bg-card/80 backdrop-blur-xl border-r border-border flex flex-col">
       <div className="p-6 border-b border-border">
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-xl bg-gradient-primary shadow-glow">
-            <Server className="w-6 h-6 text-primary-foreground" />
-          </div>
+          <img 
+            src={kodoLogo} 
+            alt="Kodo Logo" 
+            className="w-12 h-12 object-contain"
+          />
           <div>
             <h1 className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent">
               Kodo
