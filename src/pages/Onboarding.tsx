@@ -11,6 +11,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { toast } from "sonner";
 import { Loader2, CheckCircle2, AlertCircle, Building2, Server, Sparkles } from "lucide-react";
+import { DemoClusterButton } from "@/components/DemoClusterButton";
 
 interface ClusterConfig {
   name: string;
@@ -330,6 +331,15 @@ export default function Onboarding() {
                   rows={4}
                 />
               </div>
+            </div>
+
+            <div className="border-t pt-4">
+              <div className="text-center space-y-2 mb-4">
+                <p className="text-sm text-muted-foreground">
+                  Não tem um cluster ainda? Crie um cluster de teste para explorar o sistema
+                </p>
+              </div>
+              <DemoClusterButton onSuccess={() => window.location.reload()} />
             </div>
 
             <div className="flex gap-4">

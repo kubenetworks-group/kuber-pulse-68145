@@ -1,5 +1,8 @@
 project_id = "mcqfgnjootzthtizboom"
 
+[functions.seed-demo-cluster]
+verify_jwt = true
+
 [functions.validate-cluster-connection]
 verify_jwt = true
 
