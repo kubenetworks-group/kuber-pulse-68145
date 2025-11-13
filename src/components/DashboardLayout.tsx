@@ -2,6 +2,7 @@ import { Sidebar } from "./Sidebar";
 import { NotificationBell } from "./NotificationBell";
 import { ClusterSelector } from "./ClusterSelector";
 import { Footer } from "./Footer";
+import { TrialBanner } from "./TrialBanner";
 import { useState } from "react";
 import { Menu } from "lucide-react";
 import { Button } from "./ui/button";
@@ -47,6 +48,9 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
           </div>
         </div>
         <div className="flex-1">
+          <div className="px-4 sm:px-6 lg:px-8 py-4">
+            <TrialBanner />
+          </div>
           {children}
         </div>
         <Footer />

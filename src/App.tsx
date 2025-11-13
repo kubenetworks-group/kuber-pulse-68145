@@ -17,6 +17,9 @@ import Users from "./pages/Users";
 import Storage from "./pages/Storage";
 import Settings from "./pages/Settings";
 import Agents from "./pages/Agents";
+import Pricing from "./pages/Pricing";
+import PaymentSuccess from "./pages/PaymentSuccess";
+import PaymentCanceled from "./pages/PaymentCanceled";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -111,6 +114,16 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
+              <Route
+                path="/pricing"
+                element={
+                  <ProtectedRoute>
+                    <Pricing />
+                  </ProtectedRoute>
+                }
+              />
+              <Route path="/payment-success" element={<PaymentSuccess />} />
+              <Route path="/payment-canceled" element={<PaymentCanceled />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>

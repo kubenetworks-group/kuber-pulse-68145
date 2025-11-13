@@ -176,6 +176,27 @@ export default function Onboarding() {
     }
 
     try {
+      // Initialize trial subscription
+      const { data: org } = await supabase
+        .from('organizations')
+        .select('id')
+        .eq('user_id', user?.id)
+        .single();
+
+      if (org) {
+        const { data: trialData, error: trialError } = await supabase.functions.invoke('initialize-trial', {
+          body: { organization_id: org.id, user_id: user?.id },
+        });
+
+        if (trialError) {
+          console.error('Error initializing trial:', trialError);
+          toast.error("Erro ao inicializar trial");
+        } else {
+          console.log('Trial initialized:', trialData);
+          toast.success("Trial de 30 dias ativado!");
+        }
+      }
+
       await completeOnboarding();
       navigate('/');
     } catch (error) {
