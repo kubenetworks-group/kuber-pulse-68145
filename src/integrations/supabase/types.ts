@@ -14,16 +14,1063 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      agent_anomalies: {
+        Row: {
+          ai_analysis: Json
+          anomaly_type: string
+          auto_heal_applied: boolean | null
+          cluster_id: string
+          created_at: string
+          description: string
+          id: string
+          recommendation: string | null
+          resolved: boolean | null
+          resolved_at: string | null
+          severity: string
+          user_id: string
+        }
+        Insert: {
+          ai_analysis: Json
+          anomaly_type: string
+          auto_heal_applied?: boolean | null
+          cluster_id: string
+          created_at?: string
+          description: string
+          id?: string
+          recommendation?: string | null
+          resolved?: boolean | null
+          resolved_at?: string | null
+          severity: string
+          user_id: string
+        }
+        Update: {
+          ai_analysis?: Json
+          anomaly_type?: string
+          auto_heal_applied?: boolean | null
+          cluster_id?: string
+          created_at?: string
+          description?: string
+          id?: string
+          recommendation?: string | null
+          resolved?: boolean | null
+          resolved_at?: string | null
+          severity?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_anomalies_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agent_api_keys: {
+        Row: {
+          api_key: string
+          cluster_id: string
+          created_at: string
+          id: string
+          is_active: boolean
+          last_seen: string | null
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          api_key: string
+          cluster_id: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_seen?: string | null
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          api_key?: string
+          cluster_id?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_seen?: string | null
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_api_keys_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agent_commands: {
+        Row: {
+          cluster_id: string
+          command_params: Json
+          command_type: string
+          completed_at: string | null
+          created_at: string
+          executed_at: string | null
+          id: string
+          result: Json | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          cluster_id: string
+          command_params: Json
+          command_type: string
+          completed_at?: string | null
+          created_at?: string
+          executed_at?: string | null
+          id?: string
+          result?: Json | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          cluster_id?: string
+          command_params?: Json
+          command_type?: string
+          completed_at?: string | null
+          created_at?: string
+          executed_at?: string | null
+          id?: string
+          result?: Json | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_commands_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agent_metrics: {
+        Row: {
+          cluster_id: string
+          collected_at: string
+          created_at: string
+          id: string
+          metric_data: Json
+          metric_type: string
+        }
+        Insert: {
+          cluster_id: string
+          collected_at: string
+          created_at?: string
+          id?: string
+          metric_data: Json
+          metric_type: string
+        }
+        Update: {
+          cluster_id?: string
+          collected_at?: string
+          created_at?: string
+          id?: string
+          metric_data?: Json
+          metric_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_metrics_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_cost_savings: {
+        Row: {
+          calculation_details: Json | null
+          cluster_id: string
+          cost_per_minute: number
+          created_at: string | null
+          downtime_avoided_minutes: number
+          estimated_savings: number
+          id: string
+          incident_id: string
+          saving_type: string
+          user_id: string
+        }
+        Insert: {
+          calculation_details?: Json | null
+          cluster_id: string
+          cost_per_minute?: number
+          created_at?: string | null
+          downtime_avoided_minutes?: number
+          estimated_savings?: number
+          id?: string
+          incident_id: string
+          saving_type: string
+          user_id: string
+        }
+        Update: {
+          calculation_details?: Json | null
+          cluster_id?: string
+          cost_per_minute?: number
+          created_at?: string | null
+          downtime_avoided_minutes?: number
+          estimated_savings?: number
+          id?: string
+          incident_id?: string
+          saving_type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_cost_savings_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_cost_savings_incident_id_fkey"
+            columns: ["incident_id"]
+            isOneToOne: false
+            referencedRelation: "ai_incidents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_incidents: {
+        Row: {
+          action_result: Json | null
+          action_taken: boolean | null
+          ai_analysis: Json
+          auto_heal_action: string | null
+          cluster_id: string
+          created_at: string | null
+          description: string
+          id: string
+          incident_type: string
+          resolved_at: string | null
+          severity: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          action_result?: Json | null
+          action_taken?: boolean | null
+          ai_analysis: Json
+          auto_heal_action?: string | null
+          cluster_id: string
+          created_at?: string | null
+          description: string
+          id?: string
+          incident_type: string
+          resolved_at?: string | null
+          severity: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          action_result?: Json | null
+          action_taken?: boolean | null
+          ai_analysis?: Json
+          auto_heal_action?: string | null
+          cluster_id?: string
+          created_at?: string | null
+          description?: string
+          id?: string
+          incident_type?: string
+          resolved_at?: string | null
+          severity?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_incidents_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_incidents_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cluster_events: {
+        Row: {
+          cluster_id: string
+          created_at: string | null
+          details: Json | null
+          event_type: string
+          id: string
+          message: string
+          user_id: string
+        }
+        Insert: {
+          cluster_id: string
+          created_at?: string | null
+          details?: Json | null
+          event_type: string
+          id?: string
+          message: string
+          user_id: string
+        }
+        Update: {
+          cluster_id?: string
+          created_at?: string | null
+          details?: Json | null
+          event_type?: string
+          id?: string
+          message?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cluster_events_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cluster_validation_results: {
+        Row: {
+          available_features: Json | null
+          cluster_id: string
+          created_at: string
+          has_ingress: boolean
+          has_monitoring: boolean
+          has_storage: boolean
+          id: string
+          recommendations: string | null
+          validation_status: string
+        }
+        Insert: {
+          available_features?: Json | null
+          cluster_id: string
+          created_at?: string
+          has_ingress?: boolean
+          has_monitoring?: boolean
+          has_storage?: boolean
+          id?: string
+          recommendations?: string | null
+          validation_status?: string
+        }
+        Update: {
+          available_features?: Json | null
+          cluster_id?: string
+          created_at?: string
+          has_ingress?: boolean
+          has_monitoring?: boolean
+          has_storage?: boolean
+          id?: string
+          recommendations?: string | null
+          validation_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cluster_validation_results_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      clusters: {
+        Row: {
+          api_endpoint: string
+          cluster_type: string
+          config_file: string | null
+          cpu_usage: number | null
+          created_at: string | null
+          environment: string
+          id: string
+          last_cost_calculation: string | null
+          last_sync: string | null
+          memory_usage: number | null
+          monthly_cost: number | null
+          name: string
+          nodes: number | null
+          pods: number | null
+          provider: string
+          region: string | null
+          status: string
+          storage_available_gb: number | null
+          storage_total_gb: number | null
+          storage_used_gb: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          api_endpoint: string
+          cluster_type: string
+          config_file?: string | null
+          cpu_usage?: number | null
+          created_at?: string | null
+          environment: string
+          id?: string
+          last_cost_calculation?: string | null
+          last_sync?: string | null
+          memory_usage?: number | null
+          monthly_cost?: number | null
+          name: string
+          nodes?: number | null
+          pods?: number | null
+          provider: string
+          region?: string | null
+          status?: string
+          storage_available_gb?: number | null
+          storage_total_gb?: number | null
+          storage_used_gb?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          api_endpoint?: string
+          cluster_type?: string
+          config_file?: string | null
+          cpu_usage?: number | null
+          created_at?: string | null
+          environment?: string
+          id?: string
+          last_cost_calculation?: string | null
+          last_sync?: string | null
+          memory_usage?: number | null
+          monthly_cost?: number | null
+          name?: string
+          nodes?: number | null
+          pods?: number | null
+          provider?: string
+          region?: string | null
+          status?: string
+          storage_available_gb?: number | null
+          storage_total_gb?: number | null
+          storage_used_gb?: number | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      cost_calculations: {
+        Row: {
+          calculation_date: string
+          cluster_id: string
+          compute_cost: number
+          created_at: string | null
+          id: string
+          network_cost: number
+          period_end: string
+          period_start: string
+          pricing_details: Json | null
+          storage_cost: number
+          total_cost: number
+          user_id: string
+        }
+        Insert: {
+          calculation_date?: string
+          cluster_id: string
+          compute_cost?: number
+          created_at?: string | null
+          id?: string
+          network_cost?: number
+          period_end: string
+          period_start: string
+          pricing_details?: Json | null
+          storage_cost?: number
+          total_cost?: number
+          user_id: string
+        }
+        Update: {
+          calculation_date?: string
+          cluster_id?: string
+          compute_cost?: number
+          created_at?: string | null
+          id?: string
+          network_cost?: number
+          period_end?: string
+          period_start?: string
+          pricing_details?: Json | null
+          storage_cost?: number
+          total_cost?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cost_calculations_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoices: {
+        Row: {
+          amount_brl: number
+          amount_usd: number | null
+          created_at: string
+          currency: string
+          due_date: string | null
+          id: string
+          invoice_pdf_url: string | null
+          organization_id: string
+          paid_at: string | null
+          status: string
+          stripe_invoice_id: string | null
+          subscription_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount_brl?: number
+          amount_usd?: number | null
+          created_at?: string
+          currency?: string
+          due_date?: string | null
+          id?: string
+          invoice_pdf_url?: string | null
+          organization_id: string
+          paid_at?: string | null
+          status?: string
+          stripe_invoice_id?: string | null
+          subscription_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount_brl?: number
+          amount_usd?: number | null
+          created_at?: string
+          currency?: string
+          due_date?: string | null
+          id?: string
+          invoice_pdf_url?: string | null
+          organization_id?: string
+          paid_at?: string | null
+          status?: string
+          stripe_invoice_id?: string | null
+          subscription_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          created_at: string
+          id: string
+          message: string
+          read: boolean
+          related_entity_id: string | null
+          related_entity_type: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message: string
+          read?: boolean
+          related_entity_id?: string | null
+          related_entity_type?: string | null
+          title: string
+          type?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message?: string
+          read?: boolean
+          related_entity_id?: string | null
+          related_entity_type?: string | null
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      organizations: {
+        Row: {
+          cnpj: string | null
+          company_name: string
+          created_at: string
+          id: string
+          onboarding_completed: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cnpj?: string | null
+          company_name: string
+          created_at?: string
+          id?: string
+          onboarding_completed?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cnpj?: string | null
+          company_name?: string
+          created_at?: string
+          id?: string
+          onboarding_completed?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          company: string | null
+          created_at: string | null
+          email: string
+          full_name: string | null
+          id: string
+          updated_at: string | null
+        }
+        Insert: {
+          company?: string | null
+          created_at?: string | null
+          email: string
+          full_name?: string | null
+          id: string
+          updated_at?: string | null
+        }
+        Update: {
+          company?: string | null
+          created_at?: string | null
+          email?: string
+          full_name?: string | null
+          id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      pvcs: {
+        Row: {
+          cluster_id: string
+          created_at: string | null
+          id: string
+          last_sync: string | null
+          name: string
+          namespace: string
+          requested_bytes: number
+          status: string
+          storage_class: string | null
+          updated_at: string | null
+          used_bytes: number
+          user_id: string
+        }
+        Insert: {
+          cluster_id: string
+          created_at?: string | null
+          id?: string
+          last_sync?: string | null
+          name: string
+          namespace: string
+          requested_bytes?: number
+          status?: string
+          storage_class?: string | null
+          updated_at?: string | null
+          used_bytes?: number
+          user_id: string
+        }
+        Update: {
+          cluster_id?: string
+          created_at?: string | null
+          id?: string
+          last_sync?: string | null
+          name?: string
+          namespace?: string
+          requested_bytes?: number
+          status?: string
+          storage_class?: string | null
+          updated_at?: string | null
+          used_bytes?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pvcs_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      security_audits: {
+        Row: {
+          category: string
+          cluster_id: string
+          created_at: string | null
+          description: string
+          id: string
+          resolved_at: string | null
+          severity: string
+          status: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          category: string
+          cluster_id: string
+          created_at?: string | null
+          description: string
+          id?: string
+          resolved_at?: string | null
+          severity: string
+          status?: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          cluster_id?: string
+          created_at?: string | null
+          description?: string
+          id?: string
+          resolved_at?: string | null
+          severity?: string
+          status?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "security_audits_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      storage_recommendations: {
+        Row: {
+          applied_at: string | null
+          cluster_id: string
+          created_at: string | null
+          current_size_gb: number
+          days_analyzed: number | null
+          id: string
+          potential_savings: number | null
+          pvc_id: string
+          reasoning: string
+          recommendation_type: string
+          recommended_size_gb: number
+          status: string | null
+          usage_percentage: number
+          user_id: string
+        }
+        Insert: {
+          applied_at?: string | null
+          cluster_id: string
+          created_at?: string | null
+          current_size_gb: number
+          days_analyzed?: number | null
+          id?: string
+          potential_savings?: number | null
+          pvc_id: string
+          reasoning: string
+          recommendation_type: string
+          recommended_size_gb: number
+          status?: string | null
+          usage_percentage: number
+          user_id: string
+        }
+        Update: {
+          applied_at?: string | null
+          cluster_id?: string
+          created_at?: string | null
+          current_size_gb?: number
+          days_analyzed?: number | null
+          id?: string
+          potential_savings?: number | null
+          pvc_id?: string
+          reasoning?: string
+          recommendation_type?: string
+          recommended_size_gb?: number
+          status?: string | null
+          usage_percentage?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "storage_recommendations_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "storage_recommendations_pvc_id_fkey"
+            columns: ["pvc_id"]
+            isOneToOne: false
+            referencedRelation: "pvcs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subscription_plans: {
+        Row: {
+          created_at: string
+          currency: string
+          description: string | null
+          features: Json
+          id: string
+          is_active: boolean
+          limits: Json
+          name: string
+          price_brl: number
+          price_id_brl: string | null
+          price_id_usd: string | null
+          price_usd: number | null
+          slug: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          currency?: string
+          description?: string | null
+          features?: Json
+          id?: string
+          is_active?: boolean
+          limits?: Json
+          name: string
+          price_brl?: number
+          price_id_brl?: string | null
+          price_id_usd?: string | null
+          price_usd?: number | null
+          slug: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          currency?: string
+          description?: string | null
+          features?: Json
+          id?: string
+          is_active?: boolean
+          limits?: Json
+          name?: string
+          price_brl?: number
+          price_id_brl?: string | null
+          price_id_usd?: string | null
+          price_usd?: number | null
+          slug?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      subscriptions: {
+        Row: {
+          cancel_at_period_end: boolean
+          canceled_at: string | null
+          created_at: string
+          current_period_end: string | null
+          current_period_start: string | null
+          id: string
+          organization_id: string
+          plan_type: Database["public"]["Enums"]["plan_type"]
+          status: Database["public"]["Enums"]["subscription_status"]
+          stripe_customer_id: string | null
+          stripe_price_id: string | null
+          stripe_subscription_id: string | null
+          trial_end: string | null
+          trial_start: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cancel_at_period_end?: boolean
+          canceled_at?: string | null
+          created_at?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          id?: string
+          organization_id: string
+          plan_type?: Database["public"]["Enums"]["plan_type"]
+          status?: Database["public"]["Enums"]["subscription_status"]
+          stripe_customer_id?: string | null
+          stripe_price_id?: string | null
+          stripe_subscription_id?: string | null
+          trial_end?: string | null
+          trial_start?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cancel_at_period_end?: boolean
+          canceled_at?: string | null
+          created_at?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          id?: string
+          organization_id?: string
+          plan_type?: Database["public"]["Enums"]["plan_type"]
+          status?: Database["public"]["Enums"]["subscription_status"]
+          stripe_customer_id?: string | null
+          stripe_price_id?: string | null
+          stripe_subscription_id?: string | null
+          trial_end?: string | null
+          trial_start?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      usage_tracking: {
+        Row: {
+          ai_actions_executed: number
+          ai_analyses_used: number
+          clusters_connected: number
+          created_at: string
+          id: string
+          organization_id: string
+          period_end: string
+          period_start: string
+          reports_generated: number
+          storage_analyzed_gb: number
+          subscription_id: string
+          updated_at: string
+        }
+        Insert: {
+          ai_actions_executed?: number
+          ai_analyses_used?: number
+          clusters_connected?: number
+          created_at?: string
+          id?: string
+          organization_id: string
+          period_end: string
+          period_start: string
+          reports_generated?: number
+          storage_analyzed_gb?: number
+          subscription_id: string
+          updated_at?: string
+        }
+        Update: {
+          ai_actions_executed?: number
+          ai_analyses_used?: number
+          clusters_connected?: number
+          created_at?: string
+          id?: string
+          organization_id?: string
+          period_end?: string
+          period_start?: string
+          reports_generated?: number
+          storage_analyzed_gb?: number
+          subscription_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "usage_tracking_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "usage_tracking_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_user_roles: {
+        Args: { _user_id: string }
+        Returns: Database["public"]["Enums"]["app_role"][]
+      }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "dev" | "sre" | "gestor" | "finops"
+      plan_type: "trial" | "starter" | "growth" | "enterprise"
+      subscription_status:
+        | "trialing"
+        | "active"
+        | "past_due"
+        | "canceled"
+        | "expired"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +1197,16 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "dev", "sre", "gestor", "finops"],
+      plan_type: ["trial", "starter", "growth", "enterprise"],
+      subscription_status: [
+        "trialing",
+        "active",
+        "past_due",
+        "canceled",
+        "expired",
+      ],
+    },
   },
 } as const
