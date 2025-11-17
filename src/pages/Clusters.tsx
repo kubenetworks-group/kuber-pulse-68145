@@ -281,16 +281,25 @@ const Clusters = () => {
       });
 
       // Call edge function to validate the cluster connection
-      supabase.functions.invoke('validate-cluster-connection', {
+      const { data: validationData, error: validationError } = await supabase.functions.invoke('validate-cluster-connection', {
         body: {
           cluster_id: data.id,
           config_file: formData.config_file,
           cluster_type: formData.cluster_type,
           api_endpoint: formData.api_endpoint,
         },
-      }).catch(err => {
-        console.error('Error calling validation function:', err);
       });
+
+      if (validationError) {
+        console.error('Error calling validation function:', validationError);
+        toast.error('Failed to validate cluster connection');
+        
+        // Update status to error if validation failed
+        await supabase
+          .from("clusters")
+          .update({ status: 'error' })
+          .eq("id", data.id);
+      }
 
       setOpen(false);
       setFormData({
