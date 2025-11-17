@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 export const useOnboarding = () => {
   const { user } = useAuth();
   const [needsOnboarding, setNeedsOnboarding] = useState<boolean | null>(null);
+  const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -17,7 +18,7 @@ export const useOnboarding = () => {
     try {
       const { data, error } = await supabase
         .from('organizations')
-        .select('onboarding_completed')
+        .select('id, onboarding_completed')
         .eq('user_id', user?.id)
         .order('created_at', { ascending: false })
         .limit(1)
@@ -27,9 +28,11 @@ export const useOnboarding = () => {
 
       // If no organization exists or onboarding not completed, needs onboarding
       setNeedsOnboarding(!data || !data.onboarding_completed);
+      setOrganizationId(data?.id || null);
     } catch (error) {
       console.error('Error checking onboarding status:', error);
       setNeedsOnboarding(true);
+      setOrganizationId(null);
     } finally {
       setLoading(false);
     }
@@ -55,6 +58,7 @@ export const useOnboarding = () => {
 
   return {
     needsOnboarding,
+    organizationId,
     loading,
     checkOnboardingStatus,
     completeOnboarding,

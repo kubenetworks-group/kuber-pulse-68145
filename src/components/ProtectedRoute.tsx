@@ -4,7 +4,7 @@ import { useOnboarding } from "@/hooks/useOnboarding";
 
 export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
-  const { needsOnboarding, loading: onboardingLoading } = useOnboarding();
+  const { needsOnboarding, organizationId, loading: onboardingLoading } = useOnboarding();
   const location = useLocation();
 
   if (loading || onboardingLoading) {

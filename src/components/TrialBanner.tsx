@@ -1,11 +1,13 @@
 import { useSubscription } from "@/hooks/useSubscription";
+import { useOnboarding } from "@/hooks/useOnboarding";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { Clock, AlertTriangle, XCircle } from "lucide-react";
 
 export const TrialBanner = () => {
-  const { isTrialing, daysLeftInTrial, trialExpired, isExpired } = useSubscription();
+  const { organizationId } = useOnboarding();
+  const { isTrialing, daysLeftInTrial, trialExpired, isExpired } = useSubscription(organizationId);
   const navigate = useNavigate();
 
   if (!isTrialing && !isExpired) return null;
