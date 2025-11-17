@@ -67,8 +67,13 @@ const Agents = () => {
   };
 
   const createAgentKey = async () => {
-    if (!newAgentName || !selectedClusterId) {
-      toast.error('Preencha todos os campos');
+    if (!newAgentName.trim()) {
+      toast.error('Digite um nome para o agente');
+      return;
+    }
+
+    if (!selectedClusterId || selectedClusterId === "") {
+      toast.error('Selecione um cluster');
       return;
     }
 
@@ -280,21 +285,23 @@ spec:
               </DialogHeader>
               <div className="space-y-4 pt-4">
                 <div>
-                  <Label htmlFor="agent-name">Nome do Agente</Label>
+                  <Label htmlFor="agent-name">Nome do Agente *</Label>
                   <Input
                     id="agent-name"
                     placeholder="Ex: Production Agent"
                     value={newAgentName}
                     onChange={(e) => setNewAgentName(e.target.value)}
+                    required
                   />
                 </div>
                 <div>
-                  <Label htmlFor="cluster">Cluster</Label>
+                  <Label htmlFor="cluster">Cluster *</Label>
                   <select
                     id="cluster"
                     className="w-full px-3 py-2 rounded-md border bg-background"
                     value={selectedClusterId}
                     onChange={(e) => setSelectedClusterId(e.target.value)}
+                    required
                   >
                     <option value="">Selecione um cluster</option>
                     {clusters.map((cluster) => (
@@ -303,10 +310,15 @@ spec:
                       </option>
                     ))}
                   </select>
+                  {clusters.length === 0 && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      ⚠️ Você precisa conectar um cluster primeiro
+                    </p>
+                  )}
                 </div>
                 <Button 
                   onClick={createAgentKey} 
-                  disabled={creating}
+                  disabled={creating || !newAgentName.trim() || !selectedClusterId}
                   className="w-full"
                 >
                   {creating ? 'Gerando...' : 'Gerar API Key'}
