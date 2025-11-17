@@ -2,37 +2,42 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
-export const useSubscription = () => {
+export const useSubscription = (initialOrgId?: string | null) => {
   const { user } = useAuth();
   const [subscription, setSubscription] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (user) {
-      fetchSubscription();
+      fetchSubscription(initialOrgId);
     }
-  }, [user]);
+  }, [user, initialOrgId]);
 
-  const fetchSubscription = async () => {
+  const fetchSubscription = async (orgId?: string | null) => {
     try {
       setLoading(true);
       
-      // Get organization first
-      const { data: org } = await supabase
-        .from('organizations')
-        .select('id')
-        .eq('user_id', user?.id)
-        .single();
+      let organizationId = orgId;
 
-      if (!org) {
-        setSubscription(null);
-        return;
+      // Only fetch organization if not provided
+      if (!organizationId) {
+        const { data: org } = await supabase
+          .from('organizations')
+          .select('id')
+          .eq('user_id', user?.id)
+          .single();
+
+        if (!org) {
+          setSubscription(null);
+          return;
+        }
+        organizationId = org.id;
       }
 
       const { data, error } = await supabase
         .from('subscriptions')
         .select('*')
-        .eq('organization_id', org.id)
+        .eq('organization_id', organizationId)
         .single();
 
       if (error && error.code !== 'PGRST116') throw error;
