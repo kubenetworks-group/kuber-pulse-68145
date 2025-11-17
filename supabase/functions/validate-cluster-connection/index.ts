@@ -57,8 +57,11 @@ async function validateKubernetesCluster(
   config_file: string
 ) {
   try {
+    console.log('Starting Kubernetes cluster validation...')
+    
     // Parse the kubeconfig YAML
     const config = parseKubeConfig(config_file)
+    console.log('Parsed kubeconfig:', JSON.stringify(config, null, 2))
     
     if (!config.clusters || config.clusters.length === 0) {
       await createLog(supabase, cluster_id, user_id, 'error', 'Invalid kubeconfig: no clusters found')
@@ -67,6 +70,14 @@ async function validateKubernetesCluster(
     }
 
     const clusterInfo = config.clusters[0].cluster
+    
+    if (!clusterInfo || !clusterInfo.server) {
+      console.error('Invalid cluster info:', JSON.stringify(clusterInfo, null, 2))
+      await createLog(supabase, cluster_id, user_id, 'error', 'Invalid kubeconfig: server URL not found in cluster configuration')
+      await updateClusterStatus(supabase, cluster_id, 'error')
+      return
+    }
+    
     const serverUrl = clusterInfo.server
 
     await createLog(supabase, cluster_id, user_id, 'info', `Found cluster endpoint: ${serverUrl}`)
@@ -262,8 +273,10 @@ async function validateKubernetesCluster(
       await updateClusterStatus(supabase, cluster_id, 'error')
     }
   } catch (error: any) {
+    console.error('Kubernetes validation error:', error)
     await createLog(supabase, cluster_id, user_id, 'error', 
-      `Configuration parsing failed: ${error.message}`
+      `Configuration parsing failed: ${error.message}`,
+      { error: error.toString(), stack: error.stack }
     )
     await updateClusterStatus(supabase, cluster_id, 'error')
   }
@@ -330,6 +343,8 @@ async function validateDockerCluster(
 }
 
 function parseKubeConfig(yamlContent: string): any {
+  console.log('Parsing kubeconfig, length:', yamlContent.length)
+  
   const lines = yamlContent.split('\n')
   const config: any = {
     clusters: [],
@@ -339,29 +354,53 @@ function parseKubeConfig(yamlContent: string): any {
   
   let currentSection: string | null = null
   let currentItem: any = null
+  let indentLevel = 0
   
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
     const trimmed = line.trim()
     
+    // Track section changes
     if (trimmed.startsWith('clusters:')) {
       currentSection = 'clusters'
+      currentItem = null
+      continue
     } else if (trimmed.startsWith('contexts:')) {
       currentSection = 'contexts'
+      currentItem = null
+      continue
     } else if (trimmed.startsWith('users:')) {
       currentSection = 'users'
-    } else if (trimmed.startsWith('- cluster:') || trimmed.startsWith('- context:') || trimmed.startsWith('- name:')) {
-      if (currentSection) {
-        currentItem = {}
-        config[currentSection].push(currentItem)
+      currentItem = null
+      continue
+    }
+    
+    // Handle cluster items
+    if (currentSection === 'clusters') {
+      if (trimmed.startsWith('- cluster:')) {
+        currentItem = { cluster: {} }
+        config.clusters.push(currentItem)
+        continue
       }
-    } else if (trimmed.includes('server:') && currentItem) {
-      const match = trimmed.match(/server:\s*(.+)/)
-      if (match && !currentItem.cluster) {
-        currentItem.cluster = { server: match[1] }
+      
+      if (currentItem && trimmed.includes('server:')) {
+        const match = trimmed.match(/server:\s*(.+)/)
+        if (match) {
+          currentItem.cluster.server = match[1].trim()
+          console.log('Found server URL:', currentItem.cluster.server)
+        }
+      }
+      
+      if (currentItem && trimmed.includes('name:') && !currentItem.name) {
+        const match = trimmed.match(/name:\s*(.+)/)
+        if (match) {
+          currentItem.name = match[1].trim()
+        }
       }
     }
   }
   
+  console.log('Parsed config:', JSON.stringify(config, null, 2))
   return config
 }
 
