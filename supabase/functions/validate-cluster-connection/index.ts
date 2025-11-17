@@ -30,10 +30,15 @@ Deno.serve(async (req) => {
 
     console.log(`Validating ${cluster_type} cluster ${cluster_id}`)
 
-    if (cluster_type === 'kubernetes') {
+    // Support all Kubernetes-based cluster types
+    const kubernetesTypes = ['kubernetes', 'microk8s', 'k3s', 'minikube']
+
+    if (kubernetesTypes.includes(cluster_type)) {
       await validateKubernetesCluster(supabaseClient, cluster_id, user.id, config_file)
     } else if (cluster_type === 'docker') {
       await validateDockerCluster(supabaseClient, cluster_id, user.id, api_endpoint)
+    } else {
+      throw new Error(`Unsupported cluster type: ${cluster_type}`)
     }
 
     return new Response(
