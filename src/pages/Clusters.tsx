@@ -42,7 +42,7 @@ const Clusters = () => {
     region: "",
     config_file: "",
     is_local: false,
-    connection_type: "cloud",
+    connection_type: "cloud" as string,
   });
 
   useEffect(() => {
@@ -380,21 +380,42 @@ const Clusters = () => {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="cluster_type">Cluster Type</Label>
-                  <Select
-                    value={formData.cluster_type}
-                    onValueChange={(value) => setFormData({ ...formData, cluster_type: value })}
-                  >
+                <Select
+                  value={formData.cluster_type}
+                  onValueChange={(value) => {
+                    const localTypes = ['microk8s', 'k3s', 'minikube', 'docker'];
+                    const isLocal = localTypes.includes(value);
+                    setFormData({ 
+                      ...formData, 
+                      cluster_type: value,
+                      is_local: isLocal,
+                      connection_type: isLocal ? 'local-direct' : 'cloud'
+                    });
+                  }}
+                >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="kubernetes">Kubernetes</SelectItem>
-                      <SelectItem value="docker">Docker</SelectItem>
-                      <SelectItem value="docker-swarm">Docker Swarm</SelectItem>
+                      <SelectItem value="kubernetes">Kubernetes (Cloud)</SelectItem>
+                      <SelectItem value="microk8s">MicroK8s (Local)</SelectItem>
+                      <SelectItem value="k3s">K3s (Local)</SelectItem>
+                      <SelectItem value="minikube">Minikube (Local)</SelectItem>
+                      <SelectItem value="docker">Docker Desktop</SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
-                {formData.cluster_type === "kubernetes" ? (
+                 </div>
+
+                 {formData.is_local && (
+                   <div className="p-4 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                     <p className="text-sm text-blue-700 dark:text-blue-300">
+                       ℹ️ <strong>Cluster Local:</strong> Clusters locais não podem ser acessados diretamente pela cloud. 
+                       Após criar o cluster, você precisará baixar e instalar o agente dentro do cluster para que ele possa enviar métricas.
+                     </p>
+                   </div>
+                 )}
+
+                 {(formData.cluster_type === "kubernetes" || formData.cluster_type === "microk8s" || formData.cluster_type === "k3s" || formData.cluster_type === "minikube") ? (
                   <div className="space-y-2">
                     <Label htmlFor="config_file">Kubernetes Config File (YAML)</Label>
                     <Input
@@ -460,6 +481,7 @@ const Clusters = () => {
                 <div key={cluster.id} className="relative group">
                   <div onClick={() => setSelectedClusterId(cluster.id)} className="cursor-pointer">
                     <ClusterCard
+                      id={cluster.id}
                       name={cluster.name}
                       status={cluster.status as any}
                       nodes={cluster.nodes}
@@ -467,6 +489,7 @@ const Clusters = () => {
                       cpuUsage={Number(cluster.cpu_usage)}
                       memoryUsage={Number(cluster.memory_usage)}
                       environment={`${cluster.provider.toUpperCase()} - ${cluster.environment}`}
+                      is_local={cluster.is_local}
                     />
                   </div>
                   <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">

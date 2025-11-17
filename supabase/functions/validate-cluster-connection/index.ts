@@ -81,15 +81,41 @@ async function validateKubernetesCluster(
     // Check if it's a local/private IP
     const isPrivateIP = isPrivateIPAddress(serverUrl)
     if (isPrivateIP) {
-      await createLog(supabase, cluster_id, user_id, 'error', 
-        'Cluster uses a private IP address and cannot be accessed from the cloud',
-        { 
-          note: 'Private networks require direct access. Consider using a VPN or exposing the cluster through a public endpoint.',
-          server: serverUrl
-        }
-      )
-      await updateClusterStatus(supabase, cluster_id, 'error')
-      return
+      // Fetch cluster info to check if it's a local cluster
+      const { data: cluster } = await supabase
+        .from('clusters')
+        .select('is_local, name')
+        .eq('id', cluster_id)
+        .single()
+      
+      if (cluster?.is_local) {
+        // ✅ Local cluster with private IP is EXPECTED
+        await createLog(supabase, cluster_id, user_id, 'info', 
+          'Local cluster detected. Waiting for agent connection...',
+          { 
+            note: 'This is a local cluster. Install the agent inside your cluster to begin monitoring.',
+            server: serverUrl,
+            next_steps: [
+              '1. Download the agent deployment file from the Clusters page',
+              '2. Apply it to your cluster: kubectl apply -f agent.yaml',
+              '3. The agent will automatically connect and send metrics'
+            ]
+          }
+        )
+        await updateClusterStatus(supabase, cluster_id, 'pending_agent')
+        return
+      } else {
+        // ❌ Cloud cluster with private IP is ERROR
+        await createLog(supabase, cluster_id, user_id, 'error', 
+          'Cluster uses a private IP address and cannot be accessed from the cloud',
+          { 
+            note: 'Private networks require direct access. Consider using a VPN or exposing the cluster through a public endpoint.',
+            server: serverUrl
+          }
+        )
+        await updateClusterStatus(supabase, cluster_id, 'error')
+        return
+      }
     }
 
     await createLog(supabase, cluster_id, user_id, 'info', 'Cluster endpoint is public, attempting connection...')
