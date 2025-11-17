@@ -281,24 +281,46 @@ const Clusters = () => {
       });
 
       // Call edge function to validate the cluster connection
-      const { data: validationData, error: validationError } = await supabase.functions.invoke('validate-cluster-connection', {
-        body: {
-          cluster_id: data.id,
-          config_file: formData.config_file,
-          cluster_type: formData.cluster_type,
-          api_endpoint: formData.api_endpoint,
-        },
-      });
+      try {
+        console.log('Calling validation for cluster:', data.id, 'type:', formData.cluster_type);
+        
+        const { data: validationData, error: validationError } = await supabase.functions.invoke('validate-cluster-connection', {
+          body: {
+            cluster_id: data.id,
+            config_file: formData.config_file,
+            cluster_type: formData.cluster_type,
+            api_endpoint: formData.api_endpoint,
+          },
+        });
 
-      if (validationError) {
-        console.error('Error calling validation function:', validationError);
+        console.log('Validation response:', { validationData, validationError });
+
+        if (validationError) {
+          console.error('Error calling validation function:', validationError);
+          toast.error('Failed to validate cluster connection');
+          
+          // Update status to error if validation failed
+          await supabase
+            .from("clusters")
+            .update({ status: 'error' })
+            .eq("id", data.id);
+            
+          await createClusterLog(data.id, "error", "Validation function failed", {
+            error: validationError.message || validationError
+          });
+        }
+      } catch (validationException) {
+        console.error('Exception during validation:', validationException);
         toast.error('Failed to validate cluster connection');
         
-        // Update status to error if validation failed
         await supabase
           .from("clusters")
           .update({ status: 'error' })
           .eq("id", data.id);
+          
+        await createClusterLog(data.id, "error", "Validation exception", {
+          error: validationException instanceof Error ? validationException.message : String(validationException)
+        });
       }
 
       setOpen(false);
@@ -499,6 +521,7 @@ const Clusters = () => {
                       memoryUsage={Number(cluster.memory_usage)}
                       environment={`${cluster.provider.toUpperCase()} - ${cluster.environment}`}
                       is_local={cluster.is_local}
+                      onRefresh={() => handleRefreshConnection(cluster)}
                     />
                   </div>
                   <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">

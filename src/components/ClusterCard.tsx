@@ -1,8 +1,9 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Server, Activity, HardDrive, Cpu, Download } from "lucide-react";
+import { Server, Activity, HardDrive, Cpu, Download, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
+import { useEffect } from "react";
 
 interface ClusterCardProps {
   id?: string;
@@ -14,6 +15,7 @@ interface ClusterCardProps {
   memoryUsage: number;
   environment: string;
   is_local?: boolean;
+  onRefresh?: () => void;
 }
 
 export const ClusterCard = ({
@@ -26,6 +28,7 @@ export const ClusterCard = ({
   memoryUsage,
   environment,
   is_local,
+  onRefresh,
 }: ClusterCardProps) => {
   const statusConfig = {
     healthy: { 
@@ -33,46 +36,64 @@ export const ClusterCard = ({
       text: "text-success",
       gradient: "from-success/10 to-success/5",
       border: "border-success/30",
-      label: "Saudável"
+      label: "Saudável",
+      showSpinner: false
     },
     warning: { 
       color: "bg-warning", 
       text: "text-warning",
       gradient: "from-warning/10 to-warning/5",
       border: "border-warning/30",
-      label: "Atenção"
+      label: "Atenção",
+      showSpinner: false
     },
     critical: { 
       color: "bg-destructive", 
       text: "text-destructive",
       gradient: "from-destructive/10 to-destructive/5",
       border: "border-destructive/30",
-      label: "Crítico"
+      label: "Crítico",
+      showSpinner: false
     },
     connecting: {
       color: "bg-blue-500",
       text: "text-blue-500",
       gradient: "from-blue-500/10 to-blue-500/5",
       border: "border-blue-500/30",
-      label: "Conectando"
+      label: "Conectando",
+      showSpinner: true
     },
     error: {
       color: "bg-destructive",
       text: "text-destructive",
       gradient: "from-destructive/10 to-destructive/5",
       border: "border-destructive/30",
-      label: "Erro"
+      label: "Erro",
+      showSpinner: false
     },
     pending_agent: {
       color: "bg-blue-500",
       text: "text-blue-500",
       gradient: "from-blue-500/10 to-blue-500/5",
       border: "border-blue-500/30",
-      label: "Aguardando Agente"
+      label: "Aguardando Agente",
+      showSpinner: false
     }
   };
 
   const config = statusConfig[status] || statusConfig.healthy;
+  
+  // Auto-refresh connecting clusters after 5 seconds
+  useEffect(() => {
+    if (status === 'connecting' && onRefresh) {
+      const timer = setTimeout(() => {
+        console.log('Auto-refreshing connecting cluster:', id);
+        onRefresh();
+      }, 5000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [status, id, onRefresh]);
 
   const downloadAgentConfig = () => {
     if (!id) return;
@@ -202,8 +223,9 @@ spec:
             </div>
           </div>
           <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-card/80 border border-border/50">
-            <div className={`w-2 h-2 rounded-full ${config.color} animate-pulse`} />
-            <Badge variant="secondary" className="text-xs font-semibold">
+            <div className={`w-2 h-2 rounded-full ${config.color} ${config.showSpinner ? '' : 'animate-pulse'}`} />
+            <Badge variant="secondary" className="text-xs font-semibold flex items-center gap-1.5">
+              {config.showSpinner && <RefreshCw className="w-3 h-3 animate-spin" />}
               {config.label}
             </Badge>
           </div>
