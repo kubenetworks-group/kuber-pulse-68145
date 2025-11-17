@@ -41,6 +41,8 @@ const Clusters = () => {
     api_endpoint: "",
     region: "",
     config_file: "",
+    is_local: false,
+    connection_type: "cloud",
   });
 
   useEffect(() => {
@@ -183,6 +185,8 @@ const Clusters = () => {
       api_endpoint: cluster.api_endpoint || "",
       region: cluster.region || "",
       config_file: cluster.config_file || "",
+      is_local: cluster.is_local || false,
+      connection_type: cluster.connection_type || "cloud",
     });
     setEditDialogOpen(true);
   };
@@ -224,6 +228,8 @@ const Clusters = () => {
         api_endpoint: "",
         region: "",
         config_file: "",
+        is_local: false,
+        connection_type: "cloud",
       });
       fetchClusters();
     }
@@ -295,6 +301,8 @@ const Clusters = () => {
         api_endpoint: "",
         region: "",
         config_file: "",
+        is_local: false,
+        connection_type: "cloud",
       });
       fetchClusters();
     }

@@ -8,18 +8,11 @@ import { ClusterProvider } from "@/contexts/ClusterContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
-import Onboarding from "./pages/Onboarding";
 import Clusters from "./pages/Clusters";
 import AIMonitor from "./pages/AIMonitor";
-import Security from "./pages/Security";
 import Costs from "./pages/Costs";
-import Users from "./pages/Users";
-import Storage from "./pages/Storage";
 import Settings from "./pages/Settings";
 import Agents from "./pages/Agents";
-import Pricing from "./pages/Pricing";
-import PaymentSuccess from "./pages/PaymentSuccess";
-import PaymentCanceled from "./pages/PaymentCanceled";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -34,14 +27,6 @@ const App = () => (
           <ClusterProvider>
             <Routes>
               <Route path="/auth" element={<Auth />} />
-              <Route
-                path="/onboarding"
-                element={
-                  <ProtectedRoute>
-                    <Onboarding />
-                  </ProtectedRoute>
-                }
-              />
               <Route
                 path="/"
                 element={
@@ -67,34 +52,10 @@ const App = () => (
                 }
               />
               <Route
-                path="/security"
-                element={
-                  <ProtectedRoute>
-                    <Security />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
                 path="/costs"
                 element={
                   <ProtectedRoute>
                     <Costs />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/users"
-                element={
-                  <ProtectedRoute>
-                    <Users />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/storage"
-                element={
-                  <ProtectedRoute>
-                    <Storage />
                   </ProtectedRoute>
                 }
               />
@@ -114,17 +75,6 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
-              <Route
-                path="/pricing"
-                element={
-                  <ProtectedRoute>
-                    <Pricing />
-                  </ProtectedRoute>
-                }
-              />
-              <Route path="/payment-success" element={<PaymentSuccess />} />
-              <Route path="/payment-canceled" element={<PaymentCanceled />} />
-              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
           </ClusterProvider>
