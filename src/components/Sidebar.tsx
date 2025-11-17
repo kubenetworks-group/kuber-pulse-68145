@@ -2,49 +2,29 @@ import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { LanguageSelector } from "@/components/LanguageSelector";
 import { useTranslation } from "react-i18next";
-import { useRole } from "@/hooks/useRole";
 import kodoLogo from "@/assets/kodo-logo.png";
 import {
   Server,
-  Shield,
   DollarSign,
   Settings,
   LogOut,
   LayoutDashboard,
   Bot,
-  Users,
-  Database,
 } from "lucide-react";
 
 export const Sidebar = () => {
   const location = useLocation();
   const { signOut } = useAuth();
   const { t } = useTranslation();
-  const { isAdmin } = useRole();
-
-  const baseNavigation = [
-    { name: t('common.dashboard'), href: "/", icon: LayoutDashboard },
-    { name: t('common.clusters'), href: "/clusters", icon: Server },
-    { name: t('common.storage'), href: "/storage", icon: Database },
-    { name: t('common.aiMonitor'), href: "/ai-monitor", icon: Bot },
-    { name: t('common.security'), href: "/security", icon: Shield },
-    { name: t('common.costs'), href: "/costs", icon: DollarSign },
-  ];
-
-  const adminNavigation = [
-    { name: t('common.users'), href: "/users", icon: Users },
-  ];
-
-  const settingsNavigation = [
-    { name: t('common.settings'), href: "/settings", icon: Settings },
-  ];
 
   const navigation = [
-    ...baseNavigation,
-    ...(isAdmin() ? adminNavigation : []),
-    ...settingsNavigation,
+    { name: t('common.dashboard'), href: "/", icon: LayoutDashboard },
+    { name: t('common.costs'), href: "/costs", icon: DollarSign },
+    { name: t('common.aiMonitor'), href: "/ai-monitor", icon: Bot },
+    { name: t('common.clusters'), href: "/clusters", icon: Server },
+    { name: t('common.agents'), href: "/agents", icon: Bot },
+    { name: t('common.settings'), href: "/settings", icon: Settings },
   ];
 
   return (
@@ -90,9 +70,6 @@ export const Sidebar = () => {
         <div className="flex items-center justify-between px-2 mb-2">
           <span className="text-xs text-muted-foreground">{t('settings.theme')}</span>
           <ThemeToggle />
-        </div>
-        <div className="px-2 mb-2">
-          <LanguageSelector />
         </div>
         <Button
           variant="ghost"
