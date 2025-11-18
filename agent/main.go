@@ -100,10 +100,10 @@ func collectAndSendMetrics(clientset *kubernetes.Clientset, metricsClient *metri
 			for _, node := range nodeMetrics.Items {
 				cpu := node.Usage.Cpu().MilliValue()
 				memory := node.Usage.Memory().Value()
-				
+
 				usedCPU += cpu
 				usedMemory += memory
-				
+
 				// Get node capacity
 				nodeInfo, _ := clientset.CoreV1().Nodes().Get(ctx, node.Name, metav1.GetOptions{})
 				if nodeInfo != nil {
@@ -261,12 +261,12 @@ func sendMetrics(config Config, metrics []Metric) error {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-agent-key", config.APIKey)
-	log.Printf("🔍 Headers: Content-Type=%s, x-agent-key=%s...%s", 
-		req.Header.Get("Content-Type"), 
-		config.APIKey[:8], 
-		config.APIKey[len(config.APIKey)-4:])
+	req.Header.Set("Authorization", "Bearer "+config.APIKey)
 
+	log.Printf("🔍 Headers: Content-Type=%s, Authorization=Bearer %s...%s",
+		req.Header.Get("Content-Type"),
+		config.APIKey[:8],
+		config.APIKey[len(config.APIKey)-4:])
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
@@ -306,7 +306,7 @@ func pollForCommands(clientset *kubernetes.Clientset, config Config) {
 		for _, cmd := range commands {
 			log.Printf("📥 Received command: %s (%s)", cmd.CommandType, cmd.ID)
 			result := executeCommand(clientset, cmd)
-			
+
 			if err := updateCommandStatus(config, cmd.ID, result); err != nil {
 				log.Printf("❌ Failed to update command status: %v", err)
 			}
@@ -359,7 +359,7 @@ func executeCommand(clientset *kubernetes.Clientset, cmd Command) map[string]int
 	case "restart_pod":
 		namespace := cmd.CommandParams["namespace"].(string)
 		podName := cmd.CommandParams["pod"].(string)
-		
+
 		err := clientset.CoreV1().Pods(namespace).Delete(ctx, podName, metav1.DeleteOptions{})
 		if err != nil {
 			result["message"] = fmt.Sprintf("Failed to restart pod: %v", err)
@@ -372,7 +372,7 @@ func executeCommand(clientset *kubernetes.Clientset, cmd Command) map[string]int
 		namespace := cmd.CommandParams["namespace"].(string)
 		deploymentName := cmd.CommandParams["deployment"].(string)
 		replicas := int32(cmd.CommandParams["replicas"].(float64))
-		
+
 		deployment, err := clientset.AppsV1().Deployments(namespace).Get(ctx, deploymentName, metav1.GetOptions{})
 		if err != nil {
 			result["message"] = fmt.Sprintf("Failed to get deployment: %v", err)
