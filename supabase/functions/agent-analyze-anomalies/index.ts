@@ -69,6 +69,7 @@ serve(async (req) => {
       cpu: metrics.filter(m => m.metric_type === 'cpu').map(m => m.metric_data),
       memory: metrics.filter(m => m.metric_type === 'memory').map(m => m.metric_data),
       pods: metrics.filter(m => m.metric_type === 'pods').map(m => m.metric_data),
+      pod_details: metrics.filter(m => m.metric_type === 'pod_details').map(m => m.metric_data),
       events: metrics.filter(m => m.metric_type === 'events').map(m => m.metric_data),
     };
 
@@ -89,36 +90,57 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `You are a Kubernetes cluster monitoring AI assistant. Analyze metrics and detect anomalies.
-Return a JSON object with this exact structure (no markdown code fences):
+            content: `You are a Kubernetes cluster monitoring AI assistant specialized in deep cluster analysis.
+
+Analyze the provided metrics and detect ALL issues, including:
+
+**CRITICAL CHECKS:**
+1. **Pod Restarts**: Any pod with restart_count > 0 indicates crashes
+   - 1-3 restarts = medium severity (intermittent issue)
+   - 4-10 restarts = high severity (recurring problem)
+   - >10 restarts = critical (persistent failure, CrashLoopBackOff)
+   
+2. **Pod Status**: Check pod phase and container states
+   - Phase != "Running" = potential problem
+   - Container state "waiting" with reason "CrashLoopBackOff" = critical
+   - Container state "waiting" with reason "ImagePullBackOff" = high
+   - Container ready = false = needs investigation
+   
+3. **Pod Conditions**: Analyze pod conditions
+   - PodScheduled = False = scheduling issue
+   - ContainersReady = False = container failing to start
+   - Ready = False = pod not accepting traffic
+
+4. **Resource Usage**: 
+   - CPU > 80% = scale up needed
+   - Memory > 85% = potential OOM risk
+   - Resources consistently low < 10% = scale down opportunity
+
+Return JSON (no markdown):
 {
   "anomalies": [
     {
-      "type": "high_cpu|high_memory|pod_crash|disk_full|resource_underutilized|scaling_opportunity",
+      "type": "pod_restart|pod_crash|pod_not_ready|high_cpu|high_memory|scheduling_issue|image_pull_error|resource_underutilized",
       "severity": "low|medium|high|critical",
-      "description": "Brief description in Portuguese",
-      "recommendation": "What should be done in Portuguese",
-      "auto_heal": "restart_pod|scale_up|scale_down|clear_cache|null"
+      "description": "Detailed description in Portuguese including pod name, namespace, and specific issue",
+      "recommendation": "Specific action to resolve in Portuguese",
+      "affected_pods": ["pod-name-1", "pod-name-2"],
+      "auto_heal": "restart_pod|delete_pod|scale_up|scale_down|null",
+      "auto_heal_params": {
+        "pod_name": "specific-pod-name",
+        "namespace": "namespace",
+        "action": "delete"
+      }
     }
   ],
-  "summary": "Brief summary of cluster health in Portuguese"
+  "summary": "Comprehensive cluster health summary in Portuguese"
 }
 
-Detection Guidelines:
-- CPU > 80% = high severity (scale_up or optimize)
-- CPU < 10% for extended time = resource_underutilized (scale_down opportunity)
-- Memory > 85% = high severity (memory leak or need scale)
-- Memory < 15% = resource_underutilized (cost optimization)
-- Pod crashes > 3 in 15min = critical (restart or fix)
-- Disk > 85% = high severity (clear_cache or expand)
-- No pods running = critical issue
-- All resources healthy but overprovisisoned = low severity optimization
-
-IMPORTANT: 
-- Always include a summary even if no anomalies
-- Look for both problems AND optimization opportunities
-- Be proactive with cost-saving suggestions
-- Return valid JSON only (no markdown formatting)`
+**IMPORTANT:** 
+- List EVERY pod with issues (name + namespace + reason)
+- For each anomaly with auto_heal != null, provide specific auto_heal_params
+- Always include summary even if cluster is healthy
+- Be specific about which pods need attention`
           },
           {
             role: 'user',

@@ -160,18 +160,25 @@ export default function AIMonitor() {
 
       if (error) throw error;
 
-      setAnomalies(data.anomalies || []);
-      setScanSummary(data.summary || "");
+      console.log('Scan results:', data);
       
-      const message = data.summary || `${data.anomalies_found} anomalia(s) detectada(s)`;
-      
-      toast({
-        title: data.anomalies_found > 0 ? "⚠️ Anomalias detectadas" : "✅ Cluster saudável",
-        description: message
-      });
-
-      if (data.anomalies_found > 0) {
+      if (data.anomalies && data.anomalies.length > 0) {
+        setAnomalies(data.anomalies);
+        setScanSummary(data.summary || `Encontradas ${data.anomalies.length} anomalias no cluster`);
+        
+        toast({
+          title: "⚠️ Anomalias Detectadas",
+          description: `Foram encontradas ${data.anomalies.length} anomalias que precisam de atenção`,
+          variant: "destructive"
+        });
+        
         fetchData(); // Refresh incidents
+      } else {
+        setScanSummary(data.summary || "Nenhuma anomalia crítica detectada. Cluster está saudável.");
+        toast({
+          title: "✅ Cluster Saudável",
+          description: data.summary || "Nenhuma anomalia crítica foi detectada na varredura",
+        });
       }
     } catch (error: any) {
       console.error('Error scanning cluster:', error);
@@ -182,6 +189,47 @@ export default function AIMonitor() {
       });
     } finally {
       setScanning(false);
+    }
+  };
+
+  const handleApplyAutoHeal = async (anomaly: any) => {
+    if (!anomaly.auto_heal || !anomaly.auto_heal_params) {
+      toast({
+        title: "Auto-cura não disponível",
+        description: "Esta anomalia não possui ação de auto-cura definida",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.functions.invoke('agent-auto-heal', {
+        body: {
+          cluster_id: selectedCluster,
+          anomaly_id: anomaly.id || `temp-${Date.now()}`,
+          auto_heal_action: anomaly.auto_heal,
+          auto_heal_params: anomaly.auto_heal_params
+        }
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "🤖 Auto-cura Iniciada",
+        description: `Comando "${anomaly.auto_heal}" enviado para o agente. O cluster será corrigido em breve.`,
+      });
+
+      // Refresh after a delay to see the changes
+      setTimeout(() => {
+        handleScanCluster();
+      }, 3000);
+    } catch (error: any) {
+      console.error('Error applying auto-heal:', error);
+      toast({
+        title: "Erro na Auto-cura",
+        description: error.message || "Falha ao aplicar auto-cura",
+        variant: "destructive"
+      });
     }
   };
 
@@ -360,31 +408,63 @@ export default function AIMonitor() {
                   <AlertCircle className="w-4 h-4" />
                   Anomalias Detectadas ({anomalies.length})
                 </h3>
-                <div className="space-y-2 max-h-60 overflow-y-auto">
+                <div className="space-y-3 max-h-96 overflow-y-auto">
                   {anomalies.map((anomaly, idx) => (
-                    <div 
+                    <Card 
                       key={idx}
-                      className="p-3 bg-background rounded-lg border border-border"
+                      className={`border-l-4 ${
+                        anomaly.severity === 'critical' ? 'border-l-destructive' :
+                        anomaly.severity === 'high' ? 'border-l-orange-500' :
+                        anomaly.severity === 'medium' ? 'border-l-yellow-500' :
+                        'border-l-blue-500'
+                      }`}
                     >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Badge variant={
-                              anomaly.severity === 'critical' ? 'destructive' :
-                              anomaly.severity === 'high' ? 'destructive' :
-                              anomaly.severity === 'medium' ? 'default' : 'secondary'
-                            }>
-                              {anomaly.severity}
-                            </Badge>
-                            <span className="text-sm font-medium">{anomaly.type}</span>
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="space-y-2 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Badge variant={
+                                anomaly.severity === 'critical' ? 'destructive' :
+                                anomaly.severity === 'high' ? 'default' :
+                                'secondary'
+                              }>
+                                {anomaly.severity}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground font-medium">{anomaly.type}</span>
+                              {anomaly.auto_heal && (
+                                <Badge variant="outline" className="text-xs">
+                                  <Zap className="w-3 h-3 mr-1" />
+                                  Auto-cura disponível
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-sm font-medium">{anomaly.description}</p>
+                            <p className="text-xs text-muted-foreground">💡 {anomaly.recommendation}</p>
+                            {anomaly.affected_pods && anomaly.affected_pods.length > 0 && (
+                              <div className="mt-2">
+                                <p className="text-xs font-semibold text-muted-foreground mb-1">Pods Afetados:</p>
+                                <div className="flex flex-wrap gap-1">
+                                  {anomaly.affected_pods.map((pod: string, pidx: number) => (
+                                    <Badge key={pidx} variant="outline" className="text-xs">
+                                      {pod}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
-                          <p className="text-sm text-muted-foreground">{anomaly.description}</p>
-                          {anomaly.recommendation && (
-                            <p className="text-xs text-primary mt-1">💡 {anomaly.recommendation}</p>
+                          {anomaly.auto_heal && autoHealEnabled && (
+                            <button 
+                              onClick={() => handleApplyAutoHeal(anomaly)}
+                              className="shrink-0 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 flex items-center gap-1 text-xs transition-colors"
+                            >
+                              <Zap className="w-3 h-3" />
+                              Aplicar Auto-cura
+                            </button>
                           )}
                         </div>
-                      </div>
-                    </div>
+                      </CardContent>
+                    </Card>
                   ))}
                 </div>
               </div>
