@@ -1,1 +1,10 @@
 project_id = "dadaeduevxyvkhjmwlel"
+
+[functions.agent-receive-metrics]
+verify_jwt = false
+
+[functions.agent-get-commands]
+verify_jwt = false
+
+[functions.agent-update-command]
+verify_jwt = false
