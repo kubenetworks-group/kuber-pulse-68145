@@ -39,7 +39,7 @@ func main() {
 	log.Println("🚀 Kuberpulse Agent starting...")
 
 	config := Config{
-		APIEndpoint: getEnv("API_ENDPOINT", "https://mcqfgnjootzthtizboom.supabase.co/functions/v1"),
+		APIEndpoint: getEnv("API_ENDPOINT", "https://dadaeduevxyvkhjmwlel.supabase.co/functions/v1"),
 		APIKey:      getEnv("API_KEY", ""),
 		ClusterID:   getEnv("CLUSTER_ID", ""),
 		Interval:    time.Duration(getEnvInt("COLLECT_INTERVAL", 30)) * time.Second,
