@@ -62,7 +62,9 @@ const Clusters = () => {
           filter: `user_id=eq.${user.id}`
         },
         (payload) => {
-          console.log('Cluster updated:', payload);
+          if (import.meta.env.DEV) {
+            console.log('Cluster updated');
+          }
           setClusters((current) =>
             current.map((cluster) =>
               cluster.id === payload.new.id ? { ...cluster, ...payload.new } : cluster
@@ -97,7 +99,9 @@ const Clusters = () => {
 
     if (error) {
       toast.error("Failed to load clusters");
-      console.error(error);
+      if (import.meta.env.DEV) {
+        console.error('Error loading clusters');
+      }
     } else {
       setClusters(data || []);
     }
