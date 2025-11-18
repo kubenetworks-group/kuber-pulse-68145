@@ -67,9 +67,96 @@ func main() {
 		select {
 		case <-ticker.C:
 			sendMetrics(clientset, config)
-			getCommands(config)
+			getCommands(clientset, config)
 		}
 	}
+}
+
+// ---------------------------------------------
+// POD DETAILS COLLECTION
+// ---------------------------------------------
+func collectPodDetails(clientset *kubernetes.Clientset) []map[string]interface{} {
+	pods, _ := clientset.CoreV1().Pods("").List(context.Background(), metav1.ListOptions{})
+	
+	var podDetails []map[string]interface{}
+	
+	for _, pod := range pods.Items {
+		totalRestarts := int32(0)
+		var containerStatuses []map[string]interface{}
+		
+		for _, cs := range pod.Status.ContainerStatuses {
+			totalRestarts += cs.RestartCount
+			containerStatuses = append(containerStatuses, map[string]interface{}{
+				"name":          cs.Name,
+				"ready":         cs.Ready,
+				"restart_count": cs.RestartCount,
+				"state":         getContainerState(cs.State),
+				"last_state":    getContainerState(cs.LastTerminationState),
+			})
+		}
+		
+		podDetails = append(podDetails, map[string]interface{}{
+			"name":           pod.Name,
+			"namespace":      pod.Namespace,
+			"phase":          string(pod.Status.Phase),
+			"total_restarts": totalRestarts,
+			"ready":          isPodReady(pod),
+			"containers":     containerStatuses,
+			"node":           pod.Spec.NodeName,
+			"created_at":     pod.CreationTimestamp.Time,
+			"conditions":     getPodConditions(pod),
+		})
+	}
+	
+	return podDetails
+}
+
+func getContainerState(state corev1.ContainerState) map[string]interface{} {
+	if state.Running != nil {
+		return map[string]interface{}{
+			"status":     "running",
+			"started_at": state.Running.StartedAt.Time,
+		}
+	}
+	if state.Waiting != nil {
+		return map[string]interface{}{
+			"status":  "waiting",
+			"reason":  state.Waiting.Reason,
+			"message": state.Waiting.Message,
+		}
+	}
+	if state.Terminated != nil {
+		return map[string]interface{}{
+			"status":      "terminated",
+			"reason":      state.Terminated.Reason,
+			"message":     state.Terminated.Message,
+			"exit_code":   state.Terminated.ExitCode,
+			"finished_at": state.Terminated.FinishedAt.Time,
+		}
+	}
+	return map[string]interface{}{"status": "unknown"}
+}
+
+func isPodReady(pod corev1.Pod) bool {
+	for _, condition := range pod.Status.Conditions {
+		if condition.Type == corev1.PodReady {
+			return condition.Status == corev1.ConditionTrue
+		}
+	}
+	return false
+}
+
+func getPodConditions(pod corev1.Pod) []map[string]interface{} {
+	var conditions []map[string]interface{}
+	for _, c := range pod.Status.Conditions {
+		conditions = append(conditions, map[string]interface{}{
+			"type":    string(c.Type),
+			"status":  string(c.Status),
+			"reason":  c.Reason,
+			"message": c.Message,
+		})
+	}
+	return conditions
 }
 
 // ---------------------------------------------
@@ -150,6 +237,13 @@ func sendMetrics(clientset *kubernetes.Clientset, config AgentConfig) {
 			},
 			"collected_at": time.Now().UTC().Format(time.RFC3339),
 		},
+		{
+			"type": "pod_details",
+			"data": map[string]interface{}{
+				"pods": collectPodDetails(clientset),
+			},
+			"collected_at": time.Now().UTC().Format(time.RFC3339),
+		},
 	}
 
 	payload := map[string]interface{}{
@@ -222,7 +316,17 @@ func getNodeStatus(node corev1.Node) string {
 // ---------------------------------------------
 // COMANDOS (POLLING)
 // ---------------------------------------------
-func getCommands(config AgentConfig) {
+type Command struct {
+	ID            string                 `json:"id"`
+	CommandType   string                 `json:"command_type"`
+	CommandParams map[string]interface{} `json:"command_params"`
+}
+
+type CommandsResponse struct {
+	Commands []Command `json:"commands"`
+}
+
+func getCommands(clientset *kubernetes.Clientset, config AgentConfig) {
 	url := fmt.Sprintf("%s/agent-get-commands", config.APIEndpoint)
 
 	req, _ := http.NewRequest("GET", url, nil)
@@ -244,5 +348,123 @@ func getCommands(config AgentConfig) {
 	}
 
 	body, _ := ioutil.ReadAll(resp.Body)
-	log.Printf("📥 Commands response: %s", string(body))
+	
+	var commandsResp CommandsResponse
+	if err := json.Unmarshal(body, &commandsResp); err != nil {
+		log.Printf("❌ Error parsing commands: %v", err)
+		return
+	}
+
+	if len(commandsResp.Commands) > 0 {
+		log.Printf("📥 Received %d commands", len(commandsResp.Commands))
+		executeCommands(clientset, config, commandsResp.Commands)
+	}
+}
+
+// ---------------------------------------------
+// COMMAND EXECUTION
+// ---------------------------------------------
+func executeCommands(clientset *kubernetes.Clientset, config AgentConfig, commands []Command) {
+	for _, cmd := range commands {
+		log.Printf("⚡ Executing command: %s", cmd.CommandType)
+		
+		var result map[string]interface{}
+		var err error
+		
+		switch cmd.CommandType {
+		case "restart_pod", "delete_pod":
+			result, err = deletePod(clientset, cmd.CommandParams)
+		case "scale_deployment":
+			result, err = scaleDeployment(clientset, cmd.CommandParams)
+		default:
+			err = fmt.Errorf("unknown command type: %s", cmd.CommandType)
+		}
+		
+		updateCommandStatus(config, cmd.ID, result, err)
+	}
+}
+
+func deletePod(clientset *kubernetes.Clientset, params map[string]interface{}) (map[string]interface{}, error) {
+	podName := params["pod_name"].(string)
+	namespace := params["namespace"].(string)
+	
+	err := clientset.CoreV1().Pods(namespace).Delete(
+		context.Background(),
+		podName,
+		metav1.DeleteOptions{},
+	)
+	
+	if err != nil {
+		return nil, err
+	}
+	
+	return map[string]interface{}{
+		"action":    "pod_deleted",
+		"pod":       podName,
+		"namespace": namespace,
+		"message":   "Pod deleted successfully. Kubernetes will recreate it.",
+	}, nil
+}
+
+func scaleDeployment(clientset *kubernetes.Clientset, params map[string]interface{}) (map[string]interface{}, error) {
+	deploymentName := params["deployment_name"].(string)
+	namespace := params["namespace"].(string)
+	replicas := int32(params["replicas"].(float64))
+	
+	deployment, err := clientset.AppsV1().Deployments(namespace).Get(
+		context.Background(),
+		deploymentName,
+		metav1.GetOptions{},
+	)
+	if err != nil {
+		return nil, err
+	}
+	
+	deployment.Spec.Replicas = &replicas
+	
+	_, err = clientset.AppsV1().Deployments(namespace).Update(
+		context.Background(),
+		deployment,
+		metav1.UpdateOptions{},
+	)
+	
+	if err != nil {
+		return nil, err
+	}
+	
+	return map[string]interface{}{
+		"action":     "deployment_scaled",
+		"deployment": deploymentName,
+		"namespace":  namespace,
+		"replicas":   replicas,
+	}, nil
+}
+
+func updateCommandStatus(config AgentConfig, commandID string, result map[string]interface{}, err error) {
+	status := "completed"
+	if err != nil {
+		status = "failed"
+		result = map[string]interface{}{"error": err.Error()}
+	}
+	
+	payload := map[string]interface{}{
+		"command_id": commandID,
+		"status":     status,
+		"result":     result,
+	}
+	
+	body, _ := json.Marshal(payload)
+	url := fmt.Sprintf("%s/agent-update-command", config.APIEndpoint)
+	
+	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-agent-key", config.APIKey)
+	
+	client := &http.Client{}
+	resp, _ := client.Do(req)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
+	
+	log.Printf("✅ Command %s status updated: %s", commandID, status)
 }
