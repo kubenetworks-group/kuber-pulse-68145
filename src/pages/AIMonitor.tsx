@@ -52,6 +52,7 @@ export default function AIMonitor() {
   const [selectedCluster, setSelectedCluster] = useState<string>("all");
   const [scanning, setScanning] = useState(false);
   const [anomalies, setAnomalies] = useState<any[]>([]);
+  const [scanSummary, setScanSummary] = useState<string>("");
   const [autoHealEnabled, setAutoHealEnabled] = useState(false);
 
   useEffect(() => {
@@ -149,6 +150,9 @@ export default function AIMonitor() {
     }
 
     setScanning(true);
+    setAnomalies([]);
+    setScanSummary("");
+    
     try {
       const { data, error } = await supabase.functions.invoke('agent-analyze-anomalies', {
         body: { cluster_id: selectedCluster }
@@ -157,13 +161,18 @@ export default function AIMonitor() {
       if (error) throw error;
 
       setAnomalies(data.anomalies || []);
+      setScanSummary(data.summary || "");
+      
+      const message = data.summary || `${data.anomalies_found} anomalia(s) detectada(s)`;
       
       toast({
-        title: "Varredura concluída",
-        description: `${data.anomalies_found} anomalia(s) detectada(s)`
+        title: data.anomalies_found > 0 ? "⚠️ Anomalias detectadas" : "✅ Cluster saudável",
+        description: message
       });
 
-      fetchData(); // Refresh incidents
+      if (data.anomalies_found > 0) {
+        fetchData(); // Refresh incidents
+      }
     } catch (error: any) {
       console.error('Error scanning cluster:', error);
       toast({
@@ -336,6 +345,14 @@ export default function AIMonitor() {
                 {autoHealEnabled ? 'Auto-cura Ativa' : 'Ativar Auto-cura'}
               </button>
             </div>
+
+            {scanSummary && (
+              <div className="mt-4 p-3 bg-primary/5 border border-primary/20 rounded-lg">
+                <p className="text-sm text-foreground">
+                  <span className="font-semibold">📊 Resumo da Análise:</span> {scanSummary}
+                </p>
+              </div>
+            )}
 
             {anomalies.length > 0 && (
               <div className="mt-4 space-y-2">

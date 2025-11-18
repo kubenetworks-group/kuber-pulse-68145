@@ -53,7 +53,11 @@ serve(async (req) => {
 
     if (!metrics || metrics.length === 0) {
       return new Response(
-        JSON.stringify({ anomalies: [], message: 'No recent metrics to analyze' }),
+        JSON.stringify({ 
+          anomalies: [], 
+          summary: 'Nenhuma métrica recente encontrada. O agente pode não estar enviando dados.',
+          message: 'No recent metrics to analyze' 
+        }),
         {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         }
@@ -86,25 +90,35 @@ serve(async (req) => {
           {
             role: 'system',
             content: `You are a Kubernetes cluster monitoring AI assistant. Analyze metrics and detect anomalies.
-Return a JSON array of anomalies with this structure:
+Return a JSON object with this exact structure (no markdown code fences):
 {
   "anomalies": [
     {
-      "type": "high_cpu|high_memory|pod_crash|disk_full|etc",
+      "type": "high_cpu|high_memory|pod_crash|disk_full|resource_underutilized|scaling_opportunity",
       "severity": "low|medium|high|critical",
-      "description": "Brief description",
-      "recommendation": "What should be done",
-      "auto_heal": "restart_pod|scale_up|clear_cache|null"
+      "description": "Brief description in Portuguese",
+      "recommendation": "What should be done in Portuguese",
+      "auto_heal": "restart_pod|scale_up|scale_down|clear_cache|null"
     }
-  ]
+  ],
+  "summary": "Brief summary of cluster health in Portuguese"
 }
 
-Guidelines:
-- CPU > 80% = high severity
-- Memory > 85% = high severity
-- Pod crashes > 3 in 15min = critical
-- Disk > 85% = high severity
-- Only return actual anomalies, not normal behavior`
+Detection Guidelines:
+- CPU > 80% = high severity (scale_up or optimize)
+- CPU < 10% for extended time = resource_underutilized (scale_down opportunity)
+- Memory > 85% = high severity (memory leak or need scale)
+- Memory < 15% = resource_underutilized (cost optimization)
+- Pod crashes > 3 in 15min = critical (restart or fix)
+- Disk > 85% = high severity (clear_cache or expand)
+- No pods running = critical issue
+- All resources healthy but overprovisisoned = low severity optimization
+
+IMPORTANT: 
+- Always include a summary even if no anomalies
+- Look for both problems AND optimization opportunities
+- Be proactive with cost-saving suggestions
+- Return valid JSON only (no markdown formatting)`
           },
           {
             role: 'user',
@@ -128,7 +142,10 @@ Guidelines:
     }
 
     const aiData = await aiResponse.json();
-    const aiContent = aiData.choices[0]?.message?.content || '{"anomalies":[]}';
+    let aiContent = aiData.choices[0]?.message?.content || '{"anomalies":[]}';
+    
+    // Remove markdown code fences if present
+    aiContent = aiContent.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     
     let analysisResult;
     try {
@@ -185,6 +202,13 @@ Guidelines:
         success: true,
         anomalies_found: anomalies.length,
         anomalies,
+        summary: analysisResult.summary || 'Análise concluída',
+        metrics_analyzed: {
+          cpu_samples: metricsSummary.cpu.length,
+          memory_samples: metricsSummary.memory.length,
+          pod_samples: metricsSummary.pods.length,
+          event_samples: metricsSummary.events.length
+        }
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
