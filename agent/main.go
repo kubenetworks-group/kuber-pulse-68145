@@ -120,7 +120,7 @@ func sendMetrics(clientset *kubernetes.Clientset, config AgentConfig) {
 			"type": "cpu",
 			"data": map[string]interface{}{
 				"usage_percent": cpuPercent,
-				"total_cores":   totalCPU / 1000, // converter de milicores para cores
+				"total_cores":   totalCPU / 1000,
 				"used_cores":    usedCPU / 1000,
 			},
 			"collected_at": time.Now().UTC().Format(time.RFC3339),
