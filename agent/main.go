@@ -160,6 +160,41 @@ func getPodConditions(pod corev1.Pod) []map[string]interface{} {
 }
 
 // ---------------------------------------------
+// KUBERNETES EVENTS COLLECTION
+// ---------------------------------------------
+func collectKubernetesEvents(clientset *kubernetes.Clientset) []map[string]interface{} {
+	// Get events from the last 30 minutes
+	events, _ := clientset.CoreV1().Events("").List(context.Background(), metav1.ListOptions{})
+	
+	var eventDetails []map[string]interface{}
+	thirtyMinutesAgo := time.Now().Add(-30 * time.Minute)
+	
+	for _, event := range events.Items {
+		// Only include recent events
+		if event.LastTimestamp.Time.Before(thirtyMinutesAgo) {
+			continue
+		}
+		
+		eventDetails = append(eventDetails, map[string]interface{}{
+			"type":            event.Type, // Normal or Warning
+			"reason":          event.Reason,
+			"message":         event.Message,
+			"involved_object": map[string]interface{}{
+				"kind":      event.InvolvedObject.Kind,
+				"name":      event.InvolvedObject.Name,
+				"namespace": event.InvolvedObject.Namespace,
+			},
+			"count":          event.Count,
+			"first_time":     event.FirstTimestamp.Time,
+			"last_time":      event.LastTimestamp.Time,
+			"source":         event.Source.Component,
+		})
+	}
+	
+	return eventDetails
+}
+
+// ---------------------------------------------
 // MÉTRICAS
 // ---------------------------------------------
 func sendMetrics(clientset *kubernetes.Clientset, config AgentConfig) {
@@ -241,6 +276,13 @@ func sendMetrics(clientset *kubernetes.Clientset, config AgentConfig) {
 			"type": "pod_details",
 			"data": map[string]interface{}{
 				"pods": collectPodDetails(clientset),
+			},
+			"collected_at": time.Now().UTC().Format(time.RFC3339),
+		},
+		{
+			"type": "events",
+			"data": map[string]interface{}{
+				"events": collectKubernetesEvents(clientset),
 			},
 			"collected_at": time.Now().UTC().Format(time.RFC3339),
 		},

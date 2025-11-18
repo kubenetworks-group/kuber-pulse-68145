@@ -70,8 +70,17 @@ serve(async (req) => {
       memory: metrics.filter(m => m.metric_type === 'memory').map(m => m.metric_data),
       pods: metrics.filter(m => m.metric_type === 'pods').map(m => m.metric_data),
       pod_details: metrics.filter(m => m.metric_type === 'pod_details').map(m => m.metric_data),
+      nodes: metrics.filter(m => m.metric_type === 'nodes').map(m => m.metric_data),
       events: metrics.filter(m => m.metric_type === 'events').map(m => m.metric_data),
     };
+
+    console.log('Metrics summary prepared:', {
+      cpu_count: metricsSummary.cpu.length,
+      memory_count: metricsSummary.memory.length,
+      pods_count: metricsSummary.pods.length,
+      pod_details_count: metricsSummary.pod_details.length,
+      events_count: metricsSummary.events.length,
+    });
 
     // Call Lovable AI for anomaly detection
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
@@ -92,55 +101,75 @@ serve(async (req) => {
             role: 'system',
             content: `You are a Kubernetes cluster monitoring AI assistant specialized in deep cluster analysis.
 
-Analyze the provided metrics and detect ALL issues, including:
+Analyze the provided metrics and Kubernetes EVENTS to detect ALL issues:
 
-**CRITICAL CHECKS:**
-1. **Pod Restarts**: Any pod with restart_count > 0 indicates crashes
-   - 1-3 restarts = medium severity (intermittent issue)
-   - 4-10 restarts = high severity (recurring problem)
-   - >10 restarts = critical (persistent failure, CrashLoopBackOff)
+**CRITICAL PRIORITY - ANALYZE KUBERNETES EVENTS FIRST:**
+1. **Events Analysis** - Most important! Look for Warning events:
+   - "Failed" / "FailedScheduling" = Pod can't be scheduled (resource constraints, node selector mismatch)
+   - "BackOff" / "CrashLoopBackOff" = Container crashing repeatedly
+   - "Failed" / "FailedMount" = Volume mount issues
+   - "Failed" / "FailedAttachVolume" = Storage problems
+   - "Pulled" / "ErrImagePull" / "ImagePullBackOff" = Image not found or auth issues
+   - "Unhealthy" = Liveness/Readiness probe failures
+   - "FailedCreate" = Deployment/ReplicaSet creation issues
+   - "OOMKilled" = Out of memory
+   - Look at event.message for specific error details!
+
+2. **Pod Restarts** (cross-reference with events):
+   - 1-3 restarts = medium severity
+   - 4-10 restarts = high severity
+   - >10 restarts = critical
    
-2. **Pod Status**: Check pod phase and container states
-   - Phase != "Running" = potential problem
-   - Container state "waiting" with reason "CrashLoopBackOff" = critical
-   - Container state "waiting" with reason "ImagePullBackOff" = high
-   - Container ready = false = needs investigation
-   
-3. **Pod Conditions**: Analyze pod conditions
-   - PodScheduled = False = scheduling issue
-   - ContainersReady = False = container failing to start
-   - Ready = False = pod not accepting traffic
+3. **Pod Status & States**:
+   - Phase "Pending" + events = scheduling/resource issue
+   - Phase "Failed" = deployment problem
+   - Container state "waiting" = startup issue
+   - Container ready = false = app not healthy
 
 4. **Resource Usage**: 
    - CPU > 80% = scale up needed
-   - Memory > 85% = potential OOM risk
-   - Resources consistently low < 10% = scale down opportunity
+   - Memory > 85% = OOM risk
+
+**DEPLOYMENT ANALYSIS:**
+For each pod with issues:
+1. Check events for that specific pod/deployment
+2. Extract the root cause from event messages
+3. Identify if it's: image problem, resource limit, config error, probe failure, etc.
+4. Provide specific fix based on the actual error
 
 Return JSON (no markdown):
 {
   "anomalies": [
     {
-      "type": "pod_restart|pod_crash|pod_not_ready|high_cpu|high_memory|scheduling_issue|image_pull_error|resource_underutilized",
+      "type": "pod_restart|pod_crash|pod_pending|image_pull_error|oom_killed|probe_failure|scheduling_issue|mount_failure|high_cpu|high_memory",
       "severity": "low|medium|high|critical",
-      "description": "Detailed description in Portuguese including pod name, namespace, and specific issue",
-      "recommendation": "Specific action to resolve in Portuguese",
-      "affected_pods": ["pod-name-1", "pod-name-2"],
+      "description": "Detailed description in Portuguese with pod name, namespace, and SPECIFIC error from events",
+      "recommendation": "Specific action in Portuguese based on the actual error found in events",
+      "affected_pods": ["namespace/pod-name"],
+      "event_messages": ["actual error messages from Kubernetes events"],
       "auto_heal": "restart_pod|delete_pod|scale_up|scale_down|null",
       "auto_heal_params": {
-        "pod_name": "specific-pod-name",
+        "pod_name": "pod-name",
         "namespace": "namespace",
         "action": "delete"
       }
     }
   ],
-  "summary": "Comprehensive cluster health summary in Portuguese"
+  "summary": "Portuguese summary with total issues found and most critical problems"
 }
 
-**IMPORTANT:** 
-- List EVERY pod with issues (name + namespace + reason)
-- For each anomaly with auto_heal != null, provide specific auto_heal_params
-- Always include summary even if cluster is healthy
-- Be specific about which pods need attention`
+**EXAMPLE:**
+If you see event: "Failed to pull image 'apache:2.5': image not found"
+→ anomaly type: "image_pull_error"
+→ description: "Pod apache-deploy-7 no namespace demo não consegue iniciar porque a imagem 'apache:2.5' não existe"
+→ recommendation: "Corrigir a tag da imagem no deployment para uma versão válida como 'apache:2.4' ou 'apache:latest'"
+
+**MANDATORY:**
+- Use events.message field to get exact error
+- Match events to pods by involved_object.name
+- List EVERY pod with problems
+- Include event_messages in anomaly
+- Be SPECIFIC about what's wrong and how to fix`
           },
           {
             role: 'user',
