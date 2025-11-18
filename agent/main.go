@@ -253,7 +253,8 @@ func sendMetrics(config Config, metrics []Metric) error {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-agent-key", config.APIKey)
+	req.Header.Set("Authorization", "Bearer "+config.APIKey)
+
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
@@ -297,7 +298,8 @@ func getCommands(config Config) ([]Command, error) {
 		return nil, err
 	}
 
-	req.Header.Set("x-agent-key", config.APIKey)
+	req.Header.Set("Authorization", "Bearer "+config.APIKey)
+
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
@@ -386,7 +388,8 @@ func updateCommandStatus(config Config, commandID string, result map[string]inte
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-agent-key", config.APIKey)
+	req.Header.Set("Authorization", "Bearer "+config.APIKey)
+
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)

@@ -25,7 +25,9 @@ rules:
   verbs: ["get", "list", "update"]
 - apiGroups: ["metrics.k8s.io"]
   resources: ["nodes", "pods"]
-  verbs: ["get", "list"]
+  verbs: ["get", "list", "watch"]
+
+
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -46,8 +48,8 @@ metadata:
   name: kuberpulse-config
   namespace: kuberpulse
 data:
-  API_ENDPOINT: "https://mcqfgnjootzthtizboom.supabase.co/functions/v1"
-  COLLECT_INTERVAL: "30"
+  API_ENDPOINT: "https://dadaeduevxyvkhjmwlel.supabase.co/functions/v1"
+  COLLECT_INTERVAL: "15"
 ---
 apiVersion: v1
 kind: Secret
@@ -56,8 +58,8 @@ metadata:
   namespace: kuberpulse
 type: Opaque
 stringData:
-  API_KEY: "YOUR_API_KEY_HERE"
-  CLUSTER_ID: "YOUR_CLUSTER_ID_HERE"
+  API_KEY: "eyJhbGciOiJSUzI1NiIsImtpZCI6IkZ0a1liRHdWczNZX3dxc0NHcF92Q1dMS1ZIZV95Q0JYVmRlM2JtQ2NSOEUifQ.eyJhdWQiOlsiaHR0cHM6Ly9rdWJlcm5ldGVzLmRlZmF1bHQuc3ZjIl0sImV4cCI6MTc2MzQyOTk4OSwiaWF0IjoxNzYzNDI2Mzg5LCJpc3MiOiJodHRwczovL2t1YmVybmV0ZXMuZGVmYXVsdC5zdmMiLCJqdGkiOiI2M2VkMGEwZi03YWRmLTRmY2UtYWUxNy0yNWExNzM4NThjMmMiLCJrdWJlcm5ldGVzLmlvIjp7Im5hbWVzcGFjZSI6Imt1YmVycHVsc2UiLCJzZXJ2aWNlYWNjb3VudCI6eyJuYW1lIjoia3ViZXJwdWxzZS1hZ2VudCIsInVpZCI6IjI0NDA5MGEzLWNiZjItNDI4Yy04MDViLTEyMzYxODkyOWU2MyJ9fSwibmJmIjoxNzYzNDI2Mzg5LCJzdWIiOiJzeXN0ZW06c2VydmljZWFjY291bnQ6a3ViZXJwdWxzZTprdWJlcnB1bHNlLWFnZW50In0.D5OxIb1ZzaEwFGWkwr47Owre0wIJX8ESKVeBxOWakFe2L50M8PIVjvxGLfuio13nHXC4TsAP5IG8Ld1RHgI3mIUqBXP3zuvOohU9-jcPpLJAGv3e5LkLTtTFRgzmykaOiLrL0rTYfjg8NmXASkRqeQxt32oU2srXcrDoTXetQ5jRn2pwXu7pEX54f7-Zuj9eOlsRb-GSdma3eeDm26gdIXmQZ0GyB4DifZINIPuUzqD_HpW2fPopnqKUHxmisv7kbgSR4SZaPCB8FI1zPWpY9exvNCQsKh9hVgGwm1XnL9Nh7HagPFSeuwcvYAIPjXyQNJfXLwpP722RDXWICpUVJg"
+  CLUSTER_ID: "2ba92131-8573-4651-96e9-5ad888282a7b"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -79,7 +81,7 @@ spec:
       serviceAccountName: kuberpulse-agent
       containers:
       - name: agent
-        image: kuberpulse/agent:latest
+        image: docker.io/denercavalcante/kuberpulse-agent:v0.0.1
         imagePullPolicy: Always
         envFrom:
         - configMapRef:
