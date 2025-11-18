@@ -2,6 +2,7 @@
   "common": {
     "dashboard": "Dashboard",
     "clusters": "Clusters",
+    "agents": "Agentes",
     "storage": "Storage",
     "aiMonitor": "Monitor IA",
     "costs": "Custos",

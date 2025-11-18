@@ -5,7 +5,7 @@
 
 set -e
 
-VERSION=${1:-v0.0.6}
+VERSION=${1:-v0.0.11}
 IMAGE_NAME="denercavalcante/kuberpulse-agent"
 FULL_IMAGE="${IMAGE_NAME}:${VERSION}"
 

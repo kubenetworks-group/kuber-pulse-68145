@@ -56,8 +56,7 @@ metadata:
   namespace: kuberpulse
 type: Opaque
 stringData:
-  # SUBSTITUA pelo api_key retornado do SQL acima
-  API_KEY: "agent_COLE_AQUI_O_UUID_RETORNADO"
+  API_KEY: "kp_c9df516823f84624b713027fb22cc905"
   CLUSTER_ID: "2ba92131-8573-4651-96e9-5ad888282a7b"
 ---
 apiVersion: apps/v1
