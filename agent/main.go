@@ -67,6 +67,9 @@ func main() {
 
 	log.Printf("✅ Connected to Kubernetes cluster")
 	log.Printf("📡 Sending metrics every %v", config.Interval)
+	log.Printf("🔧 API Endpoint: %s", config.APIEndpoint)
+	log.Printf("🔧 Cluster ID: %s", config.ClusterID)
+	log.Printf("🔧 API Key: %s...%s", config.APIKey[:8], config.APIKey[len(config.APIKey)-4:])
 
 	// Start metrics collection loop
 	go collectAndSendMetrics(clientset, metricsClient, config)
@@ -247,13 +250,22 @@ func sendMetrics(config Config, metrics []Metric) error {
 		return fmt.Errorf("failed to marshal metrics: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", config.APIEndpoint+"/agent-receive-metrics", bytes.NewBuffer(jsonData))
+	url := config.APIEndpoint + "/agent-receive-metrics"
+	log.Printf("🔍 Sending to: %s", url)
+	log.Printf("🔍 Payload size: %d bytes", len(jsonData))
+	log.Printf("🔍 Metrics count: %d", len(metrics))
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-agent-key", config.APIKey)
+	log.Printf("🔍 Headers: Content-Type=%s, x-agent-key=%s...%s", 
+		req.Header.Get("Content-Type"), 
+		config.APIKey[:8], 
+		config.APIKey[len(config.APIKey)-4:])
 
 
 	client := &http.Client{Timeout: 10 * time.Second}
@@ -263,8 +275,18 @@ func sendMetrics(config Config, metrics []Metric) error {
 	}
 	defer resp.Body.Close()
 
+	// Read response body for debugging
+	var respBody bytes.Buffer
+	respBody.ReadFrom(resp.Body)
+	respBodyStr := respBody.String()
+
+	log.Printf("🔍 Response status: %d", resp.StatusCode)
+	if respBodyStr != "" {
+		log.Printf("🔍 Response body: %s", respBodyStr)
+	}
+
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("bad response status: %d", resp.StatusCode)
+		return fmt.Errorf("bad response status: %d, body: %s", resp.StatusCode, respBodyStr)
 	}
 
 	return nil
@@ -293,7 +315,10 @@ func pollForCommands(clientset *kubernetes.Clientset, config Config) {
 }
 
 func getCommands(config Config) ([]Command, error) {
-	req, err := http.NewRequest("GET", config.APIEndpoint+"/agent-get-commands", nil)
+	url := config.APIEndpoint + "/agent-get-commands"
+	log.Printf("🔍 Polling commands from: %s", url)
+
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -303,18 +328,23 @@ func getCommands(config Config) ([]Command, error) {
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
+		log.Printf("🔍 Command request failed: %v", err)
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	log.Printf("🔍 Commands response status: %d", resp.StatusCode)
 
 	var result struct {
 		Commands []Command `json:"commands"`
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		log.Printf("🔍 Failed to decode commands response: %v", err)
 		return nil, err
 	}
 
+	log.Printf("🔍 Received %d commands", len(result.Commands))
 	return result.Commands, nil
 }
 
@@ -381,7 +411,11 @@ func updateCommandStatus(config Config, commandID string, result map[string]inte
 		return err
 	}
 
-	req, err := http.NewRequest("POST", config.APIEndpoint+"/agent-update-command", bytes.NewBuffer(jsonData))
+	url := config.APIEndpoint + "/agent-update-command"
+	log.Printf("🔍 Updating command %s status to: %s", commandID, status)
+	log.Printf("🔍 Update URL: %s", url)
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return err
 	}
@@ -392,10 +426,12 @@ func updateCommandStatus(config Config, commandID string, result map[string]inte
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
+		log.Printf("🔍 Command update failed: %v", err)
 		return err
 	}
 	defer resp.Body.Close()
 
+	log.Printf("🔍 Command update response status: %d", resp.StatusCode)
 	return nil
 }
 
