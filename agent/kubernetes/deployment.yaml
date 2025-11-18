@@ -46,7 +46,7 @@ metadata:
   name: kuberpulse-config
   namespace: kuberpulse
 data:
-  API_ENDPOINT: "https://mcqfgnjootzthtizboom.supabase.co/functions/v1"
+  API_ENDPOINT: "https://dadaeduevxyvkhjmwlel.supabase.co/functions/v1"
   COLLECT_INTERVAL: "30"
 ---
 apiVersion: v1
