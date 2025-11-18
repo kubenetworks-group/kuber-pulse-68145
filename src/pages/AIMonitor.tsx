@@ -440,6 +440,14 @@ export default function AIMonitor() {
                             </div>
                             <p className="text-sm font-medium">{anomaly.description}</p>
                             <p className="text-xs text-muted-foreground">💡 {anomaly.recommendation}</p>
+                            {anomaly.event_messages && anomaly.event_messages.length > 0 && (
+                              <div className="mt-2 p-2 bg-destructive/10 rounded border border-destructive/20">
+                                <p className="text-xs font-semibold text-destructive mb-1">🔴 Erro do Kubernetes:</p>
+                                {anomaly.event_messages.map((msg: string, midx: number) => (
+                                  <p key={midx} className="text-xs font-mono text-destructive/90">{msg}</p>
+                                ))}
+                              </div>
+                            )}
                             {anomaly.affected_pods && anomaly.affected_pods.length > 0 && (
                               <div className="mt-2">
                                 <p className="text-xs font-semibold text-muted-foreground mb-1">Pods Afetados:</p>
