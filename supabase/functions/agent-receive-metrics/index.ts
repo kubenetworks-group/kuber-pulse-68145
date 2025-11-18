@@ -1,10 +1,45 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-agent-key',
 };
+
+// Validation schemas
+const MetricDataSchema = z.record(z.unknown()).refine(
+  (data) => JSON.stringify(data).length < 10000,
+  { message: 'Metric data too large (max 10KB)' }
+);
+
+const MetricSchema = z.object({
+  type: z.string().max(50),
+  data: MetricDataSchema,
+  collected_at: z.string().datetime().optional(),
+});
+
+const MetricsPayloadSchema = z.object({
+  metrics: z.array(MetricSchema).min(1).max(100),
+});
+
+// Rate limiting map (in-memory)
+const rateLimiter = new Map<string, number[]>();
+
+function checkRateLimit(key: string, maxRequests: number, windowMs: number): boolean {
+  const now = Date.now();
+  const requests = (rateLimiter.get(key) || []).filter(
+    timestamp => now - timestamp < windowMs
+  );
+  
+  if (requests.length >= maxRequests) {
+    return false; // Rate limited
+  }
+  
+  requests.push(now);
+  rateLimiter.set(key, requests);
+  return true;
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -15,10 +50,24 @@ serve(async (req) => {
     const agentKey = req.headers.get('x-agent-key');
     
     if (!agentKey) {
-      console.error('Missing agent key');
+      console.error('Authentication failed');
       return new Response(JSON.stringify({ error: 'Missing API key' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Rate limiting: 4 requests per minute
+    if (!checkRateLimit(agentKey, 4, 60000)) {
+      console.warn('Rate limit exceeded');
+      return new Response(JSON.stringify({ error: 'Rate limit exceeded' }), {
+        status: 429,
+        headers: { 
+          ...corsHeaders, 
+          'Content-Type': 'application/json',
+          'X-RateLimit-Limit': '4',
+          'X-RateLimit-Window': '60s',
+        },
       });
     }
 
@@ -35,7 +84,7 @@ serve(async (req) => {
       .single();
 
     if (keyError || !apiKeyData || !apiKeyData.is_active) {
-      console.error('Invalid or inactive API key:', keyError);
+      console.error('Authentication failed');
       return new Response(JSON.stringify({ error: 'Invalid API key' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -50,15 +99,25 @@ serve(async (req) => {
       .update({ last_seen: new Date().toISOString() })
       .eq('api_key', agentKey);
 
-    const { metrics } = await req.json();
+    // Parse and validate request body
+    const body = await req.json();
+    const validationResult = MetricsPayloadSchema.safeParse(body);
     
-    if (!metrics || !Array.isArray(metrics)) {
-      console.error('Invalid metrics format');
-      return new Response(JSON.stringify({ error: 'Invalid metrics format' }), {
+    if (!validationResult.success) {
+      console.error('Validation failed');
+      return new Response(JSON.stringify({ 
+        error: 'Invalid metrics format',
+        details: validationResult.error.errors.map(e => ({
+          path: e.path.join('.'),
+          message: e.message
+        }))
+      }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
+    const { metrics } = validationResult.data;
 
     // Insert metrics into database
     const metricsToInsert = metrics.map(metric => ({
@@ -73,7 +132,7 @@ serve(async (req) => {
       .insert(metricsToInsert);
 
     if (insertError) {
-      console.error('Error inserting metrics:', insertError);
+      console.error('Database error occurred');
       return new Response(JSON.stringify({ error: 'Failed to store metrics' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -100,7 +159,7 @@ serve(async (req) => {
         .eq('id', cluster_id);
     }
 
-    console.log(`Received ${metrics.length} metrics from cluster ${cluster_id}`);
+    console.log(`Received ${metrics.length} metrics successfully`);
 
     return new Response(
       JSON.stringify({ success: true, received: metrics.length }),
@@ -109,9 +168,9 @@ serve(async (req) => {
       }
     );
   } catch (error) {
-    console.error('Error in agent-receive-metrics:', error);
+    console.error('Request processing failed');
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
+      JSON.stringify({ error: 'Internal server error' }),
       {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

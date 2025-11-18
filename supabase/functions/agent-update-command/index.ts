@@ -1,10 +1,39 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-agent-key',
 };
+
+// Validation schema
+const UpdateCommandSchema = z.object({
+  command_id: z.string().uuid(),
+  status: z.enum(['sent', 'executing', 'completed', 'failed']),
+  result: z.record(z.unknown()).optional().refine(
+    (data) => !data || JSON.stringify(data).length < 50000,
+    { message: 'Result data too large (max 50KB)' }
+  ),
+});
+
+// Rate limiting
+const rateLimiter = new Map<string, number[]>();
+
+function checkRateLimit(key: string, maxRequests: number, windowMs: number): boolean {
+  const now = Date.now();
+  const requests = (rateLimiter.get(key) || []).filter(
+    timestamp => now - timestamp < windowMs
+  );
+  
+  if (requests.length >= maxRequests) {
+    return false;
+  }
+  
+  requests.push(now);
+  rateLimiter.set(key, requests);
+  return true;
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -15,10 +44,24 @@ serve(async (req) => {
     const agentKey = req.headers.get('x-agent-key');
     
     if (!agentKey) {
-      console.error('Missing agent key');
+      console.error('Authentication failed');
       return new Response(JSON.stringify({ error: 'Missing API key' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Rate limiting: 10 requests per minute
+    if (!checkRateLimit(agentKey, 10, 60000)) {
+      console.warn('Rate limit exceeded');
+      return new Response(JSON.stringify({ error: 'Rate limit exceeded' }), {
+        status: 429,
+        headers: { 
+          ...corsHeaders, 
+          'Content-Type': 'application/json',
+          'X-RateLimit-Limit': '10',
+          'X-RateLimit-Window': '60s',
+        },
       });
     }
 
@@ -35,18 +78,32 @@ serve(async (req) => {
       .single();
 
     if (keyError || !apiKeyData || !apiKeyData.is_active) {
-      console.error('Invalid or inactive API key:', keyError);
+      console.error('Authentication failed');
       return new Response(JSON.stringify({ error: 'Invalid API key' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    const { command_id, status, result } = await req.json();
-
-    if (!command_id || !status) {
-      throw new Error('command_id and status are required');
+    // Parse and validate request body
+    const body = await req.json();
+    const validationResult = UpdateCommandSchema.safeParse(body);
+    
+    if (!validationResult.success) {
+      console.error('Validation failed');
+      return new Response(JSON.stringify({ 
+        error: 'Invalid request format',
+        details: validationResult.error.errors.map(e => ({
+          path: e.path.join('.'),
+          message: e.message
+        }))
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
+
+    const { command_id, status, result } = validationResult.data;
 
     // Update command status
     const updateData: any = {
@@ -65,11 +122,14 @@ serve(async (req) => {
       .eq('cluster_id', apiKeyData.cluster_id);
 
     if (updateError) {
-      console.error('Error updating command:', updateError);
-      throw new Error('Failed to update command');
+      console.error('Database error occurred');
+      return new Response(JSON.stringify({ error: 'Failed to update command' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
-    console.log(`Updated command ${command_id} to status ${status}`);
+    console.log(`Command updated successfully`);
 
     return new Response(
       JSON.stringify({ success: true }),
@@ -78,9 +138,9 @@ serve(async (req) => {
       }
     );
   } catch (error) {
-    console.error('Error in agent-update-command:', error);
+    console.error('Request processing failed');
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
+      JSON.stringify({ error: 'Internal server error' }),
       {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

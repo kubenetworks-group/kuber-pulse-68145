@@ -59,7 +59,7 @@ func main() {
 	log.Printf("📡 Sending metrics every %ds", config.Interval)
 	log.Printf("🔧 API Endpoint: %s", config.APIEndpoint)
 	log.Printf("🔧 Cluster ID: %s", config.ClusterID)
-	log.Printf("🔧 API Key: %s...%s", config.APIKey[:8], config.APIKey[len(config.APIKey)-4:])
+	log.Printf("🔧 API Key configured: %d characters", len(config.APIKey))
 
 	ticker := time.NewTicker(time.Duration(config.Interval) * time.Second)
 
