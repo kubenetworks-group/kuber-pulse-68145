@@ -50,6 +50,9 @@ export default function AIMonitor() {
   const [severityFilter, setSeverityFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selectedCluster, setSelectedCluster] = useState<string>("all");
+  const [scanning, setScanning] = useState(false);
+  const [anomalies, setAnomalies] = useState<any[]>([]);
+  const [autoHealEnabled, setAutoHealEnabled] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -133,6 +136,54 @@ export default function AIMonitor() {
     return () => {
       supabase.removeChannel(channel);
     };
+  };
+
+  const handleScanCluster = async () => {
+    if (selectedCluster === 'all') {
+      toast({
+        title: "Selecione um cluster",
+        description: "Por favor, selecione um cluster específico para varredura",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setScanning(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('agent-analyze-anomalies', {
+        body: { cluster_id: selectedCluster }
+      });
+
+      if (error) throw error;
+
+      setAnomalies(data.anomalies || []);
+      
+      toast({
+        title: "Varredura concluída",
+        description: `${data.anomalies_found} anomalia(s) detectada(s)`
+      });
+
+      fetchData(); // Refresh incidents
+    } catch (error: any) {
+      console.error('Error scanning cluster:', error);
+      toast({
+        title: "Erro na varredura",
+        description: error.message || "Falha ao analisar o cluster",
+        variant: "destructive"
+      });
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const handleEnableAutoHeal = async () => {
+    setAutoHealEnabled(!autoHealEnabled);
+    toast({
+      title: autoHealEnabled ? "Auto-cura desativada" : "Auto-cura ativada",
+      description: autoHealEnabled 
+        ? "A IA não executará ações automaticamente" 
+        : "A IA agora executará ações de correção automaticamente"
+    });
   };
 
   const handleExecuteAction = async (incidentId: string) => {
@@ -241,6 +292,88 @@ export default function AIMonitor() {
             </SelectContent>
           </Select>
         </div>
+
+        {/* Cluster Analysis Section */}
+        <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Target className="w-5 h-5" />
+              Análise de Cluster
+            </CardTitle>
+            <CardDescription>
+              Inicie uma varredura de anomalias no cluster selecionado
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex gap-3">
+              <button
+                onClick={handleScanCluster}
+                disabled={scanning || selectedCluster === 'all'}
+                className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
+              >
+                {scanning ? (
+                  <>
+                    <Activity className="w-4 h-4 animate-spin" />
+                    Analisando...
+                  </>
+                ) : (
+                  <>
+                    <Shield className="w-4 h-4" />
+                    Varrer Cluster
+                  </>
+                )}
+              </button>
+              
+              <button
+                onClick={handleEnableAutoHeal}
+                className={`flex-1 px-4 py-2 rounded-lg flex items-center justify-center gap-2 transition-colors ${
+                  autoHealEnabled 
+                    ? 'bg-green-500 text-white hover:bg-green-600' 
+                    : 'bg-secondary text-secondary-foreground hover:bg-secondary/90'
+                }`}
+              >
+                <Zap className="w-4 h-4" />
+                {autoHealEnabled ? 'Auto-cura Ativa' : 'Ativar Auto-cura'}
+              </button>
+            </div>
+
+            {anomalies.length > 0 && (
+              <div className="mt-4 space-y-2">
+                <h3 className="font-semibold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4" />
+                  Anomalias Detectadas ({anomalies.length})
+                </h3>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {anomalies.map((anomaly, idx) => (
+                    <div 
+                      key={idx}
+                      className="p-3 bg-background rounded-lg border border-border"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Badge variant={
+                              anomaly.severity === 'critical' ? 'destructive' :
+                              anomaly.severity === 'high' ? 'destructive' :
+                              anomaly.severity === 'medium' ? 'default' : 'secondary'
+                            }>
+                              {anomaly.severity}
+                            </Badge>
+                            <span className="text-sm font-medium">{anomaly.type}</span>
+                          </div>
+                          <p className="text-sm text-muted-foreground">{anomaly.description}</p>
+                          {anomaly.recommendation && (
+                            <p className="text-xs text-primary mt-1">💡 {anomaly.recommendation}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Stats Grid com visualizações melhoradas */}
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
