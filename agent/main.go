@@ -261,9 +261,9 @@ func sendMetrics(config Config, metrics []Metric) error {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+config.APIKey)
+	req.Header.Set("x-agent-key", config.APIKey)
 
-	log.Printf("🔍 Headers: Content-Type=%s, Authorization=Bearer %s...%s",
+	log.Printf("🔍 Headers: Content-Type=%s, x-agent-key=%s...%s",
 		req.Header.Get("Content-Type"),
 		config.APIKey[:8],
 		config.APIKey[len(config.APIKey)-4:])
