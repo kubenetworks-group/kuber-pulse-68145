@@ -117,6 +117,8 @@
     "monthlySpend": "Gasto Mensual",
     "recentEvents": "Eventos Recientes",
     "clusterHealth": "Salud de Clústeres",
+    "allocated": "Asignado",
+    "available": "Disponible",
     "viewAll": "Ver Todos",
     "podHealthByNamespace": "Salud de Pods por Namespace",
     "clusterDetails": "Detalles del Cluster",
