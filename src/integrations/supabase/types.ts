@@ -422,6 +422,7 @@ export type Database = {
           pods: number | null
           provider: string
           region: string | null
+          skip_ssl_verify: boolean | null
           status: string
           storage_available_gb: number | null
           storage_total_gb: number | null
@@ -449,6 +450,7 @@ export type Database = {
           pods?: number | null
           provider: string
           region?: string | null
+          skip_ssl_verify?: boolean | null
           status?: string
           storage_available_gb?: number | null
           storage_total_gb?: number | null
@@ -476,6 +478,7 @@ export type Database = {
           pods?: number | null
           provider?: string
           region?: string | null
+          skip_ssl_verify?: boolean | null
           status?: string
           storage_available_gb?: number | null
           storage_total_gb?: number | null
