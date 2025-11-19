@@ -56,8 +56,8 @@ metadata:
   namespace: kuberpulse
 type: Opaque
 stringData:
-  API_KEY: "kp_c9df516823f84624b713027fb22cc905"
-  CLUSTER_ID: "2ba92131-8573-4651-96e9-5ad888282a7b"
+  API_KEY: "<REPLACE_WITH_YOUR_API_KEY>"
+  CLUSTER_ID: "<REPLACE_WITH_YOUR_CLUSTER_ID>"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -79,7 +79,7 @@ spec:
       serviceAccountName: kuberpulse-agent
       containers:
       - name: agent
-        image: docker.io/denercavalcante/kuberpulse-agent:v0.0.12
+        image: docker.io/denercavalcante/kuberpulse-agent:v0.0.16
         imagePullPolicy: Always
         envFrom:
         - configMapRef:
