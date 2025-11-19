@@ -13,6 +13,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
@@ -413,14 +414,18 @@ func executeCommands(clientset *kubernetes.Clientset, config AgentConfig, comman
 		var result map[string]interface{}
 		var err error
 
-		switch cmd.CommandType {
-		case "restart_pod", "delete_pod":
-			result, err = deletePod(clientset, cmd.CommandParams)
-		case "scale_deployment":
-			result, err = scaleDeployment(clientset, cmd.CommandParams)
-		default:
-			err = fmt.Errorf("unknown command type: %s", cmd.CommandType)
-		}
+	switch cmd.CommandType {
+	case "restart_pod", "delete_pod":
+		result, err = deletePod(clientset, cmd.CommandParams)
+	case "scale_deployment":
+		result, err = scaleDeployment(clientset, cmd.CommandParams)
+	case "update_deployment_image":
+		result, err = updateDeploymentImage(clientset, cmd.CommandParams)
+	case "update_deployment_resources":
+		result, err = updateDeploymentResources(clientset, cmd.CommandParams)
+	default:
+		err = fmt.Errorf("unknown command type: %s", cmd.CommandType)
+	}
 
 		updateCommandStatus(config, cmd.ID, result, err)
 	}
@@ -479,6 +484,125 @@ func scaleDeployment(clientset *kubernetes.Clientset, params map[string]interfac
 		"deployment": deploymentName,
 		"namespace":  namespace,
 		"replicas":   replicas,
+	}, nil
+}
+
+func updateDeploymentImage(clientset *kubernetes.Clientset, params map[string]interface{}) (map[string]interface{}, error) {
+	deploymentName := params["deployment_name"].(string)
+	namespace := params["namespace"].(string)
+	containerName := params["container_name"].(string)
+	newImage := params["new_image"].(string)
+
+	deployment, err := clientset.AppsV1().Deployments(namespace).Get(
+		context.Background(),
+		deploymentName,
+		metav1.GetOptions{},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get deployment: %v", err)
+	}
+
+	// Find and update the container image
+	updated := false
+	for i, container := range deployment.Spec.Template.Spec.Containers {
+		if container.Name == containerName {
+			deployment.Spec.Template.Spec.Containers[i].Image = newImage
+			updated = true
+			break
+		}
+	}
+
+	if !updated {
+		return nil, fmt.Errorf("container %s not found in deployment", containerName)
+	}
+
+	_, err = clientset.AppsV1().Deployments(namespace).Update(
+		context.Background(),
+		deployment,
+		metav1.UpdateOptions{},
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to update deployment: %v", err)
+	}
+
+	return map[string]interface{}{
+		"action":          "deployment_image_updated",
+		"deployment":      deploymentName,
+		"namespace":       namespace,
+		"container":       containerName,
+		"new_image":       newImage,
+		"message":         "Deployment image updated successfully. Kubernetes will roll out the new pods.",
+	}, nil
+}
+
+func updateDeploymentResources(clientset *kubernetes.Clientset, params map[string]interface{}) (map[string]interface{}, error) {
+	deploymentName := params["deployment_name"].(string)
+	namespace := params["namespace"].(string)
+	containerName := params["container_name"].(string)
+
+	deployment, err := clientset.AppsV1().Deployments(namespace).Get(
+		context.Background(),
+		deploymentName,
+		metav1.GetOptions{},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get deployment: %v", err)
+	}
+
+	// Find and update the container resources
+	updated := false
+	for i, container := range deployment.Spec.Template.Spec.Containers {
+		if container.Name == containerName {
+			if cpuRequest, ok := params["cpu_request"].(string); ok {
+				if deployment.Spec.Template.Spec.Containers[i].Resources.Requests == nil {
+					deployment.Spec.Template.Spec.Containers[i].Resources.Requests = corev1.ResourceList{}
+				}
+				deployment.Spec.Template.Spec.Containers[i].Resources.Requests[corev1.ResourceCPU] = resource.MustParse(cpuRequest)
+			}
+			if memRequest, ok := params["memory_request"].(string); ok {
+				if deployment.Spec.Template.Spec.Containers[i].Resources.Requests == nil {
+					deployment.Spec.Template.Spec.Containers[i].Resources.Requests = corev1.ResourceList{}
+				}
+				deployment.Spec.Template.Spec.Containers[i].Resources.Requests[corev1.ResourceMemory] = resource.MustParse(memRequest)
+			}
+			if cpuLimit, ok := params["cpu_limit"].(string); ok {
+				if deployment.Spec.Template.Spec.Containers[i].Resources.Limits == nil {
+					deployment.Spec.Template.Spec.Containers[i].Resources.Limits = corev1.ResourceList{}
+				}
+				deployment.Spec.Template.Spec.Containers[i].Resources.Limits[corev1.ResourceCPU] = resource.MustParse(cpuLimit)
+			}
+			if memLimit, ok := params["memory_limit"].(string); ok {
+				if deployment.Spec.Template.Spec.Containers[i].Resources.Limits == nil {
+					deployment.Spec.Template.Spec.Containers[i].Resources.Limits = corev1.ResourceList{}
+				}
+				deployment.Spec.Template.Spec.Containers[i].Resources.Limits[corev1.ResourceMemory] = resource.MustParse(memLimit)
+			}
+			updated = true
+			break
+		}
+	}
+
+	if !updated {
+		return nil, fmt.Errorf("container %s not found in deployment", containerName)
+	}
+
+	_, err = clientset.AppsV1().Deployments(namespace).Update(
+		context.Background(),
+		deployment,
+		metav1.UpdateOptions{},
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to update deployment resources: %v", err)
+	}
+
+	return map[string]interface{}{
+		"action":     "deployment_resources_updated",
+		"deployment": deploymentName,
+		"namespace":  namespace,
+		"container":  containerName,
+		"message":    "Deployment resources updated successfully. Kubernetes will roll out the new pods.",
 	}, nil
 }
 
