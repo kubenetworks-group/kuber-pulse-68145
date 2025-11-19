@@ -206,7 +206,7 @@ export default function AIMonitor() {
       const { data, error } = await supabase.functions.invoke('agent-auto-heal', {
         body: {
           cluster_id: selectedCluster,
-          anomaly_id: anomaly.id || `temp-${Date.now()}`,
+          ...(anomaly.id && { anomaly_id: anomaly.id }),
           auto_heal_action: anomaly.auto_heal,
           auto_heal_params: anomaly.auto_heal_params
         }

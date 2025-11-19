@@ -10,7 +10,7 @@ const corsHeaders = {
 // Validation schema
 const AutoHealSchema = z.object({
   cluster_id: z.string().uuid(),
-  anomaly_id: z.string().uuid(),
+  anomaly_id: z.string().uuid().optional(),
   auto_heal_action: z.string().max(100).optional(),
   auto_heal_params: z.record(z.unknown()).optional().refine(
     (data) => !data || JSON.stringify(data).length < 10000,
@@ -95,11 +95,13 @@ serve(async (req) => {
 
     console.log('Command created successfully');
 
-    // Mark anomaly as auto-heal applied
-    await supabaseClient
-      .from('agent_anomalies')
-      .update({ auto_heal_applied: true })
-      .eq('id', anomaly_id);
+    // Mark anomaly as auto-heal applied (only if anomaly_id is provided)
+    if (anomaly_id) {
+      await supabaseClient
+        .from('agent_anomalies')
+        .update({ auto_heal_applied: true })
+        .eq('id', anomaly_id);
+    }
 
     // Create notification
     await supabaseClient
