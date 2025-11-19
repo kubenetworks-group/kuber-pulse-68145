@@ -7,16 +7,34 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-agent-key',
 };
 
-// Validation schemas
-const MetricDataSchema = z.record(z.unknown()).refine(
+// Validation schemas with type-specific limits
+const BasicMetricDataSchema = z.record(z.unknown()).refine(
   (data) => JSON.stringify(data).length < 10000,
-  { message: 'Metric data too large (max 10KB)' }
+  { message: 'Basic metric data too large (max 10KB)' }
+);
+
+const LargeMetricDataSchema = z.record(z.unknown()).refine(
+  (data) => JSON.stringify(data).length < 500000, // 500KB for pod_details and events
+  { message: 'Metric data too large (max 500KB)' }
 );
 
 const MetricSchema = z.object({
   type: z.string().max(50),
-  data: MetricDataSchema,
+  data: z.unknown(), // Will be validated based on type
   collected_at: z.string().datetime().optional(),
+}).refine((metric) => {
+  // Type-specific validation
+  const isLargeMetricType = ['pod_details', 'events', 'nodes'].includes(metric.type);
+  const schema = isLargeMetricType ? LargeMetricDataSchema : BasicMetricDataSchema;
+  const result = schema.safeParse(metric.data);
+  
+  if (!result.success) {
+    console.error(`Validation failed for metric type '${metric.type}':`, result.error.errors);
+  }
+  
+  return result.success;
+}, {
+  message: 'Invalid metric data size or structure'
 });
 
 const MetricsPayloadSchema = z.object({
@@ -104,7 +122,13 @@ serve(async (req) => {
     const validationResult = MetricsPayloadSchema.safeParse(body);
     
     if (!validationResult.success) {
-      console.error('Validation failed');
+      console.error('Validation failed:', JSON.stringify({
+        errors: validationResult.error.errors.map(e => ({
+          path: e.path.join('.'),
+          message: e.message,
+          received: e.path.length > 0 ? JSON.stringify(body).substring(0, 200) : undefined
+        }))
+      }));
       return new Response(JSON.stringify({ 
         error: 'Invalid metrics format',
         details: validationResult.error.errors.map(e => ({
@@ -116,6 +140,11 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
+    console.log(`Received ${body.metrics.length} metrics:`, body.metrics.map((m: any) => ({
+      type: m.type,
+      size: JSON.stringify(m.data).length
+    })));
 
     const { metrics } = validationResult.data;
 
@@ -149,9 +178,13 @@ serve(async (req) => {
         last_sync: new Date().toISOString()
       };
       
-      if (cpuMetric?.data?.usage_percent) updateData.cpu_usage = cpuMetric.data.usage_percent;
-      if (memoryMetric?.data?.usage_percent) updateData.memory_usage = memoryMetric.data.usage_percent;
-      if (podsMetric?.data?.running) updateData.pods = podsMetric.data.running;
+      const cpuData = cpuMetric?.data as any;
+      const memoryData = memoryMetric?.data as any;
+      const podsData = podsMetric?.data as any;
+      
+      if (cpuData?.usage_percent) updateData.cpu_usage = cpuData.usage_percent;
+      if (memoryData?.usage_percent) updateData.memory_usage = memoryData.usage_percent;
+      if (podsData?.running) updateData.pods = podsData.running;
       
       await supabaseClient
         .from('clusters')

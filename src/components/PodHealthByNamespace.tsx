@@ -20,6 +20,19 @@ const STATUS_COLORS = {
   critical: "hsl(var(--destructive))",
 };
 
+// Pod status mapping
+const POD_STATUS_MAP: Record<string, string> = {
+  Running: 'healthy',
+  Succeeded: 'healthy',
+  Pending: 'warning',
+  Unknown: 'warning',
+  Failed: 'critical',
+  CrashLoopBackOff: 'critical',
+  Error: 'critical',
+  ImagePullBackOff: 'critical',
+  ErrImagePull: 'critical',
+};
+
 export const PodHealthByNamespace = () => {
   const { t } = useTranslation();
   const { selectedClusterId } = useCluster();
@@ -36,18 +49,36 @@ export const PodHealthByNamespace = () => {
   const fetchPodData = async () => {
     setLoading(true);
     try {
-      const { data: pvcs, error } = await supabase
-        .from('pvcs')
+      // Fetch pod_details metrics from agent_metrics
+      const { data: metrics, error } = await supabase
+        .from('agent_metrics')
         .select('*')
-        .eq('cluster_id', selectedClusterId);
+        .eq('cluster_id', selectedClusterId)
+        .eq('metric_type', 'pod_details')
+        .order('collected_at', { ascending: false })
+        .limit(1);
 
       if (error) throw error;
+
+      if (!metrics || metrics.length === 0) {
+        console.log('No pod_details metrics found');
+        setNamespaceData([]);
+        setLoading(false);
+        return;
+      }
+
+      // Process the most recent pod_details metric
+      const latestMetric = metrics[0];
+      const metricData = latestMetric.metric_data as any;
+      const pods = metricData?.pods || [];
+
+      console.log(`Processing ${pods.length} pods from metric_data`);
 
       // Group by namespace and calculate health
       const namespaceMap = new Map<string, NamespaceHealth>();
       
-      pvcs?.forEach((pvc) => {
-        const ns = pvc.namespace || 'default';
+      pods.forEach((pod: any) => {
+        const ns = pod.namespace || 'default';
         if (!namespaceMap.has(ns)) {
           namespaceMap.set(ns, { namespace: ns, healthy: 0, warning: 0, critical: 0, total: 0 });
         }
@@ -55,10 +86,13 @@ export const PodHealthByNamespace = () => {
         const data = namespaceMap.get(ns)!;
         data.total++;
         
-        const usagePercent = (pvc.used_bytes / pvc.requested_bytes) * 100;
-        if (usagePercent > 85) {
+        // Determine pod health based on status and phase
+        const status = pod.status || pod.phase || 'Unknown';
+        const healthStatus = POD_STATUS_MAP[status] || 'warning';
+        
+        if (healthStatus === 'critical') {
           data.critical++;
-        } else if (usagePercent > 70) {
+        } else if (healthStatus === 'warning') {
           data.warning++;
         } else {
           data.healthy++;
@@ -68,6 +102,7 @@ export const PodHealthByNamespace = () => {
       setNamespaceData(Array.from(namespaceMap.values()));
     } catch (error) {
       console.error('Error fetching pod data:', error);
+      setNamespaceData([]);
     } finally {
       setLoading(false);
     }

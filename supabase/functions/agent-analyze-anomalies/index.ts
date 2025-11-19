@@ -82,6 +82,35 @@ serve(async (req) => {
       events_count: metricsSummary.events.length,
     });
 
+    // Check for missing essential metrics
+    if (metricsSummary.pod_details.length === 0 || metricsSummary.events.length === 0) {
+      const missingMetrics = [];
+      if (metricsSummary.pod_details.length === 0) missingMetrics.push('pod_details');
+      if (metricsSummary.events.length === 0) missingMetrics.push('events');
+      
+      console.warn('Missing essential metrics:', missingMetrics);
+      
+      return new Response(
+        JSON.stringify({ 
+          anomalies: [{
+            severity: 'warning',
+            type: 'incomplete_data',
+            description: `Dados incompletos do cluster. Métricas ausentes: ${missingMetrics.join(', ')}`,
+            recommendation: 'Verifique se o agente está configurado corretamente e tem permissões para coletar todas as métricas.',
+            ai_analysis: {
+              issue: 'incomplete_metrics',
+              missing: missingMetrics
+            }
+          }],
+          summary: `Agente está enviando apenas métricas básicas. Faltam: ${missingMetrics.join(', ')}. Análise completa não disponível.`,
+          message: 'Incomplete metrics data' 
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
     // Call Lovable AI for anomaly detection
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
@@ -101,12 +130,28 @@ serve(async (req) => {
             role: 'system',
             content: `You are a Kubernetes cluster monitoring AI assistant specialized in deep cluster analysis.
 
-Analyze the provided metrics and Kubernetes EVENTS to detect ALL issues:
+**PRIMARY ANALYSIS PRIORITY: KUBERNETES EVENTS**
+Kubernetes events are the MOST CRITICAL source of truth for cluster health. Analyze events FIRST before looking at metrics:
 
-**CRITICAL PRIORITY - ANALYZE KUBERNETES EVENTS FIRST:**
-1. **Events Analysis** - Most important! Look for Warning events:
-   - "Failed" / "FailedScheduling" = Pod can't be scheduled (resource constraints, node selector mismatch)
-   - "BackOff" / "CrashLoopBackOff" = Container crashing repeatedly
+1. **Critical Event Types (Highest Priority):**
+   - CrashLoopBackOff: Container repeatedly crashing - CRITICAL ISSUE
+   - ImagePullBackOff / ErrImagePull: Cannot pull container image - CRITICAL
+   - FailedScheduling: Pod cannot be scheduled to any node - CRITICAL
+   - Failed: General pod failure - HIGH PRIORITY
+   - Evicted: Pod evicted due to resource pressure - HIGH PRIORITY
+   - OOMKilled: Out of memory - HIGH PRIORITY
+   
+2. **Warning Event Types:**
+   - BackOff: Temporary scheduling issues
+   - Unhealthy: Health check failures
+   - FailedMount: Volume mount issues
+   - NetworkNotReady: Network problems
+
+3. **Pod Status Analysis (from pod_details):**
+   - Running + RestartCount > 5: Unstable pod
+   - Pending > 5 minutes: Scheduling issues
+   - Failed / Error: Immediate attention needed
+   - CrashLoopBackOff: Critical failure loop
    - "Failed" / "FailedMount" = Volume mount issues
    - "Failed" / "FailedAttachVolume" = Storage problems
    - "Pulled" / "ErrImagePull" / "ImagePullBackOff" = Image not found or auth issues

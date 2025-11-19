@@ -26,7 +26,9 @@
     "noData": "No data available",
     "healthy": "Healthy",
     "warning": "Warning",
-    "critical": "Critical"
+    "critical": "Critical",
+    "justNow": "just now",
+    "ago": "ago"
   },
   "storage": {
     "title": "Storage Management",
@@ -117,7 +119,10 @@
     "clusterHealth": "Cluster Health",
     "viewAll": "View All",
     "podHealthByNamespace": "Pod Health by Namespace",
-    "clusterDetails": "Cluster Details"
+    "clusterDetails": "Cluster Details",
+    "clusterEvents": "Kubernetes Events",
+    "noEvents": "No events found",
+    "noPodData": "No pod data available"
   },
   "costs": {
     "title": "Cost Analysis",
