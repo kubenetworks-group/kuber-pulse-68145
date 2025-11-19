@@ -243,36 +243,32 @@ func collectPVCs(clientset *kubernetes.Clientset) []map[string]interface{} {
 }
 
 // ---------------------------------------------
-// STORAGE METRICS COLLECTION
+// STORAGE METRICS COLLECTION (from Persistent Volumes)
 // ---------------------------------------------
 func collectStorageMetrics(clientset *kubernetes.Clientset) map[string]interface{} {
-	nodes, err := clientset.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
+	pvs, err := clientset.CoreV1().PersistentVolumes().List(context.Background(), metav1.ListOptions{})
 	if err != nil {
-		log.Printf("⚠️  Error collecting storage metrics: %v", err)
+		log.Printf("⚠️  Error collecting storage metrics from PVs: %v", err)
 		return map[string]interface{}{
 			"total_bytes":       int64(0),
 			"allocatable_bytes": int64(0),
 		}
 	}
 
-	var totalStorage, allocatableStorage int64
+	var totalStorage int64
 
-	for _, node := range nodes.Items {
-		if storage, ok := node.Status.Capacity[corev1.ResourceEphemeralStorage]; ok {
+	for _, pv := range pvs.Items {
+		if storage, ok := pv.Spec.Capacity[corev1.ResourceStorage]; ok {
 			totalStorage += storage.Value()
-		}
-		if storage, ok := node.Status.Allocatable[corev1.ResourceEphemeralStorage]; ok {
-			allocatableStorage += storage.Value()
 		}
 	}
 
-	log.Printf("💾 Storage metrics: total=%.2fGB, allocatable=%.2fGB",
-		float64(totalStorage)/(1024*1024*1024),
-		float64(allocatableStorage)/(1024*1024*1024))
+	log.Printf("💾 Storage metrics (PVs): total=%.2fGB",
+		float64(totalStorage)/(1024*1024*1024))
 
 	return map[string]interface{}{
 		"total_bytes":       totalStorage,
-		"allocatable_bytes": allocatableStorage,
+		"allocatable_bytes": totalStorage, // For PVs, allocatable is the same as total
 	}
 }
 
