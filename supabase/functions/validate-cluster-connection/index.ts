@@ -6,6 +6,7 @@ interface ClusterValidationRequest {
   config_file: string
   cluster_type: string
   api_endpoint?: string
+  skip_ssl_verify?: boolean
 }
 
 Deno.serve(async (req) => {
@@ -19,7 +20,7 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const { cluster_id, config_file, cluster_type, api_endpoint } = await req.json() as ClusterValidationRequest
+    const { cluster_id, config_file, cluster_type, api_endpoint, skip_ssl_verify } = await req.json() as ClusterValidationRequest
     const authHeader = req.headers.get('Authorization')!
     const token = authHeader.replace('Bearer ', '')
     const { data: { user } } = await supabaseClient.auth.getUser(token)
@@ -28,13 +29,13 @@ Deno.serve(async (req) => {
       throw new Error('Unauthorized')
     }
 
-    console.log(`Validating ${cluster_type} cluster ${cluster_id}`)
+    console.log(`Validating ${cluster_type} cluster ${cluster_id}`, { skip_ssl_verify })
 
     // Support all Kubernetes-based cluster types
     const kubernetesTypes = ['kubernetes', 'microk8s', 'k3s', 'minikube']
 
     if (kubernetesTypes.includes(cluster_type)) {
-      await validateKubernetesCluster(supabaseClient, cluster_id, user.id, config_file)
+      await validateKubernetesCluster(supabaseClient, cluster_id, user.id, config_file, skip_ssl_verify)
     } else if (cluster_type === 'docker') {
       await validateDockerCluster(supabaseClient, cluster_id, user.id, api_endpoint)
     } else {
@@ -59,7 +60,8 @@ async function validateKubernetesCluster(
   supabase: any,
   cluster_id: string,
   user_id: string,
-  config_file: string
+  config_file: string,
+  skip_ssl_verify: boolean = false
 ) {
   try {
     console.log('Starting Kubernetes cluster validation...')
@@ -218,19 +220,34 @@ async function validateKubernetesCluster(
                              endpointError.message?.includes('self-signed')
           
           if (isCertError) {
-            await createLog(supabase, cluster_id, user_id, 'warning', 
-              'Cluster is using self-signed or untrusted SSL certificates',
-              { 
-                note: 'The cluster is reachable but uses certificates not trusted by default. This is common for internal/on-premises clusters.',
-                endpoint: endpoint,
-                server: serverUrl
-              }
-            )
-            
-            // Mark as warning status - cluster is reachable but has cert issues
-            await updateClusterStatus(supabase, cluster_id, 'warning')
-            connected = true
-            break
+            if (skip_ssl_verify) {
+              // User explicitly chose to skip SSL verification
+              await createLog(supabase, cluster_id, user_id, 'success', 
+                'Cluster connected successfully (SSL verification skipped)',
+                { 
+                  note: 'SSL verification was skipped as per your configuration. The cluster is using self-signed or untrusted certificates.',
+                  endpoint: endpoint,
+                  server: serverUrl
+                }
+              )
+              await updateClusterStatus(supabase, cluster_id, 'healthy')
+              connected = true
+              break
+            } else {
+              await createLog(supabase, cluster_id, user_id, 'warning', 
+                'Cluster is using self-signed or untrusted SSL certificates',
+                { 
+                  note: 'The cluster is reachable but uses certificates not trusted by default. Enable "Skip SSL Verification" in cluster settings to connect anyway.',
+                  endpoint: endpoint,
+                  server: serverUrl
+                }
+              )
+              
+              // Mark as warning status - cluster is reachable but has cert issues
+              await updateClusterStatus(supabase, cluster_id, 'warning')
+              connected = true
+              break
+            }
           }
           // Continue trying other endpoints for non-cert errors
         }
