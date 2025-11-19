@@ -6,6 +6,24 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-agent-key',
 };
 
+// Rate limiting
+const rateLimiter = new Map<string, number[]>();
+
+function checkRateLimit(key: string, maxRequests: number, windowMs: number): boolean {
+  const now = Date.now();
+  const requests = (rateLimiter.get(key) || []).filter(
+    timestamp => now - timestamp < windowMs
+  );
+  
+  if (requests.length >= maxRequests) {
+    return false;
+  }
+  
+  requests.push(now);
+  rateLimiter.set(key, requests);
+  return true;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -15,10 +33,24 @@ serve(async (req) => {
     const agentKey = req.headers.get('x-agent-key');
     
     if (!agentKey) {
-      console.error('Missing agent key');
+      console.error('Authentication failed');
       return new Response(JSON.stringify({ error: 'Missing API key' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Rate limiting: 4 requests per minute
+    if (!checkRateLimit(agentKey, 4, 60000)) {
+      console.warn('Rate limit exceeded');
+      return new Response(JSON.stringify({ error: 'Rate limit exceeded' }), {
+        status: 429,
+        headers: { 
+          ...corsHeaders, 
+          'Content-Type': 'application/json',
+          'X-RateLimit-Limit': '4',
+          'X-RateLimit-Window': '60s',
+        },
       });
     }
 
@@ -35,7 +67,7 @@ serve(async (req) => {
       .single();
 
     if (keyError || !apiKeyData || !apiKeyData.is_active) {
-      console.error('Invalid or inactive API key:', keyError);
+      console.error('Authentication failed');
       return new Response(JSON.stringify({ error: 'Invalid API key' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -53,7 +85,7 @@ serve(async (req) => {
       .order('created_at', { ascending: true });
 
     if (commandsError) {
-      console.error('Error fetching commands:', commandsError);
+      console.error('Database error occurred');
       return new Response(JSON.stringify({ error: 'Failed to fetch commands' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -72,7 +104,7 @@ serve(async (req) => {
         .in('id', commandIds);
     }
 
-    console.log(`Sent ${commands?.length || 0} commands to cluster ${cluster_id}`);
+    console.log(`Sent ${commands?.length || 0} commands successfully`);
 
     return new Response(
       JSON.stringify({
@@ -84,9 +116,9 @@ serve(async (req) => {
       }
     );
   } catch (error) {
-    console.error('Error in agent-get-commands:', error);
+    console.error('Request processing failed');
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
+      JSON.stringify({ error: 'Internal server error' }),
       {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCluster } from "@/contexts/ClusterContext";
 import { AIIncidentCard } from "@/components/AIIncidentCard";
 import { MetricCard } from "@/components/MetricCard";
-import { Bot, Activity, CheckCircle, Clock, Sparkles, TrendingDown, Shield, Zap, Target, AlertCircle } from "lucide-react";
+import { Bot, Activity, CheckCircle, Clock, Sparkles, TrendingDown, Shield, Zap, Target, AlertCircle, History } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +14,8 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTranslation } from "react-i18next";
 import { useCurrency } from "@/hooks/useCurrency";
+import { format } from "date-fns";
+import { ptBR, enUS, es } from "date-fns/locale";
 
 type Incident = {
   id: string;
@@ -41,22 +44,27 @@ type Cluster = {
 
 export default function AIMonitor() {
   const { user } = useAuth();
+  const { selectedClusterId, clusters } = useCluster();
   const { t, i18n } = useTranslation();
   const { formatCurrency } = useCurrency();
   const [incidents, setIncidents] = useState<Incident[]>([]);
-  const [clusters, setClusters] = useState<Cluster[]>([]);
   const [savings, setSavings] = useState<Map<string, any>>(new Map());
   const [loading, setLoading] = useState(true);
   const [severityFilter, setSeverityFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [selectedCluster, setSelectedCluster] = useState<string>("all");
+  const [scanning, setScanning] = useState(false);
+  const [anomalies, setAnomalies] = useState<any[]>([]);
+  const [scanSummary, setScanSummary] = useState<string>("");
+  const [autoHealEnabled, setAutoHealEnabled] = useState(false);
+  const [scanHistory, setScanHistory] = useState<any[]>([]);
 
   useEffect(() => {
     if (user) {
       fetchData();
+      fetchScanHistory();
       subscribeToIncidents();
     }
-  }, [user]);
+  }, [user, selectedClusterId]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -69,14 +77,6 @@ export default function AIMonitor() {
 
       if (incidentsError) throw incidentsError;
       setIncidents((incidentsData || []) as any);
-
-      // Fetch clusters for names
-      const { data: clustersData, error: clustersError } = await supabase
-        .from('clusters')
-        .select('id, name');
-
-      if (clustersError) throw clustersError;
-      setClusters(clustersData || []);
 
       // Fetch AI savings
       const { data: savingsData, error: savingsError } = await supabase
@@ -96,6 +96,24 @@ export default function AIMonitor() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchScanHistory = async () => {
+    if (!selectedClusterId) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('scan_history')
+        .select('*')
+        .eq('cluster_id', selectedClusterId)
+        .order('scan_date', { ascending: false })
+        .limit(10);
+
+      if (error) throw error;
+      setScanHistory(data || []);
+    } catch (error) {
+      console.error('Error fetching scan history:', error);
     }
   };
 
@@ -135,6 +153,129 @@ export default function AIMonitor() {
     };
   };
 
+  const handleScanCluster = async () => {
+    if (!selectedClusterId) {
+      toast({
+        title: "Selecione um cluster",
+        description: "Por favor, selecione um cluster específico para varredura",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setScanning(true);
+    setAnomalies([]);
+    setScanSummary("");
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('agent-analyze-anomalies', {
+        body: { cluster_id: selectedClusterId }
+      });
+
+      if (error) throw error;
+
+      console.log('Scan results:', data);
+      
+      const anomaliesCount = data.anomalies?.length || 0;
+      const summary = data.summary || (anomaliesCount > 0 
+        ? `Encontradas ${anomaliesCount} anomalias no cluster`
+        : "Nenhuma anomalia crítica detectada. Cluster está saudável.");
+      
+      // Save scan to history
+      await supabase
+        .from('scan_history')
+        .insert({
+          cluster_id: selectedClusterId,
+          user_id: user?.id,
+          anomalies_found: anomaliesCount,
+          summary: summary,
+          anomalies_data: data.anomalies || []
+        });
+      
+      if (anomaliesCount > 0) {
+        setAnomalies(data.anomalies);
+        setScanSummary(summary);
+        
+        toast({
+          title: "⚠️ Anomalias Detectadas",
+          description: `Foram encontradas ${anomaliesCount} anomalias que precisam de atenção`,
+          variant: "destructive"
+        });
+        
+        fetchData(); // Refresh incidents
+      } else {
+        setScanSummary(summary);
+        toast({
+          title: "✅ Cluster Saudável",
+          description: summary,
+        });
+      }
+      
+      // Refresh scan history
+      fetchScanHistory();
+    } catch (error: any) {
+      console.error('Error scanning cluster:', error);
+      toast({
+        title: "Erro na varredura",
+        description: error.message || "Falha ao analisar o cluster",
+        variant: "destructive"
+      });
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const handleApplyAutoHeal = async (anomaly: any) => {
+    if (!anomaly.auto_heal || !anomaly.auto_heal_params) {
+      toast({
+        title: "Auto-cura não disponível",
+        description: "Esta anomalia não possui ação de auto-cura definida",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.functions.invoke('agent-auto-heal', {
+        body: {
+          cluster_id: selectedClusterId,
+          ...(anomaly.id && { anomaly_id: anomaly.id }),
+          auto_heal_action: anomaly.auto_heal,
+          auto_heal_params: anomaly.auto_heal_params
+        }
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "🤖 Auto-cura Iniciada",
+        description: `Comando "${anomaly.auto_heal}" enviado para o agente. O cluster será corrigido em breve.`,
+      });
+
+      // Refresh after a delay to see the changes
+      setTimeout(() => {
+        handleScanCluster();
+      }, 3000);
+    } catch (error: any) {
+      console.error('Error applying auto-heal:', error);
+      toast({
+        title: "Erro na Auto-cura",
+        description: error.message || "Falha ao aplicar auto-cura",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleEnableAutoHeal = async () => {
+    setAutoHealEnabled(!autoHealEnabled);
+    toast({
+      title: autoHealEnabled ? "Auto-cura desativada" : "Auto-cura ativada",
+      description: autoHealEnabled 
+        ? "A IA não executará ações automaticamente" 
+        : "A IA agora executará ações de correção automaticamente"
+    });
+  };
+
   const handleExecuteAction = async (incidentId: string) => {
     toast({
       title: "Executando ação...",
@@ -165,7 +306,7 @@ export default function AIMonitor() {
   };
 
   const filteredIncidents = incidents.filter(incident => {
-    if (selectedCluster !== "all" && incident.cluster_id !== selectedCluster) return false;
+    if (selectedClusterId && incident.cluster_id !== selectedClusterId) return false;
     if (severityFilter !== "all" && incident.severity !== severityFilter) return false;
     if (statusFilter === "resolved" && !incident.resolved_at) return false;
     if (statusFilter === "pending" && incident.resolved_at) return false;
@@ -175,9 +316,9 @@ export default function AIMonitor() {
   const totalSavingsAmount = Array.from(savings.values()).reduce((sum, s) => sum + Number(s.estimated_savings), 0);
 
   // Stats baseadas no cluster selecionado
-  const clusterIncidents = selectedCluster === "all" 
-    ? incidents 
-    : incidents.filter(i => i.cluster_id === selectedCluster);
+  const clusterIncidents = selectedClusterId
+    ? incidents.filter(i => i.cluster_id === selectedClusterId)
+    : incidents;
 
   const activeAIAgents = clusterIncidents.filter(i => 
     !i.resolved_at && i.action_taken
@@ -209,38 +350,198 @@ export default function AIMonitor() {
     ? Math.round((stats.resolved / stats.total) * 100) 
     : 0;
 
+  const getDateLocale = () => {
+    switch(i18n.language) {
+      case 'pt-BR': return ptBR;
+      case 'es-ES': return es;
+      default: return enUS;
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="p-4 sm:p-6 lg:p-8 space-y-6">
-        {/* Header com seletor de cluster */}
-        <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-2 bg-gradient-primary bg-clip-text text-transparent">
-              {t('aiMonitor.title')}
-            </h1>
-            <p className="text-muted-foreground text-sm sm:text-base">
-              {t('aiMonitor.description')}
-            </p>
-          </div>
-          <Select value={selectedCluster} onValueChange={setSelectedCluster}>
-            <SelectTrigger className="w-full sm:w-[250px]">
-              <SelectValue placeholder={t('aiMonitor.selectCluster')} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">
-                <div className="flex items-center gap-2">
-                  <Activity className="h-4 w-4" />
-                  {t('aiMonitor.allClusters')}
-                </div>
-              </SelectItem>
-              {clusters.map(cluster => (
-                <SelectItem key={cluster.id} value={cluster.id}>
-                  {cluster.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        {/* Header */}
+        <div>
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-2 bg-gradient-primary bg-clip-text text-transparent">
+            {t('aiMonitor.title')}
+          </h1>
+          <p className="text-muted-foreground text-sm sm:text-base">
+            {t('aiMonitor.description')}
+          </p>
         </div>
+
+        {/* Cluster Analysis Section */}
+        <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Target className="w-5 h-5" />
+              Análise de Cluster
+            </CardTitle>
+            <CardDescription>
+              Inicie uma varredura de anomalias no cluster selecionado
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex gap-3">
+              <button
+                onClick={handleScanCluster}
+                disabled={scanning || !selectedClusterId}
+                className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
+              >
+                {scanning ? (
+                  <>
+                    <Activity className="w-4 h-4 animate-spin" />
+                    Analisando...
+                  </>
+                ) : (
+                  <>
+                    <Shield className="w-4 h-4" />
+                    Varrer Cluster
+                  </>
+                )}
+              </button>
+              
+              <button
+                onClick={handleEnableAutoHeal}
+                className={`flex-1 px-4 py-2 rounded-lg flex items-center justify-center gap-2 transition-colors ${
+                  autoHealEnabled 
+                    ? 'bg-green-500 text-white hover:bg-green-600' 
+                    : 'bg-secondary text-secondary-foreground hover:bg-secondary/90'
+                }`}
+              >
+                <Zap className="w-4 h-4" />
+                {autoHealEnabled ? 'Auto-cura Ativa' : 'Ativar Auto-cura'}
+              </button>
+            </div>
+
+            {scanSummary && (
+              <div className="mt-4 p-3 bg-primary/5 border border-primary/20 rounded-lg">
+                <p className="text-sm text-foreground">
+                  <span className="font-semibold">📊 Resumo da Análise:</span> {scanSummary}
+                </p>
+              </div>
+            )}
+
+            {anomalies.length > 0 && (
+              <div className="mt-4 space-y-2">
+                <h3 className="font-semibold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4" />
+                  Anomalias Detectadas ({anomalies.length})
+                </h3>
+                <div className="space-y-3 max-h-96 overflow-y-auto">
+                  {anomalies.map((anomaly, idx) => (
+                    <Card 
+                      key={idx}
+                      className={`border-l-4 ${
+                        anomaly.severity === 'critical' ? 'border-l-destructive' :
+                        anomaly.severity === 'high' ? 'border-l-orange-500' :
+                        anomaly.severity === 'medium' ? 'border-l-yellow-500' :
+                        'border-l-blue-500'
+                      }`}
+                    >
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="space-y-2 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Badge variant={
+                                anomaly.severity === 'critical' ? 'destructive' :
+                                anomaly.severity === 'high' ? 'default' :
+                                'secondary'
+                              }>
+                                {anomaly.severity}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground font-medium">{anomaly.type}</span>
+                              {anomaly.auto_heal && (
+                                <Badge variant="outline" className="text-xs">
+                                  <Zap className="w-3 h-3 mr-1" />
+                                  Auto-cura disponível
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-sm font-medium">{anomaly.description}</p>
+                            <p className="text-xs text-muted-foreground">💡 {anomaly.recommendation}</p>
+                            {anomaly.event_messages && anomaly.event_messages.length > 0 && (
+                              <div className="mt-2 p-2 bg-destructive/10 rounded border border-destructive/20">
+                                <p className="text-xs font-semibold text-destructive mb-1">🔴 Erro do Kubernetes:</p>
+                                {anomaly.event_messages.map((msg: string, midx: number) => (
+                                  <p key={midx} className="text-xs font-mono text-destructive/90">{msg}</p>
+                                ))}
+                              </div>
+                            )}
+                            {anomaly.affected_pods && anomaly.affected_pods.length > 0 && (
+                              <div className="mt-2">
+                                <p className="text-xs font-semibold text-muted-foreground mb-1">Pods Afetados:</p>
+                                <div className="flex flex-wrap gap-1">
+                                  {anomaly.affected_pods.map((pod: string, pidx: number) => (
+                                    <Badge key={pidx} variant="outline" className="text-xs">
+                                      {pod}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          {anomaly.auto_heal && autoHealEnabled && (
+                            <button 
+                              onClick={() => handleApplyAutoHeal(anomaly)}
+                              className="shrink-0 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 flex items-center gap-1 text-xs transition-colors"
+                            >
+                              <Zap className="w-3 h-3" />
+                              Aplicar Auto-cura
+                            </button>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Scan History Section */}
+        {scanHistory.length > 0 && (
+          <Card className="border-muted/40">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <History className="w-5 h-5" />
+                Histórico de Varreduras
+              </CardTitle>
+              <CardDescription>
+                Últimas 10 varreduras realizadas neste cluster
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {scanHistory.map((scan) => (
+                  <div
+                    key={scan.id}
+                    className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/5 transition-colors"
+                  >
+                    <div className="flex-1 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">
+                          {format(new Date(scan.scan_date), "PPp", { locale: getDateLocale() })}
+                        </span>
+                        <Badge variant={scan.anomalies_found > 0 ? "destructive" : "default"}>
+                          {scan.anomalies_found > 0 
+                            ? `${scan.anomalies_found} anomalia${scan.anomalies_found > 1 ? 's' : ''}`
+                            : "Saudável"
+                          }
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground line-clamp-1">
+                        {scan.summary}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Stats Grid com visualizações melhoradas */}
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">

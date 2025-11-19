@@ -602,7 +602,6 @@ export type Database = {
         Row: {
           company: string | null
           created_at: string | null
-          email: string
           full_name: string | null
           id: string
           updated_at: string | null
@@ -610,7 +609,6 @@ export type Database = {
         Insert: {
           company?: string | null
           created_at?: string | null
-          email: string
           full_name?: string | null
           id: string
           updated_at?: string | null
@@ -618,7 +616,6 @@ export type Database = {
         Update: {
           company?: string | null
           created_at?: string | null
-          email?: string
           full_name?: string | null
           id?: string
           updated_at?: string | null
@@ -671,6 +668,47 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "pvcs_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scan_history: {
+        Row: {
+          anomalies_data: Json | null
+          anomalies_found: number
+          cluster_id: string
+          created_at: string
+          id: string
+          scan_date: string
+          summary: string | null
+          user_id: string
+        }
+        Insert: {
+          anomalies_data?: Json | null
+          anomalies_found?: number
+          cluster_id: string
+          created_at?: string
+          id?: string
+          scan_date?: string
+          summary?: string | null
+          user_id: string
+        }
+        Update: {
+          anomalies_data?: Json | null
+          anomalies_found?: number
+          cluster_id?: string
+          created_at?: string
+          id?: string
+          scan_date?: string
+          summary?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scan_history_cluster_id_fkey"
             columns: ["cluster_id"]
             isOneToOne: false
             referencedRelation: "clusters"

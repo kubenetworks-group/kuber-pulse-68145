@@ -6,6 +6,24 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-agent-key',
 };
 
+// Rate limiting map (in-memory)
+const rateLimiter = new Map<string, number[]>();
+
+function checkRateLimit(key: string, maxRequests: number, windowMs: number): boolean {
+  const now = Date.now();
+  const requests = (rateLimiter.get(key) || []).filter(
+    timestamp => now - timestamp < windowMs
+  );
+  
+  if (requests.length >= maxRequests) {
+    return false; // Rate limited
+  }
+  
+  requests.push(now);
+  rateLimiter.set(key, requests);
+  return true;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -15,10 +33,24 @@ serve(async (req) => {
     const agentKey = req.headers.get('x-agent-key');
     
     if (!agentKey) {
-      console.error('Missing agent key');
+      console.error('Authentication failed');
       return new Response(JSON.stringify({ error: 'Missing API key' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Rate limiting: 4 requests per minute
+    if (!checkRateLimit(agentKey, 4, 60000)) {
+      console.warn('Rate limit exceeded');
+      return new Response(JSON.stringify({ error: 'Rate limit exceeded' }), {
+        status: 429,
+        headers: { 
+          ...corsHeaders, 
+          'Content-Type': 'application/json',
+          'X-RateLimit-Limit': '4',
+          'X-RateLimit-Window': '60s',
+        },
       });
     }
 
@@ -35,7 +67,7 @@ serve(async (req) => {
       .single();
 
     if (keyError || !apiKeyData || !apiKeyData.is_active) {
-      console.error('Invalid or inactive API key:', keyError);
+      console.error('Authentication failed');
       return new Response(JSON.stringify({ error: 'Invalid API key' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -50,15 +82,89 @@ serve(async (req) => {
       .update({ last_seen: new Date().toISOString() })
       .eq('api_key', agentKey);
 
-    const { metrics } = await req.json();
+    // Parse and validate request body
+    const body = await req.json();
     
-    if (!metrics || !Array.isArray(metrics)) {
-      console.error('Invalid metrics format');
-      return new Response(JSON.stringify({ error: 'Invalid metrics format' }), {
+    if (!body.metrics || !Array.isArray(body.metrics)) {
+      console.error('Invalid payload structure - metrics array missing');
+      return new Response(JSON.stringify({ 
+        error: 'Invalid metrics format',
+        details: 'metrics array is required'
+      }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
+    console.log(`Received ${body.metrics.length} metrics from agent`);
+
+    // Validate each metric individually
+    const validMetrics: any[] = [];
+    const invalidMetrics: any[] = [];
+
+    for (const metric of body.metrics) {
+      const metricSize = JSON.stringify(metric.data || {}).length;
+      console.log(`Validating metric type '${metric.type}' (size: ${metricSize} bytes)`);
+
+      // Type-specific validation
+      const isLargeMetricType = ['pod_details', 'events', 'nodes'].includes(metric.type);
+      const maxSize = isLargeMetricType ? 500000 : 10000; // 500KB for large types, 10KB for basic
+      
+      if (metricSize > maxSize) {
+        console.error(`❌ Metric '${metric.type}' rejected - size ${metricSize} bytes exceeds limit ${maxSize} bytes`);
+        invalidMetrics.push({
+          type: metric.type,
+          reason: `Size ${metricSize} bytes exceeds limit ${maxSize} bytes`,
+          size: metricSize
+        });
+        continue;
+      }
+
+      // Validate basic structure
+      if (!metric.type || typeof metric.type !== 'string') {
+        console.error(`❌ Metric rejected - invalid type field`);
+        invalidMetrics.push({
+          type: metric.type || 'unknown',
+          reason: 'Invalid or missing type field'
+        });
+        continue;
+      }
+
+      if (!metric.data || typeof metric.data !== 'object') {
+        console.error(`❌ Metric '${metric.type}' rejected - invalid data field`);
+        invalidMetrics.push({
+          type: metric.type,
+          reason: 'Invalid or missing data field'
+        });
+        continue;
+      }
+
+      // Metric is valid
+      console.log(`✅ Metric '${metric.type}' accepted (${metricSize} bytes)`);
+      validMetrics.push({
+        type: metric.type,
+        data: metric.data,
+        collected_at: metric.collected_at || new Date().toISOString()
+      });
+    }
+
+    if (validMetrics.length === 0) {
+      console.error('All metrics failed validation');
+      return new Response(JSON.stringify({ 
+        error: 'All metrics failed validation',
+        invalid_metrics: invalidMetrics
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    console.log(`✅ ${validMetrics.length} metrics valid, ❌ ${invalidMetrics.length} metrics invalid`);
+    if (invalidMetrics.length > 0) {
+      console.warn('Invalid metrics:', JSON.stringify(invalidMetrics));
+    }
+
+    const metrics = validMetrics;
 
     // Insert metrics into database
     const metricsToInsert = metrics.map(metric => ({
@@ -73,7 +179,7 @@ serve(async (req) => {
       .insert(metricsToInsert);
 
     if (insertError) {
-      console.error('Error inserting metrics:', insertError);
+      console.error('Database error occurred');
       return new Response(JSON.stringify({ error: 'Failed to store metrics' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -90,9 +196,22 @@ serve(async (req) => {
         last_sync: new Date().toISOString()
       };
       
-      if (cpuMetric?.data?.usage_percent) updateData.cpu_usage = cpuMetric.data.usage_percent;
-      if (memoryMetric?.data?.usage_percent) updateData.memory_usage = memoryMetric.data.usage_percent;
-      if (podsMetric?.data?.running) updateData.pods = podsMetric.data.running;
+      const cpuData = cpuMetric?.data as any;
+      const memoryData = memoryMetric?.data as any;
+      const podsData = podsMetric?.data as any;
+      
+      if (cpuData?.usage_percent) updateData.cpu_usage = cpuData.usage_percent;
+      if (memoryData?.usage_percent) updateData.memory_usage = memoryData.usage_percent;
+      if (podsData?.running) updateData.pods = podsData.running;
+      
+      // Update nodes count
+      const nodesMetric = metrics.find(m => m.type === 'nodes');
+      if (nodesMetric) {
+        const nodesData = nodesMetric.data as any;
+        if (nodesData?.count !== undefined) {
+          updateData.nodes = nodesData.count;
+        }
+      }
       
       await supabaseClient
         .from('clusters')
@@ -100,18 +219,24 @@ serve(async (req) => {
         .eq('id', cluster_id);
     }
 
-    console.log(`Received ${metrics.length} metrics from cluster ${cluster_id}`);
+    console.log(`✅ Successfully stored ${metrics.length} metrics`);
 
     return new Response(
-      JSON.stringify({ success: true, received: metrics.length }),
+      JSON.stringify({ 
+        success: true, 
+        accepted: metrics.length,
+        rejected: invalidMetrics.length,
+        accepted_types: metrics.map((m: any) => m.type),
+        rejected_metrics: invalidMetrics.length > 0 ? invalidMetrics : undefined
+      }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     );
   } catch (error) {
-    console.error('Error in agent-receive-metrics:', error);
+    console.error('Request processing failed');
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
+      JSON.stringify({ error: 'Internal server error' }),
       {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

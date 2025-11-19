@@ -6,6 +6,7 @@ import { RecentEvents } from "@/components/RecentEvents";
 import { ClusterHealthMap } from "@/components/ClusterHealthMap";
 import { AIInsightsWidget } from "@/components/AIInsightsWidget";
 import { PodHealthByNamespace } from "@/components/PodHealthByNamespace";
+import { ClusterEvents } from "@/components/ClusterEvents";
 import { Server, DollarSign, Database, HardDrive, Bot } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCluster } from "@/contexts/ClusterContext";
@@ -154,6 +155,11 @@ const Index = () => {
             {/* Pod Health by Namespace */}
             <div className="animate-scale-in">
               <PodHealthByNamespace />
+            </div>
+
+            {/* Cluster Events */}
+            <div className="animate-scale-in">
+              <ClusterEvents />
             </div>
 
             {/* Recent Events */}
