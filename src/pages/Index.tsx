@@ -35,6 +35,46 @@ const Index = () => {
     }
   }, [user, selectedClusterId]);
 
+  // Real-time subscription for cluster metrics
+  useEffect(() => {
+    if (!selectedClusterId) return;
+
+    const channel = supabase
+      .channel('cluster-metrics-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'clusters',
+          filter: `id=eq.${selectedClusterId}`
+        },
+        (payload) => {
+          console.log('Real-time cluster update:', payload);
+          setClusterData(payload.new);
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'agent_metrics',
+          filter: `cluster_id=eq.${selectedClusterId}`
+        },
+        (payload) => {
+          console.log('Real-time metrics received:', payload);
+          // Refresh data when new metrics arrive
+          fetchData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [selectedClusterId]);
+
   const fetchData = async () => {
     setLoading(true);
     try {
