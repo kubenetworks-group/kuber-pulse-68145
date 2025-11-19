@@ -6,6 +6,43 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Helper function for retry with exponential backoff
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 3,
+  initialDelay: number = 1000
+): Promise<T> {
+  let lastError: Error;
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error as Error;
+      
+      // Don't retry on authentication errors
+      if (error instanceof Error && (
+        error.message.includes('Invalid OpenAI API key') ||
+        error.message.includes('Unauthorized')
+      )) {
+        throw error;
+      }
+      
+      // If it's the last attempt, throw
+      if (attempt === maxRetries - 1) {
+        break;
+      }
+      
+      // Calculate delay with exponential backoff
+      const delay = initialDelay * Math.pow(2, attempt);
+      console.log(`Attempt ${attempt + 1} failed. Retrying in ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  
+  throw lastError!;
+}
+
 // Helper function to find container name from pod details
 function findContainerName(podName: string, podDetails: any[]): string {
   for (const metricData of podDetails) {
@@ -51,6 +88,32 @@ serve(async (req) => {
 
     if (!cluster_id) {
       throw new Error('cluster_id is required');
+    }
+
+    // Check for recent scan in last 3 minutes to avoid rate limiting
+    const { data: recentScan } = await supabaseClient
+      .from('scan_history')
+      .select('*')
+      .eq('cluster_id', cluster_id)
+      .eq('user_id', user.id)
+      .gte('created_at', new Date(Date.now() - 3 * 60 * 1000).toISOString())
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (recentScan) {
+      console.log('Using cached scan from', recentScan.created_at);
+      return new Response(
+        JSON.stringify({
+          anomalies: recentScan.anomalies_data || [],
+          summary: recentScan.summary || 'Análise em cache (últimos 3 minutos)',
+          cached: true,
+          cached_at: recentScan.created_at
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
     }
 
     // Get recent metrics for the cluster
@@ -126,22 +189,23 @@ serve(async (req) => {
       );
     }
 
-    // Call OpenAI for anomaly detection
+    // Call OpenAI for anomaly detection with retry
     const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
     if (!OPENAI_API_KEY) {
       throw new Error('OPENAI_API_KEY not configured');
     }
 
-    console.log('🤖 Calling OpenAI for anomaly analysis...');
+    console.log('🤖 Calling OpenAI for anomaly analysis with retry...');
 
-    const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
+    const aiData = await retryWithBackoff(async () => {
+      const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
         messages: [
           {
             role: 'system',
@@ -307,7 +371,8 @@ If you see event: "Failed to pull image 'apache:2.5': image not found"
       throw new Error(`OpenAI API returned ${aiResponse.status}: ${errorText}`);
     }
 
-    const aiData = await aiResponse.json();
+    return await aiResponse.json();
+  }, 3, 2000); // 3 retries with 2 second initial delay
     let aiContent = aiData.choices[0]?.message?.content || '{"anomalies":[]}';
     
     // Remove markdown code fences if present
