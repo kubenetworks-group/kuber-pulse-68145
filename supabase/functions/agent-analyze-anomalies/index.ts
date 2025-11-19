@@ -171,9 +171,13 @@ Kubernetes events are the MOST CRITICAL source of truth for cluster health. Anal
    - Container state "waiting" = startup issue
    - Container ready = false = app not healthy
 
-4. **Resource Usage**: 
-   - CPU > 80% = scale up needed
-   - Memory > 85% = OOM risk
+4. **Resource Usage & Optimization**: 
+   - CPU > 80% = scale up needed or increase CPU limits
+   - Memory > 85% = OOM risk, increase memory limits
+   - OOMKilled in events = memory limit too low, MUST increase
+   - CPU throttling in events = CPU limit too low, increase
+   - Pod with very high resource limits but low usage = wasting resources, decrease
+   - Look for resource-related termination reasons in pod states
 
 **DEPLOYMENT ANALYSIS:**
 For each pod with issues:
@@ -182,20 +186,34 @@ For each pod with issues:
 3. Identify if it's: image problem, resource limit, config error, probe failure, etc.
 4. Provide specific fix based on the actual error
 
+**RESOURCE OPTIMIZATION:**
+When you detect resource issues, you MUST suggest update_deployment_resources action:
+- OOMKilled: increase memory_limit and memory_request
+- High memory usage (>85%): increase memory limits
+- High CPU usage (>80%): increase cpu limits
+- Low resource usage with high limits: decrease to save costs
+- Provide specific values based on current usage
+
 Return JSON (no markdown):
 {
   "anomalies": [
     {
-      "type": "pod_restart|pod_crash|pod_pending|image_pull_error|oom_killed|probe_failure|scheduling_issue|mount_failure|high_cpu|high_memory",
+      "type": "pod_restart|pod_crash|pod_pending|image_pull_error|oom_killed|probe_failure|scheduling_issue|mount_failure|high_cpu|high_memory|resource_limit_too_low|resource_limit_too_high",
       "severity": "low|medium|high|critical",
       "description": "Detailed description in Portuguese with pod name, namespace, and SPECIFIC error from events",
       "recommendation": "Specific action in Portuguese based on the actual error found in events",
       "affected_pods": ["namespace/pod-name"],
       "event_messages": ["actual error messages from Kubernetes events"],
-      "auto_heal": "restart_pod|delete_pod|scale_up|scale_down|null",
+      "auto_heal": "restart_pod|delete_pod|scale_up|scale_down|update_deployment_resources|null",
       "auto_heal_params": {
         "pod_name": "pod-name",
         "namespace": "namespace",
+        "deployment_name": "deployment-name",
+        "container_name": "container-name",
+        "cpu_limit": "500m",
+        "cpu_request": "250m",
+        "memory_limit": "512Mi",
+        "memory_request": "256Mi",
         "action": "delete"
       }
     }
@@ -209,11 +227,36 @@ If you see event: "Failed to pull image 'apache:2.5': image not found"
 → description: "Pod apache-deploy-7 no namespace demo não consegue iniciar porque a imagem 'apache:2.5' não existe"
 → recommendation: "Corrigir a tag da imagem no deployment para uma versão válida como 'apache:2.4' ou 'apache:latest'"
 
+**RESOURCE OPTIMIZATION EXAMPLES:**
+1. OOMKilled event: "Container killed due to OOM"
+   → type: "oom_killed"
+   → auto_heal: "update_deployment_resources"
+   → params: increase memory_limit by 50-100% based on current value
+   → description: "Pod X foi encerrado por falta de memória (OOMKilled)"
+   → recommendation: "Aumentar o limite de memória de 256Mi para 512Mi"
+
+2. High CPU usage: CPU > 80%
+   → type: "high_cpu"
+   → auto_heal: "update_deployment_resources"
+   → params: increase cpu_limit by 50%
+   → description: "Pod X usando 90% da CPU, risco de throttling"
+   → recommendation: "Aumentar limite de CPU de 500m para 750m"
+
+3. Over-provisioned: Pod using 10% of 2GB memory
+   → type: "resource_limit_too_high"
+   → auto_heal: "update_deployment_resources"
+   → params: decrease memory to 512Mi
+   → description: "Pod X alocado com 2Gi mas usando apenas 200Mi, desperdiçando recursos"
+   → recommendation: "Reduzir limite de memória para 512Mi para economizar custos"
+
 **MANDATORY:**
 - Use events.message field to get exact error
 - Match events to pods by involved_object.name
 - List EVERY pod with problems
 - Include event_messages in anomaly
+- For resource issues, calculate optimal values based on current usage
+- Always provide deployment_name and container_name for update_deployment_resources
+- Extract deployment_name from pod name (e.g., "apache-deploy-7abc123" → "apache-deploy")
 - Be SPECIFIC about what's wrong and how to fix`
           },
           {
