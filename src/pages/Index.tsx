@@ -21,6 +21,12 @@ const Index = () => {
   const [clusterData, setClusterData] = useState<any>(null);
   const [incidents, setIncidents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [storageMetrics, setStorageMetrics] = useState({
+    total: 0,
+    allocated: 0,
+    used: 0,
+    available: 0
+  });
 
   useEffect(() => {
     if (user && selectedClusterId) {
@@ -42,6 +48,31 @@ const Index = () => {
         console.error('Error fetching cluster:', clusterError);
       } else {
         setClusterData(cluster);
+        
+        // Fetch PVCs for storage calculation
+        const { data: pvcsData, error: pvcsError } = await supabase
+          .from('pvcs')
+          .select('requested_bytes, used_bytes')
+          .eq('cluster_id', selectedClusterId);
+
+        if (pvcsError) {
+          console.error('Error fetching PVCs:', pvcsError);
+        } else if (pvcsData) {
+          // Calculate storage metrics
+          const allocatedBytes = pvcsData.reduce((sum, pvc) => sum + (pvc.requested_bytes || 0), 0);
+          const usedBytes = pvcsData.reduce((sum, pvc) => sum + (pvc.used_bytes || 0), 0);
+          const totalGB = cluster?.storage_total_gb || 0;
+          const allocatedGB = allocatedBytes / (1024 ** 3); // Convert bytes to GB
+          const usedGB = usedBytes / (1024 ** 3);
+          const availableGB = totalGB - allocatedGB;
+
+          setStorageMetrics({
+            total: totalGB,
+            allocated: allocatedGB,
+            used: usedGB,
+            available: Math.max(0, availableGB) // Ensure non-negative
+          });
+        }
       }
 
       // Fetch recent AI incidents for selected cluster
@@ -106,9 +137,13 @@ const Index = () => {
           />
           <MetricCard
             title={t('clusters.storage')}
-            value={`${clusterData?.storage_used_gb?.toFixed(0) || 0} GB`}
+            value={`${storageMetrics.used.toFixed(1)} / ${storageMetrics.total.toFixed(0)} GB`}
+            subtitle={`${t('dashboard.allocated')}: ${storageMetrics.allocated.toFixed(1)} GB | ${t('dashboard.available')}: ${storageMetrics.available.toFixed(1)} GB`}
             icon={HardDrive}
-            trend={{ value: 5, isPositive: false }}
+            trend={{ 
+              value: storageMetrics.total > 0 ? Math.round((storageMetrics.used / storageMetrics.total) * 100) : 0, 
+              isPositive: false 
+            }}
           />
           <MetricCard
             title={t('aiMonitor.title')}
