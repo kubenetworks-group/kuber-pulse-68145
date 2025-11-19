@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useCluster } from "@/contexts/ClusterContext";
 import { AIIncidentCard } from "@/components/AIIncidentCard";
 import { MetricCard } from "@/components/MetricCard";
+import { CronJobsStatus } from "@/components/CronJobsStatus";
 import { ScanHistoryTab } from "@/components/ScanHistoryTab";
 import { Bot, Activity, CheckCircle, Clock, Sparkles, TrendingDown, Shield, Zap, Target, AlertCircle, History } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
@@ -446,22 +447,23 @@ export default function AIMonitor() {
         </div>
 
         {/* Cluster Analysis Section */}
-        <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Target className="w-5 h-5" />
-                <CardTitle>Análise de Cluster</CardTitle>
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Target className="w-5 h-5" />
+                  <CardTitle>Análise de Cluster</CardTitle>
+                </div>
+                <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/20 animate-pulse">
+                  <Activity className="w-3 h-3 mr-1" />
+                  Monitoramento Ativo
+                </Badge>
               </div>
-              <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/20 animate-pulse">
-                <Activity className="w-3 h-3 mr-1" />
-                Monitoramento Ativo (a cada 5min)
-              </Badge>
-            </div>
-            <CardDescription>
-              O sistema está monitorando automaticamente todos os clusters em tempo real
-            </CardDescription>
-          </CardHeader>
+              <CardDescription>
+                O sistema está monitorando automaticamente todos os clusters em tempo real
+              </CardDescription>
+            </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex gap-3">
               <button
@@ -580,6 +582,10 @@ export default function AIMonitor() {
             )}
           </CardContent>
         </Card>
+        
+        {/* Cron Jobs Status */}
+        <CronJobsStatus />
+      </div>
 
         {/* Stats Grid com visualizações melhoradas */}
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
