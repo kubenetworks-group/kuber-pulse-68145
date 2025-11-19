@@ -7,14 +7,11 @@ ARG TARGETOS
 
 WORKDIR /app
 
-# Copy go mod files
 COPY go.mod go.sum* ./
 RUN go mod download
 
-# Copy source code
 COPY . .
 
-# Build the binary for the target platform
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
     go build -a -installsuffix cgo -ldflags '-w -s' -o kuberpulse-agent .
 
