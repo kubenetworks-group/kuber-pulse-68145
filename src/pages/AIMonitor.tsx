@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useCluster } from "@/contexts/ClusterContext";
 import { AIIncidentCard } from "@/components/AIIncidentCard";
 import { MetricCard } from "@/components/MetricCard";
+import { ScanHistoryTab } from "@/components/ScanHistoryTab";
 import { Bot, Activity, CheckCircle, Clock, Sparkles, TrendingDown, Shield, Zap, Target, AlertCircle, History } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -54,6 +55,7 @@ export default function AIMonitor() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [scanning, setScanning] = useState(false);
   const [anomalies, setAnomalies] = useState<any[]>([]);
+  const [recentAnomalies, setRecentAnomalies] = useState<any[]>([]);
   const [scanSummary, setScanSummary] = useState<string>("");
   const [autoHealEnabled, setAutoHealEnabled] = useState(false);
   const [scanHistory, setScanHistory] = useState<any[]>([]);
@@ -62,7 +64,9 @@ export default function AIMonitor() {
     if (user) {
       fetchData();
       fetchScanHistory();
+      fetchRecentAnomalies();
       subscribeToIncidents();
+      subscribeToAnomalies();
     }
   }, [user, selectedClusterId]);
 
@@ -115,6 +119,75 @@ export default function AIMonitor() {
     } catch (error) {
       console.error('Error fetching scan history:', error);
     }
+  };
+
+  const fetchRecentAnomalies = async () => {
+    if (!selectedClusterId) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('agent_anomalies')
+        .select('*')
+        .eq('cluster_id', selectedClusterId)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (error) throw error;
+      setRecentAnomalies(data || []);
+    } catch (error) {
+      console.error('Error fetching recent anomalies:', error);
+    }
+  };
+
+  const subscribeToAnomalies = () => {
+    const channel = supabase
+      .channel('agent-anomalies-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'agent_anomalies',
+          filter: selectedClusterId ? `cluster_id=eq.${selectedClusterId}` : undefined
+        },
+        (payload) => {
+          const newAnomaly = payload.new;
+          setRecentAnomalies(prev => [newAnomaly, ...prev].slice(0, 20));
+          
+          toast({
+            title: "🔍 Nova Anomalia Detectada",
+            description: newAnomaly.description.substring(0, 100) + '...',
+            variant: newAnomaly.severity === 'critical' ? 'destructive' : 'default'
+          });
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'agent_anomalies',
+          filter: selectedClusterId ? `cluster_id=eq.${selectedClusterId}` : undefined
+        },
+        (payload) => {
+          const updatedAnomaly = payload.new;
+          setRecentAnomalies(prev => prev.map(a => 
+            a.id === updatedAnomaly.id ? updatedAnomaly : a
+          ));
+          
+          if (updatedAnomaly.resolved) {
+            toast({
+              title: "✅ Anomalia Resolvida",
+              description: "Uma anomalia foi marcada como resolvida",
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   };
 
   const subscribeToIncidents = () => {
@@ -203,6 +276,7 @@ export default function AIMonitor() {
         });
         
         fetchData(); // Refresh incidents
+        fetchRecentAnomalies(); // Refresh detected anomalies
       } else {
         setScanSummary(summary);
         toast({
@@ -660,6 +734,10 @@ export default function AIMonitor() {
               <Activity className="h-4 w-4" />
               {t('aiMonitor.detailedActions')}
             </TabsTrigger>
+            <TabsTrigger value="history" className="flex items-center gap-2">
+              <History className="h-4 w-4" />
+              Histórico
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="incidents" className="space-y-4">
@@ -799,6 +877,10 @@ export default function AIMonitor() {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="history" className="space-y-4">
+            <ScanHistoryTab scanHistory={scanHistory} loading={loading} />
           </TabsContent>
         </Tabs>
       </div>
