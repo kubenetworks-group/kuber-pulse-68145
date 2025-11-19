@@ -575,48 +575,6 @@ export default function AIMonitor() {
           </CardContent>
         </Card>
 
-        {/* Scan History Section */}
-        {scanHistory.length > 0 && (
-          <Card className="border-muted/40">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <History className="w-5 h-5" />
-                Histórico de Varreduras
-              </CardTitle>
-              <CardDescription>
-                Últimas 10 varreduras realizadas neste cluster
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {scanHistory.map((scan) => (
-                  <div
-                    key={scan.id}
-                    className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/5 transition-colors"
-                  >
-                    <div className="flex-1 space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium">
-                          {format(new Date(scan.scan_date), "PPp", { locale: getDateLocale() })}
-                        </span>
-                        <Badge variant={scan.anomalies_found > 0 ? "destructive" : "default"}>
-                          {scan.anomalies_found > 0 
-                            ? `${scan.anomalies_found} anomalia${scan.anomalies_found > 1 ? 's' : ''}`
-                            : "Saudável"
-                          }
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground line-clamp-1">
-                        {scan.summary}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
         {/* Stats Grid com visualizações melhoradas */}
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
           <Card className="bg-gradient-to-br from-primary/10 to-primary/5 border-primary/20">

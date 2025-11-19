@@ -14,3 +14,6 @@ verify_jwt = false
 
 [functions.agent-retry-failed-commands]
 verify_jwt = false
+
+[functions.auto-analyze-clusters]
+verify_jwt = false
