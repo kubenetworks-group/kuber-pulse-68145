@@ -433,6 +433,8 @@ func executeCommands(clientset *kubernetes.Clientset, config AgentConfig, comman
 		result, err = scaleDeployment(clientset, cmd.CommandParams)
 	case "update_deployment_resources":
 		result, err = updateDeploymentResources(clientset, cmd.CommandParams)
+	case "update_deployment_image":
+		result, err = updateDeploymentImage(clientset, cmd.CommandParams)
 	default:
 		err = fmt.Errorf("unknown command type: %s", cmd.CommandType)
 	}
@@ -573,6 +575,58 @@ func updateDeploymentResources(clientset *kubernetes.Clientset, params map[strin
 		"memory_limit": params["memory_limit"],
 		"memory_request": params["memory_request"],
 		"message":     "Recursos do deployment atualizados com sucesso. Pods serão recriados.",
+	}, nil
+}
+
+func updateDeploymentImage(clientset *kubernetes.Clientset, params map[string]interface{}) (map[string]interface{}, error) {
+	deploymentName := params["deployment_name"].(string)
+	namespace := params["namespace"].(string)
+	containerName := params["container_name"].(string)
+	newImage := params["new_image"].(string)
+	
+	deployment, err := clientset.AppsV1().Deployments(namespace).Get(
+		context.Background(),
+		deploymentName,
+		metav1.GetOptions{},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get deployment: %v", err)
+	}
+	
+	// Find the container and update its image
+	containerFound := false
+	oldImage := ""
+	for i, container := range deployment.Spec.Template.Spec.Containers {
+		if container.Name == containerName {
+			containerFound = true
+			oldImage = container.Image
+			deployment.Spec.Template.Spec.Containers[i].Image = newImage
+			break
+		}
+	}
+	
+	if !containerFound {
+		return nil, fmt.Errorf("container %s not found in deployment %s", containerName, deploymentName)
+	}
+	
+	_, err = clientset.AppsV1().Deployments(namespace).Update(
+		context.Background(),
+		deployment,
+		metav1.UpdateOptions{},
+	)
+	
+	if err != nil {
+		return nil, fmt.Errorf("failed to update deployment: %v", err)
+	}
+	
+	return map[string]interface{}{
+		"action":      "image_updated",
+		"deployment":  deploymentName,
+		"namespace":   namespace,
+		"container":   containerName,
+		"old_image":   oldImage,
+		"new_image":   newImage,
+		"message":     fmt.Sprintf("Imagem do deployment atualizada de %s para %s. Pods serão recriados.", oldImage, newImage),
 	}, nil
 }
 
