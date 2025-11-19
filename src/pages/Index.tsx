@@ -1,8 +1,7 @@
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { MetricCard } from "@/components/MetricCard";
-import { ClusterCard } from "@/components/ClusterCard";
+import { NodeDetailsCard } from "@/components/NodeDetailsCard";
 import { CostChart } from "@/components/CostChart";
-import { RecentEvents } from "@/components/RecentEvents";
 import { ClusterHealthMap } from "@/components/ClusterHealthMap";
 import { AIInsightsWidget } from "@/components/AIInsightsWidget";
 import { PodHealthByNamespace } from "@/components/PodHealthByNamespace";
@@ -14,6 +13,7 @@ import { useCluster } from "@/contexts/ClusterContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useNodeMetrics } from "@/hooks/useNodeMetrics";
 
 const Index = () => {
   const { user } = useAuth();
@@ -28,12 +28,53 @@ const Index = () => {
     used: 0,
     available: 0
   });
+  const nodeMetrics = useNodeMetrics(selectedClusterId);
 
   useEffect(() => {
     if (user && selectedClusterId) {
       fetchData();
     }
   }, [user, selectedClusterId]);
+
+  // Real-time subscription for cluster metrics
+  useEffect(() => {
+    if (!selectedClusterId) return;
+
+    const channel = supabase
+      .channel('cluster-metrics-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'clusters',
+          filter: `id=eq.${selectedClusterId}`
+        },
+        (payload) => {
+          console.log('Real-time cluster update:', payload);
+          setClusterData(payload.new);
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'agent_metrics',
+          filter: `cluster_id=eq.${selectedClusterId}`
+        },
+        (payload) => {
+          console.log('Real-time metrics received:', payload);
+          // Refresh data when new metrics arrive
+          fetchData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [selectedClusterId]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -165,17 +206,16 @@ const Index = () => {
               </div>
             )}
 
-            {/* Selected Cluster Details */}
-            {!loading && clusterData && (
+            {/* Node Details */}
+            {selectedClusterId && (
               <div className="animate-scale-in">
-                <ClusterCard
-                  name={clusterData.name}
-                  status={clusterData.status}
-                  pods={clusterData.pods}
-                  nodes={clusterData.nodes}
-                  cpuUsage={clusterData.cpu_usage}
-                  memoryUsage={clusterData.memory_usage}
-                  environment={`${clusterData.provider} - ${clusterData.environment}`}
+                <NodeDetailsCard
+                  nodes={nodeMetrics.nodes}
+                  totalCPU={nodeMetrics.totalCPU}
+                  totalMemory={nodeMetrics.totalMemory}
+                  cpuUsage={nodeMetrics.cpuUsage}
+                  memoryUsage={nodeMetrics.memoryUsage}
+                  loading={nodeMetrics.loading}
                 />
               </div>
             )}
@@ -206,11 +246,6 @@ const Index = () => {
             {/* Cluster Events */}
             <div className="animate-scale-in">
               <ClusterEvents />
-            </div>
-
-            {/* Recent Events */}
-            <div className="animate-scale-in">
-              <RecentEvents />
             </div>
           </div>
         </div>
