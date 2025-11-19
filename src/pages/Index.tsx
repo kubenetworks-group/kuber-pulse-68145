@@ -7,6 +7,7 @@ import { ClusterHealthMap } from "@/components/ClusterHealthMap";
 import { AIInsightsWidget } from "@/components/AIInsightsWidget";
 import { PodHealthByNamespace } from "@/components/PodHealthByNamespace";
 import { ClusterEvents } from "@/components/ClusterEvents";
+import { StorageChart } from "@/components/StorageChart";
 import { Server, DollarSign, Database, HardDrive, Bot } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCluster } from "@/contexts/ClusterContext";
@@ -182,6 +183,16 @@ const Index = () => {
             {/* Cost Chart */}
             <div className="animate-scale-in">
               <CostChart />
+            </div>
+
+            {/* Storage Chart */}
+            <div className="animate-scale-in">
+              <StorageChart 
+                total={storageMetrics.total}
+                allocated={storageMetrics.allocated}
+                used={storageMetrics.used}
+                available={storageMetrics.available}
+              />
             </div>
           </div>
 
