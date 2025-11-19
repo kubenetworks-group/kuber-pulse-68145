@@ -120,7 +120,10 @@ export type Database = {
           created_at: string
           executed_at: string | null
           id: string
+          max_retries: number | null
+          next_retry_at: string | null
           result: Json | null
+          retry_count: number | null
           status: string
           user_id: string
         }
@@ -132,7 +135,10 @@ export type Database = {
           created_at?: string
           executed_at?: string | null
           id?: string
+          max_retries?: number | null
+          next_retry_at?: string | null
           result?: Json | null
+          retry_count?: number | null
           status?: string
           user_id: string
         }
@@ -144,7 +150,10 @@ export type Database = {
           created_at?: string
           executed_at?: string | null
           id?: string
+          max_retries?: number | null
+          next_retry_at?: string | null
           result?: Json | null
+          retry_count?: number | null
           status?: string
           user_id?: string
         }

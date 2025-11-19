@@ -105,6 +105,22 @@ serve(async (req) => {
 
     const { command_id, status, result } = validationResult.data;
 
+    // Get current command to check retry settings
+    const { data: currentCommand, error: fetchError } = await supabaseClient
+      .from('agent_commands')
+      .select('retry_count, max_retries')
+      .eq('id', command_id)
+      .eq('cluster_id', apiKeyData.cluster_id)
+      .single();
+
+    if (fetchError) {
+      console.error('Failed to fetch command:', fetchError);
+      return new Response(JSON.stringify({ error: 'Command not found' }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Update command status
     const updateData: any = {
       status,
@@ -113,6 +129,16 @@ serve(async (req) => {
 
     if (result) {
       updateData.result = result;
+    }
+
+    // If failed and retries available, schedule retry with exponential backoff
+    if (status === 'failed' && currentCommand.retry_count < currentCommand.max_retries) {
+      const retryCount = currentCommand.retry_count || 0;
+      // Exponential backoff: 2^retryCount minutes (1min, 2min, 4min, 8min)
+      const delayMinutes = Math.pow(2, retryCount);
+      const nextRetryAt = new Date(Date.now() + delayMinutes * 60 * 1000);
+      updateData.next_retry_at = nextRetryAt.toISOString();
+      console.log(`Scheduling retry ${retryCount + 1}/${currentCommand.max_retries} in ${delayMinutes} minutes`);
     }
 
     const { error: updateError } = await supabaseClient

@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.verify-docker-image]
 verify_jwt = false
+
+[functions.agent-retry-failed-commands]
+verify_jwt = false
