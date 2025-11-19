@@ -448,12 +448,18 @@ export default function AIMonitor() {
         {/* Cluster Analysis Section */}
         <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Target className="w-5 h-5" />
-              Análise de Cluster
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Target className="w-5 h-5" />
+                <CardTitle>Análise de Cluster</CardTitle>
+              </div>
+              <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/20 animate-pulse">
+                <Activity className="w-3 h-3 mr-1" />
+                Monitoramento Ativo (a cada 5min)
+              </Badge>
+            </div>
             <CardDescription>
-              Inicie uma varredura de anomalias no cluster selecionado
+              O sistema está monitorando automaticamente todos os clusters em tempo real
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -471,7 +477,7 @@ export default function AIMonitor() {
                 ) : (
                   <>
                     <Shield className="w-4 h-4" />
-                    Varrer Cluster
+                    Varredura Manual
                   </>
                 )}
               </button>
