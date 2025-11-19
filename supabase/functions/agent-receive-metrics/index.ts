@@ -204,6 +204,15 @@ serve(async (req) => {
       if (memoryData?.usage_percent) updateData.memory_usage = memoryData.usage_percent;
       if (podsData?.running) updateData.pods = podsData.running;
       
+      // Update nodes count
+      const nodesMetric = metrics.find(m => m.type === 'nodes');
+      if (nodesMetric) {
+        const nodesData = nodesMetric.data as any;
+        if (nodesData?.count !== undefined) {
+          updateData.nodes = nodesData.count;
+        }
+      }
+      
       await supabaseClient
         .from('clusters')
         .update(updateData)
