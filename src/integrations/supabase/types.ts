@@ -675,6 +675,47 @@ export type Database = {
           },
         ]
       }
+      scan_history: {
+        Row: {
+          anomalies_data: Json | null
+          anomalies_found: number
+          cluster_id: string
+          created_at: string
+          id: string
+          scan_date: string
+          summary: string | null
+          user_id: string
+        }
+        Insert: {
+          anomalies_data?: Json | null
+          anomalies_found?: number
+          cluster_id: string
+          created_at?: string
+          id?: string
+          scan_date?: string
+          summary?: string | null
+          user_id: string
+        }
+        Update: {
+          anomalies_data?: Json | null
+          anomalies_found?: number
+          cluster_id?: string
+          created_at?: string
+          id?: string
+          scan_date?: string
+          summary?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scan_history_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
