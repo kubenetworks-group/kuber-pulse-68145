@@ -204,7 +204,7 @@ Return JSON (no markdown):
       "recommendation": "Specific action in Portuguese based on the actual error found in events",
       "affected_pods": ["namespace/pod-name"],
       "event_messages": ["actual error messages from Kubernetes events"],
-      "auto_heal": "restart_pod|delete_pod|scale_up|scale_down|update_deployment_resources|null",
+      "auto_heal": "restart_pod|delete_pod|scale_up|scale_down|update_deployment_resources|update_deployment_image|null",
       "auto_heal_params": {
         "pod_name": "pod-name",
         "namespace": "namespace",
@@ -214,6 +214,8 @@ Return JSON (no markdown):
         "cpu_request": "250m",
         "memory_limit": "512Mi",
         "memory_request": "256Mi",
+        "new_image": "nginx:1.21",
+        "old_image": "nginx:1.19",
         "action": "delete"
       }
     }
@@ -224,8 +226,11 @@ Return JSON (no markdown):
 **EXAMPLE:**
 If you see event: "Failed to pull image 'apache:2.5': image not found"
 → anomaly type: "image_pull_error"
-→ description: "Pod apache-deploy-7 no namespace demo não consegue iniciar porque a imagem 'apache:2.5' não existe"
-→ recommendation: "Corrigir a tag da imagem no deployment para uma versão válida como 'apache:2.4' ou 'apache:latest'"
+→ description: "Pod apache-deploy-7 no namespace demo não consegue iniciar porque a imagem 'apache:2.5' não foi encontrada"
+→ recommendation: "Verificar se a tag da imagem está correta no deployment"
+→ affected_pods: ["demo/apache-deploy-7abc123"]
+→ event_messages: ["Failed to pull image 'apache:2.5': image not found"]
+→ NOTE: Docker Hub verification will be done automatically after AI analysis
 
 **RESOURCE OPTIMIZATION EXAMPLES:**
 1. OOMKilled event: "Container killed due to OOM"
@@ -295,6 +300,69 @@ If you see event: "Failed to pull image 'apache:2.5': image not found"
     }
 
     const anomalies = analysisResult.anomalies || [];
+
+    // Verify Docker images for ImagePullBackOff errors
+    for (let i = 0; i < anomalies.length; i++) {
+      const anomaly = anomalies[i];
+      
+      if (anomaly.type === 'image_pull_error' && anomaly.event_messages) {
+        // Extract image name from error messages
+        const imageMatch = anomaly.event_messages
+          .join(' ')
+          .match(/image[:\s]+"?([a-zA-Z0-9\-_\.\/]+:[a-zA-Z0-9\-_\.]+)"?/i);
+        
+        if (imageMatch && imageMatch[1]) {
+          const failedImage = imageMatch[1];
+          console.log(`Verifying Docker image: ${failedImage}`);
+          
+          try {
+            const verifyResponse = await supabaseClient.functions.invoke('verify-docker-image', {
+              body: { image: failedImage }
+            });
+
+            if (verifyResponse.data) {
+              const { exists, suggested_image, suggested_tag, message } = verifyResponse.data;
+              
+              if (!exists && suggested_image) {
+                console.log(`Image ${failedImage} not found. Suggesting: ${suggested_image}`);
+                
+                // Update anomaly with Docker Hub verification
+                anomaly.description = `${anomaly.description}\n\n🐳 Docker Hub: ${message}`;
+                anomaly.recommendation = `Atualizar a imagem do deployment de "${failedImage}" para "${suggested_image}" (tag sugerida: ${suggested_tag})`;
+                
+                // Add auto-heal action to update image
+                anomaly.auto_heal = 'update_deployment_image';
+                
+                // Extract deployment and container info from affected pods
+                if (anomaly.affected_pods && anomaly.affected_pods.length > 0) {
+                  const podName = anomaly.affected_pods[0].split('/')[1] || anomaly.affected_pods[0];
+                  // Extract deployment name from pod name (e.g., "nginx-deploy-abc123" -> "nginx-deploy")
+                  const deploymentName = podName.replace(/-[a-z0-9]{5,10}-[a-z0-9]{5}$/, '');
+                  const namespace = anomaly.affected_pods[0].split('/')[0] || 'default';
+                  
+                  anomaly.auto_heal_params = {
+                    deployment_name: deploymentName,
+                    namespace: namespace,
+                    container_name: deploymentName, // Assuming container name matches deployment
+                    new_image: suggested_image,
+                    old_image: failedImage
+                  };
+                  
+                  console.log(`Auto-heal configured for ${deploymentName}: ${failedImage} -> ${suggested_image}`);
+                }
+              } else if (exists) {
+                console.log(`Image ${failedImage} exists on Docker Hub`);
+                anomaly.description = `${anomaly.description}\n\n✅ Imagem verificada no Docker Hub e existe.`;
+                anomaly.recommendation = `A imagem existe no Docker Hub. Verifique as credenciais do registry ou permissões de rede do cluster.`;
+              }
+            }
+          } catch (verifyError) {
+            console.error('Error verifying Docker image:', verifyError);
+            // Continue without Docker Hub verification
+          }
+        }
+      }
+    }
 
     // Store anomalies in database
     if (anomalies.length > 0) {
