@@ -43,6 +43,7 @@ const Clusters = () => {
     config_file: "",
     is_local: false,
     connection_type: "cloud" as string,
+    skip_ssl_verify: false,
   });
 
   useEffect(() => {
@@ -150,6 +151,7 @@ const Clusters = () => {
           config_file: cluster.config_file,
           cluster_type: cluster.cluster_type,
           api_endpoint: cluster.api_endpoint,
+          skip_ssl_verify: cluster.skip_ssl_verify || false,
         },
       });
 
@@ -191,6 +193,7 @@ const Clusters = () => {
       config_file: cluster.config_file || "",
       is_local: cluster.is_local || false,
       connection_type: cluster.connection_type || "cloud",
+      skip_ssl_verify: cluster.skip_ssl_verify || false,
     });
     setEditDialogOpen(true);
   };
@@ -210,6 +213,7 @@ const Clusters = () => {
         api_endpoint: formData.api_endpoint,
         region: formData.region,
         config_file: formData.config_file,
+        skip_ssl_verify: formData.skip_ssl_verify,
       })
       .eq("id", clusterToEdit.id);
 
@@ -234,6 +238,7 @@ const Clusters = () => {
         config_file: "",
         is_local: false,
         connection_type: "cloud",
+        skip_ssl_verify: false,
       });
       fetchClusters();
     }
@@ -294,6 +299,7 @@ const Clusters = () => {
             config_file: formData.config_file,
             cluster_type: formData.cluster_type,
             api_endpoint: formData.api_endpoint,
+            skip_ssl_verify: formData.skip_ssl_verify,
           },
         });
 
@@ -338,6 +344,7 @@ const Clusters = () => {
         config_file: "",
         is_local: false,
         connection_type: "cloud",
+        skip_ssl_verify: false,
       });
       fetchClusters();
     }
@@ -488,6 +495,20 @@ const Clusters = () => {
                     placeholder="us-east-1"
                   />
                 </div>
+                
+                <div className="flex items-center space-x-2 p-4 border border-muted rounded-md bg-muted/20">
+                  <input
+                    type="checkbox"
+                    id="skip-ssl"
+                    className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                    checked={formData.skip_ssl_verify}
+                    onChange={(e) => setFormData({ ...formData, skip_ssl_verify: e.target.checked })}
+                  />
+                  <Label htmlFor="skip-ssl" className="text-sm font-medium cursor-pointer">
+                    Ignorar verificação SSL (para certificados auto-assinados)
+                  </Label>
+                </div>
+                
                 <Button type="submit" className="w-full">
                   Connect Cluster
                 </Button>
@@ -684,6 +705,20 @@ const Clusters = () => {
                   placeholder="us-east-1"
                 />
               </div>
+              
+              <div className="flex items-center space-x-2 p-4 border border-muted rounded-md bg-muted/20">
+                <input
+                  type="checkbox"
+                  id="edit-skip-ssl"
+                  className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                  checked={formData.skip_ssl_verify}
+                  onChange={(e) => setFormData({ ...formData, skip_ssl_verify: e.target.checked })}
+                />
+                <Label htmlFor="edit-skip-ssl" className="text-sm font-medium cursor-pointer">
+                  Ignorar verificação SSL (para certificados auto-assinados)
+                </Label>
+              </div>
+              
               <Button type="submit" className="w-full">
                 Update Cluster
               </Button>

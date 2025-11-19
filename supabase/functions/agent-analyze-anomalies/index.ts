@@ -6,6 +6,43 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Helper function for retry with exponential backoff
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 3,
+  initialDelay: number = 1000
+): Promise<T> {
+  let lastError: Error;
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error as Error;
+      
+      // Don't retry on authentication errors
+      if (error instanceof Error && (
+        error.message.includes('Invalid OpenAI API key') ||
+        error.message.includes('Unauthorized')
+      )) {
+        throw error;
+      }
+      
+      // If it's the last attempt, throw
+      if (attempt === maxRetries - 1) {
+        break;
+      }
+      
+      // Calculate delay with exponential backoff
+      const delay = initialDelay * Math.pow(2, attempt);
+      console.log(`Attempt ${attempt + 1} failed. Retrying in ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  
+  throw lastError!;
+}
+
 // Helper function to find container name from pod details
 function findContainerName(podName: string, podDetails: any[]): string {
   for (const metricData of podDetails) {
@@ -51,6 +88,32 @@ serve(async (req) => {
 
     if (!cluster_id) {
       throw new Error('cluster_id is required');
+    }
+
+    // Check for recent scan in last 3 minutes to avoid rate limiting
+    const { data: recentScan } = await supabaseClient
+      .from('scan_history')
+      .select('*')
+      .eq('cluster_id', cluster_id)
+      .eq('user_id', user.id)
+      .gte('created_at', new Date(Date.now() - 3 * 60 * 1000).toISOString())
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (recentScan) {
+      console.log('Using cached scan from', recentScan.created_at);
+      return new Response(
+        JSON.stringify({
+          anomalies: recentScan.anomalies_data || [],
+          summary: recentScan.summary || 'Análise em cache (últimos 3 minutos)',
+          cached: true,
+          cached_at: recentScan.created_at
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
     }
 
     // Get recent metrics for the cluster
@@ -126,20 +189,23 @@ serve(async (req) => {
       );
     }
 
-    // Call Lovable AI for anomaly detection
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY not configured');
+    // Call OpenAI for anomaly detection with retry
+    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+    if (!OPENAI_API_KEY) {
+      throw new Error('OPENAI_API_KEY not configured');
     }
 
-    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+    console.log('🤖 Calling OpenAI for anomaly analysis with retry...');
+
+    const aiData = await retryWithBackoff(async () => {
+      const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
         messages: [
           {
             role: 'system',
@@ -289,18 +355,24 @@ If you see event: "Failed to pull image 'apache:2.5': image not found"
     });
 
     if (!aiResponse.ok) {
+      const errorText = await aiResponse.text();
+      console.error('OpenAI API error:', aiResponse.status, errorText);
+      
       if (aiResponse.status === 429) {
         throw new Error('Rate limit exceeded. Please try again later.');
       }
-      if (aiResponse.status === 402) {
-        throw new Error('Insufficient credits. Please add funds to your Lovable AI workspace.');
+      if (aiResponse.status === 401) {
+        throw new Error('Invalid OpenAI API key.');
       }
-      const errorText = await aiResponse.text();
-      console.error('AI Gateway error:', aiResponse.status, errorText);
-      throw new Error('AI analysis failed');
+      if (aiResponse.status === 402 || aiResponse.status === 403) {
+        throw new Error('Insufficient OpenAI credits. Please add funds to your account.');
+      }
+      
+      throw new Error(`OpenAI API returned ${aiResponse.status}: ${errorText}`);
     }
 
-    const aiData = await aiResponse.json();
+    return await aiResponse.json();
+  }, 3, 2000); // 3 retries with 2 second initial delay
     let aiContent = aiData.choices[0]?.message?.content || '{"anomalies":[]}';
     
     // Remove markdown code fences if present
