@@ -1,10 +1,22 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Validation schema
+const AutoHealSchema = z.object({
+  cluster_id: z.string().uuid(),
+  anomaly_id: z.string().uuid().optional(),
+  auto_heal_action: z.string().max(100).optional(),
+  auto_heal_params: z.record(z.unknown()).optional().refine(
+    (data) => !data || JSON.stringify(data).length < 10000,
+    { message: 'Auto-heal params too large (max 10KB)' }
+  ),
+});
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -14,7 +26,10 @@ serve(async (req) => {
   try {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
-      throw new Error('Missing authorization header');
+      return new Response(JSON.stringify({ error: 'Missing authorization header' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     const supabaseClient = createClient(
@@ -29,16 +44,33 @@ serve(async (req) => {
 
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
     if (userError || !user) {
-      throw new Error('Unauthorized');
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
-    const { cluster_id, anomaly_id, auto_heal_action, auto_heal_params } = await req.json();
-
-    if (!cluster_id || !anomaly_id) {
-      throw new Error('cluster_id and anomaly_id are required');
+    // Parse and validate request body
+    const body = await req.json();
+    const validationResult = AutoHealSchema.safeParse(body);
+    
+    if (!validationResult.success) {
+      console.error('Validation failed');
+      return new Response(JSON.stringify({ 
+        error: 'Invalid request format',
+        details: validationResult.error.errors.map(e => ({
+          path: e.path.join('.'),
+          message: e.message
+        }))
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
-    console.log('Creating auto-heal command:', { cluster_id, auto_heal_action, auto_heal_params });
+    const { cluster_id, anomaly_id, auto_heal_action, auto_heal_params } = validationResult.data;
+
+    console.log('Creating auto-heal command');
 
     // Create command for agent to execute
     const { data: command, error: commandError } = await supabaseClient
@@ -46,32 +78,33 @@ serve(async (req) => {
       .insert({
         cluster_id,
         user_id: user.id,
-        command_type: auto_heal_action,
-        command_params: auto_heal_params,
+        command_type: auto_heal_action || 'auto_heal',
+        command_params: auto_heal_params || {},
         status: 'pending',
       })
       .select()
       .single();
 
     if (commandError) {
-      console.error('Error creating command:', commandError);
-      throw new Error('Failed to create auto-heal command');
+      console.error('Database error occurred');
+      return new Response(JSON.stringify({ error: 'Failed to create auto-heal command' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
-    console.log('Command created:', command);
+    console.log('Command created successfully');
 
-    // Mark anomaly as auto-heal applied
-    const { error: anomalyError } = await supabaseClient
-      .from('agent_anomalies')
-      .update({ auto_heal_applied: true })
-      .eq('id', anomaly_id);
-
-    if (anomalyError) {
-      console.error('Error updating anomaly:', anomalyError);
+    // Mark anomaly as auto-heal applied (only if anomaly_id is provided)
+    if (anomaly_id) {
+      await supabaseClient
+        .from('agent_anomalies')
+        .update({ auto_heal_applied: true })
+        .eq('id', anomaly_id);
     }
 
     // Create notification
-    const { error: notifError } = await supabaseClient
+    await supabaseClient
       .from('notifications')
       .insert({
         user_id: user.id,
@@ -81,10 +114,6 @@ serve(async (req) => {
         related_entity_type: 'cluster',
         related_entity_id: cluster_id,
       });
-
-    if (notifError) {
-      console.error('Error creating notification:', notifError);
-    }
 
     return new Response(
       JSON.stringify({
@@ -97,9 +126,9 @@ serve(async (req) => {
       }
     );
   } catch (error) {
-    console.error('Error in agent-auto-heal:', error);
+    console.error('Request processing failed');
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
+      JSON.stringify({ error: 'Internal server error' }),
       {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.agent-update-command]
 verify_jwt = false
+
+[functions.verify-docker-image]
+verify_jwt = false

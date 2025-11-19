@@ -77,13 +77,13 @@ func main() {
 // ---------------------------------------------
 func collectPodDetails(clientset *kubernetes.Clientset) []map[string]interface{} {
 	pods, _ := clientset.CoreV1().Pods("").List(context.Background(), metav1.ListOptions{})
-	
+
 	var podDetails []map[string]interface{}
-	
+
 	for _, pod := range pods.Items {
 		totalRestarts := int32(0)
 		var containerStatuses []map[string]interface{}
-		
+
 		for _, cs := range pod.Status.ContainerStatuses {
 			totalRestarts += cs.RestartCount
 			containerStatuses = append(containerStatuses, map[string]interface{}{
@@ -94,7 +94,7 @@ func collectPodDetails(clientset *kubernetes.Clientset) []map[string]interface{}
 				"last_state":    getContainerState(cs.LastTerminationState),
 			})
 		}
-		
+
 		podDetails = append(podDetails, map[string]interface{}{
 			"name":           pod.Name,
 			"namespace":      pod.Namespace,
@@ -107,7 +107,7 @@ func collectPodDetails(clientset *kubernetes.Clientset) []map[string]interface{}
 			"conditions":     getPodConditions(pod),
 		})
 	}
-	
+
 	return podDetails
 }
 
@@ -165,32 +165,32 @@ func getPodConditions(pod corev1.Pod) []map[string]interface{} {
 func collectKubernetesEvents(clientset *kubernetes.Clientset) []map[string]interface{} {
 	// Get events from the last 30 minutes
 	events, _ := clientset.CoreV1().Events("").List(context.Background(), metav1.ListOptions{})
-	
+
 	var eventDetails []map[string]interface{}
 	thirtyMinutesAgo := time.Now().Add(-30 * time.Minute)
-	
+
 	for _, event := range events.Items {
 		// Only include recent events
 		if event.LastTimestamp.Time.Before(thirtyMinutesAgo) {
 			continue
 		}
-		
+
 		eventDetails = append(eventDetails, map[string]interface{}{
-			"type":            event.Type, // Normal or Warning
-			"reason":          event.Reason,
-			"message":         event.Message,
+			"type":    event.Type, // Normal or Warning
+			"reason":  event.Reason,
+			"message": event.Message,
 			"involved_object": map[string]interface{}{
 				"kind":      event.InvolvedObject.Kind,
 				"name":      event.InvolvedObject.Name,
 				"namespace": event.InvolvedObject.Namespace,
 			},
-			"count":          event.Count,
-			"first_time":     event.FirstTimestamp.Time,
-			"last_time":      event.LastTimestamp.Time,
-			"source":         event.Source.Component,
+			"count":      event.Count,
+			"first_time": event.FirstTimestamp.Time,
+			"last_time":  event.LastTimestamp.Time,
+			"source":     event.Source.Component,
 		})
 	}
-	
+
 	return eventDetails
 }
 
@@ -390,7 +390,7 @@ func getCommands(clientset *kubernetes.Clientset, config AgentConfig) {
 	}
 
 	body, _ := ioutil.ReadAll(resp.Body)
-	
+
 	var commandsResp CommandsResponse
 	if err := json.Unmarshal(body, &commandsResp); err != nil {
 		log.Printf("❌ Error parsing commands: %v", err)
@@ -409,10 +409,10 @@ func getCommands(clientset *kubernetes.Clientset, config AgentConfig) {
 func executeCommands(clientset *kubernetes.Clientset, config AgentConfig, commands []Command) {
 	for _, cmd := range commands {
 		log.Printf("⚡ Executing command: %s", cmd.CommandType)
-		
+
 		var result map[string]interface{}
 		var err error
-		
+
 		switch cmd.CommandType {
 		case "restart_pod", "delete_pod":
 			result, err = deletePod(clientset, cmd.CommandParams)
@@ -421,7 +421,7 @@ func executeCommands(clientset *kubernetes.Clientset, config AgentConfig, comman
 		default:
 			err = fmt.Errorf("unknown command type: %s", cmd.CommandType)
 		}
-		
+
 		updateCommandStatus(config, cmd.ID, result, err)
 	}
 }
@@ -429,17 +429,17 @@ func executeCommands(clientset *kubernetes.Clientset, config AgentConfig, comman
 func deletePod(clientset *kubernetes.Clientset, params map[string]interface{}) (map[string]interface{}, error) {
 	podName := params["pod_name"].(string)
 	namespace := params["namespace"].(string)
-	
+
 	err := clientset.CoreV1().Pods(namespace).Delete(
 		context.Background(),
 		podName,
 		metav1.DeleteOptions{},
 	)
-	
+
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return map[string]interface{}{
 		"action":    "pod_deleted",
 		"pod":       podName,
@@ -452,7 +452,7 @@ func scaleDeployment(clientset *kubernetes.Clientset, params map[string]interfac
 	deploymentName := params["deployment_name"].(string)
 	namespace := params["namespace"].(string)
 	replicas := int32(params["replicas"].(float64))
-	
+
 	deployment, err := clientset.AppsV1().Deployments(namespace).Get(
 		context.Background(),
 		deploymentName,
@@ -461,19 +461,19 @@ func scaleDeployment(clientset *kubernetes.Clientset, params map[string]interfac
 	if err != nil {
 		return nil, err
 	}
-	
+
 	deployment.Spec.Replicas = &replicas
-	
+
 	_, err = clientset.AppsV1().Deployments(namespace).Update(
 		context.Background(),
 		deployment,
 		metav1.UpdateOptions{},
 	)
-	
+
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return map[string]interface{}{
 		"action":     "deployment_scaled",
 		"deployment": deploymentName,
@@ -488,25 +488,25 @@ func updateCommandStatus(config AgentConfig, commandID string, result map[string
 		status = "failed"
 		result = map[string]interface{}{"error": err.Error()}
 	}
-	
+
 	payload := map[string]interface{}{
 		"command_id": commandID,
 		"status":     status,
 		"result":     result,
 	}
-	
+
 	body, _ := json.Marshal(payload)
 	url := fmt.Sprintf("%s/agent-update-command", config.APIEndpoint)
-	
+
 	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-agent-key", config.APIKey)
-	
+
 	client := &http.Client{}
 	resp, _ := client.Do(req)
 	if resp != nil {
 		defer resp.Body.Close()
 	}
-	
+
 	log.Printf("✅ Command %s status updated: %s", commandID, status)
 }

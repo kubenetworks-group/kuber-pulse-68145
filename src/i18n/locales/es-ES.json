@@ -26,7 +26,9 @@
     "noData": "No hay datos disponibles",
     "healthy": "Saludable",
     "warning": "Alerta",
-    "critical": "Crítico"
+    "critical": "Crítico",
+    "justNow": "ahora mismo",
+    "ago": "hace"
   },
   "storage": {
     "title": "Gestión de Almacenamiento",
@@ -117,7 +119,10 @@
     "clusterHealth": "Salud de Clústeres",
     "viewAll": "Ver Todos",
     "podHealthByNamespace": "Salud de Pods por Namespace",
-    "clusterDetails": "Detalles del Cluster"
+    "clusterDetails": "Detalles del Cluster",
+    "clusterEvents": "Eventos de Kubernetes",
+    "noEvents": "No se encontraron eventos",
+    "noPodData": "No hay datos de pods disponibles"
   },
   "costs": {
     "title": "Análisis de Costes",

@@ -82,6 +82,35 @@ serve(async (req) => {
       events_count: metricsSummary.events.length,
     });
 
+    // Check for missing essential metrics
+    if (metricsSummary.pod_details.length === 0 || metricsSummary.events.length === 0) {
+      const missingMetrics = [];
+      if (metricsSummary.pod_details.length === 0) missingMetrics.push('pod_details');
+      if (metricsSummary.events.length === 0) missingMetrics.push('events');
+      
+      console.warn('Missing essential metrics:', missingMetrics);
+      
+      return new Response(
+        JSON.stringify({ 
+          anomalies: [{
+            severity: 'warning',
+            type: 'incomplete_data',
+            description: `Dados incompletos do cluster. Métricas ausentes: ${missingMetrics.join(', ')}`,
+            recommendation: 'Verifique se o agente está configurado corretamente e tem permissões para coletar todas as métricas.',
+            ai_analysis: {
+              issue: 'incomplete_metrics',
+              missing: missingMetrics
+            }
+          }],
+          summary: `Agente está enviando apenas métricas básicas. Faltam: ${missingMetrics.join(', ')}. Análise completa não disponível.`,
+          message: 'Incomplete metrics data' 
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
     // Call Lovable AI for anomaly detection
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
@@ -101,12 +130,28 @@ serve(async (req) => {
             role: 'system',
             content: `You are a Kubernetes cluster monitoring AI assistant specialized in deep cluster analysis.
 
-Analyze the provided metrics and Kubernetes EVENTS to detect ALL issues:
+**PRIMARY ANALYSIS PRIORITY: KUBERNETES EVENTS**
+Kubernetes events are the MOST CRITICAL source of truth for cluster health. Analyze events FIRST before looking at metrics:
 
-**CRITICAL PRIORITY - ANALYZE KUBERNETES EVENTS FIRST:**
-1. **Events Analysis** - Most important! Look for Warning events:
-   - "Failed" / "FailedScheduling" = Pod can't be scheduled (resource constraints, node selector mismatch)
-   - "BackOff" / "CrashLoopBackOff" = Container crashing repeatedly
+1. **Critical Event Types (Highest Priority):**
+   - CrashLoopBackOff: Container repeatedly crashing - CRITICAL ISSUE
+   - ImagePullBackOff / ErrImagePull: Cannot pull container image - CRITICAL
+   - FailedScheduling: Pod cannot be scheduled to any node - CRITICAL
+   - Failed: General pod failure - HIGH PRIORITY
+   - Evicted: Pod evicted due to resource pressure - HIGH PRIORITY
+   - OOMKilled: Out of memory - HIGH PRIORITY
+   
+2. **Warning Event Types:**
+   - BackOff: Temporary scheduling issues
+   - Unhealthy: Health check failures
+   - FailedMount: Volume mount issues
+   - NetworkNotReady: Network problems
+
+3. **Pod Status Analysis (from pod_details):**
+   - Running + RestartCount > 5: Unstable pod
+   - Pending > 5 minutes: Scheduling issues
+   - Failed / Error: Immediate attention needed
+   - CrashLoopBackOff: Critical failure loop
    - "Failed" / "FailedMount" = Volume mount issues
    - "Failed" / "FailedAttachVolume" = Storage problems
    - "Pulled" / "ErrImagePull" / "ImagePullBackOff" = Image not found or auth issues
@@ -126,9 +171,13 @@ Analyze the provided metrics and Kubernetes EVENTS to detect ALL issues:
    - Container state "waiting" = startup issue
    - Container ready = false = app not healthy
 
-4. **Resource Usage**: 
-   - CPU > 80% = scale up needed
-   - Memory > 85% = OOM risk
+4. **Resource Usage & Optimization**: 
+   - CPU > 80% = scale up needed or increase CPU limits
+   - Memory > 85% = OOM risk, increase memory limits
+   - OOMKilled in events = memory limit too low, MUST increase
+   - CPU throttling in events = CPU limit too low, increase
+   - Pod with very high resource limits but low usage = wasting resources, decrease
+   - Look for resource-related termination reasons in pod states
 
 **DEPLOYMENT ANALYSIS:**
 For each pod with issues:
@@ -137,20 +186,36 @@ For each pod with issues:
 3. Identify if it's: image problem, resource limit, config error, probe failure, etc.
 4. Provide specific fix based on the actual error
 
+**RESOURCE OPTIMIZATION:**
+When you detect resource issues, you MUST suggest update_deployment_resources action:
+- OOMKilled: increase memory_limit and memory_request
+- High memory usage (>85%): increase memory limits
+- High CPU usage (>80%): increase cpu limits
+- Low resource usage with high limits: decrease to save costs
+- Provide specific values based on current usage
+
 Return JSON (no markdown):
 {
   "anomalies": [
     {
-      "type": "pod_restart|pod_crash|pod_pending|image_pull_error|oom_killed|probe_failure|scheduling_issue|mount_failure|high_cpu|high_memory",
+      "type": "pod_restart|pod_crash|pod_pending|image_pull_error|oom_killed|probe_failure|scheduling_issue|mount_failure|high_cpu|high_memory|resource_limit_too_low|resource_limit_too_high",
       "severity": "low|medium|high|critical",
       "description": "Detailed description in Portuguese with pod name, namespace, and SPECIFIC error from events",
       "recommendation": "Specific action in Portuguese based on the actual error found in events",
       "affected_pods": ["namespace/pod-name"],
       "event_messages": ["actual error messages from Kubernetes events"],
-      "auto_heal": "restart_pod|delete_pod|scale_up|scale_down|null",
+      "auto_heal": "restart_pod|delete_pod|scale_up|scale_down|update_deployment_resources|update_deployment_image|null",
       "auto_heal_params": {
         "pod_name": "pod-name",
         "namespace": "namespace",
+        "deployment_name": "deployment-name",
+        "container_name": "container-name",
+        "cpu_limit": "500m",
+        "cpu_request": "250m",
+        "memory_limit": "512Mi",
+        "memory_request": "256Mi",
+        "new_image": "nginx:1.21",
+        "old_image": "nginx:1.19",
         "action": "delete"
       }
     }
@@ -161,14 +226,42 @@ Return JSON (no markdown):
 **EXAMPLE:**
 If you see event: "Failed to pull image 'apache:2.5': image not found"
 → anomaly type: "image_pull_error"
-→ description: "Pod apache-deploy-7 no namespace demo não consegue iniciar porque a imagem 'apache:2.5' não existe"
-→ recommendation: "Corrigir a tag da imagem no deployment para uma versão válida como 'apache:2.4' ou 'apache:latest'"
+→ description: "Pod apache-deploy-7 no namespace demo não consegue iniciar porque a imagem 'apache:2.5' não foi encontrada"
+→ recommendation: "Verificar se a tag da imagem está correta no deployment"
+→ affected_pods: ["demo/apache-deploy-7abc123"]
+→ event_messages: ["Failed to pull image 'apache:2.5': image not found"]
+→ NOTE: Docker Hub verification will be done automatically after AI analysis
+
+**RESOURCE OPTIMIZATION EXAMPLES:**
+1. OOMKilled event: "Container killed due to OOM"
+   → type: "oom_killed"
+   → auto_heal: "update_deployment_resources"
+   → params: increase memory_limit by 50-100% based on current value
+   → description: "Pod X foi encerrado por falta de memória (OOMKilled)"
+   → recommendation: "Aumentar o limite de memória de 256Mi para 512Mi"
+
+2. High CPU usage: CPU > 80%
+   → type: "high_cpu"
+   → auto_heal: "update_deployment_resources"
+   → params: increase cpu_limit by 50%
+   → description: "Pod X usando 90% da CPU, risco de throttling"
+   → recommendation: "Aumentar limite de CPU de 500m para 750m"
+
+3. Over-provisioned: Pod using 10% of 2GB memory
+   → type: "resource_limit_too_high"
+   → auto_heal: "update_deployment_resources"
+   → params: decrease memory to 512Mi
+   → description: "Pod X alocado com 2Gi mas usando apenas 200Mi, desperdiçando recursos"
+   → recommendation: "Reduzir limite de memória para 512Mi para economizar custos"
 
 **MANDATORY:**
 - Use events.message field to get exact error
 - Match events to pods by involved_object.name
 - List EVERY pod with problems
 - Include event_messages in anomaly
+- For resource issues, calculate optimal values based on current usage
+- Always provide deployment_name and container_name for update_deployment_resources
+- Extract deployment_name from pod name (e.g., "apache-deploy-7abc123" → "apache-deploy")
 - Be SPECIFIC about what's wrong and how to fix`
           },
           {
@@ -207,6 +300,69 @@ If you see event: "Failed to pull image 'apache:2.5': image not found"
     }
 
     const anomalies = analysisResult.anomalies || [];
+
+    // Verify Docker images for ImagePullBackOff errors
+    for (let i = 0; i < anomalies.length; i++) {
+      const anomaly = anomalies[i];
+      
+      if (anomaly.type === 'image_pull_error' && anomaly.event_messages) {
+        // Extract image name from error messages
+        const imageMatch = anomaly.event_messages
+          .join(' ')
+          .match(/image[:\s]+"?([a-zA-Z0-9\-_\.\/]+:[a-zA-Z0-9\-_\.]+)"?/i);
+        
+        if (imageMatch && imageMatch[1]) {
+          const failedImage = imageMatch[1];
+          console.log(`Verifying Docker image: ${failedImage}`);
+          
+          try {
+            const verifyResponse = await supabaseClient.functions.invoke('verify-docker-image', {
+              body: { image: failedImage }
+            });
+
+            if (verifyResponse.data) {
+              const { exists, suggested_image, suggested_tag, message } = verifyResponse.data;
+              
+              if (!exists && suggested_image) {
+                console.log(`Image ${failedImage} not found. Suggesting: ${suggested_image}`);
+                
+                // Update anomaly with Docker Hub verification
+                anomaly.description = `${anomaly.description}\n\n🐳 Docker Hub: ${message}`;
+                anomaly.recommendation = `Atualizar a imagem do deployment de "${failedImage}" para "${suggested_image}" (tag sugerida: ${suggested_tag})`;
+                
+                // Add auto-heal action to update image
+                anomaly.auto_heal = 'update_deployment_image';
+                
+                // Extract deployment and container info from affected pods
+                if (anomaly.affected_pods && anomaly.affected_pods.length > 0) {
+                  const podName = anomaly.affected_pods[0].split('/')[1] || anomaly.affected_pods[0];
+                  // Extract deployment name from pod name (e.g., "nginx-deploy-abc123" -> "nginx-deploy")
+                  const deploymentName = podName.replace(/-[a-z0-9]{5,10}-[a-z0-9]{5}$/, '');
+                  const namespace = anomaly.affected_pods[0].split('/')[0] || 'default';
+                  
+                  anomaly.auto_heal_params = {
+                    deployment_name: deploymentName,
+                    namespace: namespace,
+                    container_name: deploymentName, // Assuming container name matches deployment
+                    new_image: suggested_image,
+                    old_image: failedImage
+                  };
+                  
+                  console.log(`Auto-heal configured for ${deploymentName}: ${failedImage} -> ${suggested_image}`);
+                }
+              } else if (exists) {
+                console.log(`Image ${failedImage} exists on Docker Hub`);
+                anomaly.description = `${anomaly.description}\n\n✅ Imagem verificada no Docker Hub e existe.`;
+                anomaly.recommendation = `A imagem existe no Docker Hub. Verifique as credenciais do registry ou permissões de rede do cluster.`;
+              }
+            }
+          } catch (verifyError) {
+            console.error('Error verifying Docker image:', verifyError);
+            // Continue without Docker Hub verification
+          }
+        }
+      }
+    }
 
     // Store anomalies in database
     if (anomalies.length > 0) {
