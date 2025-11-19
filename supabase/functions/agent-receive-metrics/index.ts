@@ -1,45 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-agent-key',
 };
-
-// Validation schemas with type-specific limits
-const BasicMetricDataSchema = z.record(z.unknown()).refine(
-  (data) => JSON.stringify(data).length < 10000,
-  { message: 'Basic metric data too large (max 10KB)' }
-);
-
-const LargeMetricDataSchema = z.record(z.unknown()).refine(
-  (data) => JSON.stringify(data).length < 500000, // 500KB for pod_details and events
-  { message: 'Metric data too large (max 500KB)' }
-);
-
-const MetricSchema = z.object({
-  type: z.string().max(50),
-  data: z.unknown(), // Will be validated based on type
-  collected_at: z.string().datetime().optional(),
-}).refine((metric) => {
-  // Type-specific validation
-  const isLargeMetricType = ['pod_details', 'events', 'nodes'].includes(metric.type);
-  const schema = isLargeMetricType ? LargeMetricDataSchema : BasicMetricDataSchema;
-  const result = schema.safeParse(metric.data);
-  
-  if (!result.success) {
-    console.error(`Validation failed for metric type '${metric.type}':`, result.error.errors);
-  }
-  
-  return result.success;
-}, {
-  message: 'Invalid metric data size or structure'
-});
-
-const MetricsPayloadSchema = z.object({
-  metrics: z.array(MetricSchema).min(1).max(100),
-});
 
 // Rate limiting map (in-memory)
 const rateLimiter = new Map<string, number[]>();
@@ -119,34 +84,87 @@ serve(async (req) => {
 
     // Parse and validate request body
     const body = await req.json();
-    const validationResult = MetricsPayloadSchema.safeParse(body);
     
-    if (!validationResult.success) {
-      console.error('Validation failed:', JSON.stringify({
-        errors: validationResult.error.errors.map(e => ({
-          path: e.path.join('.'),
-          message: e.message,
-          received: e.path.length > 0 ? JSON.stringify(body).substring(0, 200) : undefined
-        }))
-      }));
+    if (!body.metrics || !Array.isArray(body.metrics)) {
+      console.error('Invalid payload structure - metrics array missing');
       return new Response(JSON.stringify({ 
         error: 'Invalid metrics format',
-        details: validationResult.error.errors.map(e => ({
-          path: e.path.join('.'),
-          message: e.message
-        }))
+        details: 'metrics array is required'
       }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    console.log(`Received ${body.metrics.length} metrics:`, body.metrics.map((m: any) => ({
-      type: m.type,
-      size: JSON.stringify(m.data).length
-    })));
+    console.log(`Received ${body.metrics.length} metrics from agent`);
 
-    const { metrics } = validationResult.data;
+    // Validate each metric individually
+    const validMetrics: any[] = [];
+    const invalidMetrics: any[] = [];
+
+    for (const metric of body.metrics) {
+      const metricSize = JSON.stringify(metric.data || {}).length;
+      console.log(`Validating metric type '${metric.type}' (size: ${metricSize} bytes)`);
+
+      // Type-specific validation
+      const isLargeMetricType = ['pod_details', 'events', 'nodes'].includes(metric.type);
+      const maxSize = isLargeMetricType ? 500000 : 10000; // 500KB for large types, 10KB for basic
+      
+      if (metricSize > maxSize) {
+        console.error(`❌ Metric '${metric.type}' rejected - size ${metricSize} bytes exceeds limit ${maxSize} bytes`);
+        invalidMetrics.push({
+          type: metric.type,
+          reason: `Size ${metricSize} bytes exceeds limit ${maxSize} bytes`,
+          size: metricSize
+        });
+        continue;
+      }
+
+      // Validate basic structure
+      if (!metric.type || typeof metric.type !== 'string') {
+        console.error(`❌ Metric rejected - invalid type field`);
+        invalidMetrics.push({
+          type: metric.type || 'unknown',
+          reason: 'Invalid or missing type field'
+        });
+        continue;
+      }
+
+      if (!metric.data || typeof metric.data !== 'object') {
+        console.error(`❌ Metric '${metric.type}' rejected - invalid data field`);
+        invalidMetrics.push({
+          type: metric.type,
+          reason: 'Invalid or missing data field'
+        });
+        continue;
+      }
+
+      // Metric is valid
+      console.log(`✅ Metric '${metric.type}' accepted (${metricSize} bytes)`);
+      validMetrics.push({
+        type: metric.type,
+        data: metric.data,
+        collected_at: metric.collected_at || new Date().toISOString()
+      });
+    }
+
+    if (validMetrics.length === 0) {
+      console.error('All metrics failed validation');
+      return new Response(JSON.stringify({ 
+        error: 'All metrics failed validation',
+        invalid_metrics: invalidMetrics
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    console.log(`✅ ${validMetrics.length} metrics valid, ❌ ${invalidMetrics.length} metrics invalid`);
+    if (invalidMetrics.length > 0) {
+      console.warn('Invalid metrics:', JSON.stringify(invalidMetrics));
+    }
+
+    const metrics = validMetrics;
 
     // Insert metrics into database
     const metricsToInsert = metrics.map(metric => ({
@@ -192,10 +210,16 @@ serve(async (req) => {
         .eq('id', cluster_id);
     }
 
-    console.log(`Received ${metrics.length} metrics successfully`);
+    console.log(`✅ Successfully stored ${metrics.length} metrics`);
 
     return new Response(
-      JSON.stringify({ success: true, received: metrics.length }),
+      JSON.stringify({ 
+        success: true, 
+        accepted: metrics.length,
+        rejected: invalidMetrics.length,
+        accepted_types: metrics.map((m: any) => m.type),
+        rejected_metrics: invalidMetrics.length > 0 ? invalidMetrics : undefined
+      }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
