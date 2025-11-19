@@ -107,7 +107,7 @@ serve(async (req) => {
       console.log(`Validating metric type '${metric.type}' (size: ${metricSize} bytes)`);
 
       // Type-specific validation
-      const isLargeMetricType = ['pod_details', 'events', 'nodes'].includes(metric.type);
+      const isLargeMetricType = ['pod_details', 'events', 'nodes', 'pvcs'].includes(metric.type);
       const maxSize = isLargeMetricType ? 500000 : 10000; // 500KB for large types, 10KB for basic
       
       if (metricSize > maxSize) {
@@ -217,6 +217,72 @@ serve(async (req) => {
         .from('clusters')
         .update(updateData)
         .eq('id', cluster_id);
+    }
+
+    // Process PVCs
+    const pvcsMetric = metrics.find(m => m.type === 'pvcs');
+    if (pvcsMetric && pvcsMetric.data?.pvcs) {
+      const pvcsData = pvcsMetric.data.pvcs as any[];
+      
+      // Get user_id from cluster
+      const { data: clusterData } = await supabaseClient
+        .from('clusters')
+        .select('user_id')
+        .eq('id', cluster_id)
+        .single();
+      
+      if (clusterData && pvcsData.length > 0) {
+        // Delete old PVCs for this cluster
+        await supabaseClient
+          .from('pvcs')
+          .delete()
+          .eq('cluster_id', cluster_id);
+        
+        // Insert new PVCs
+        const pvcsToInsert = pvcsData.map(pvc => ({
+          cluster_id,
+          user_id: clusterData.user_id,
+          name: pvc.name,
+          namespace: pvc.namespace,
+          storage_class: pvc.storage_class || null,
+          status: pvc.status,
+          requested_bytes: pvc.requested_bytes || 0,
+          used_bytes: pvc.used_bytes || 0,
+          last_sync: new Date().toISOString(),
+        }));
+        
+        const { error: pvcError } = await supabaseClient
+          .from('pvcs')
+          .insert(pvcsToInsert);
+        
+        if (pvcError) {
+          console.error('Error storing PVCs:', pvcError);
+        } else {
+          console.log(`✅ Stored ${pvcsToInsert.length} PVCs`);
+        }
+      }
+    }
+
+    // Process storage metrics
+    const storageMetric = metrics.find(m => m.type === 'storage');
+    if (storageMetric) {
+      const storageData = storageMetric.data as any;
+      
+      if (storageData?.total_bytes !== undefined) {
+        const totalGB = storageData.total_bytes / (1024 ** 3);
+        const allocatableGB = (storageData.allocatable_bytes || 0) / (1024 ** 3);
+        const availableGB = allocatableGB;
+        
+        await supabaseClient
+          .from('clusters')
+          .update({
+            storage_total_gb: totalGB,
+            storage_available_gb: availableGB,
+          })
+          .eq('id', cluster_id);
+        
+        console.log(`✅ Updated cluster storage: ${totalGB.toFixed(2)}GB total, ${availableGB.toFixed(2)}GB available`);
+      }
     }
 
     console.log(`✅ Successfully stored ${metrics.length} metrics`);

@@ -196,6 +196,87 @@ func collectKubernetesEvents(clientset *kubernetes.Clientset) []map[string]inter
 }
 
 // ---------------------------------------------
+// PVC COLLECTION
+// ---------------------------------------------
+func collectPVCs(clientset *kubernetes.Clientset) []map[string]interface{} {
+	pvcs, err := clientset.CoreV1().PersistentVolumeClaims("").List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		log.Printf("⚠️  Error collecting PVCs: %v", err)
+		return []map[string]interface{}{}
+	}
+
+	var pvcDetails []map[string]interface{}
+
+	for _, pvc := range pvcs.Items {
+		requestedBytes := int64(0)
+		if pvc.Spec.Resources.Requests != nil {
+			if storage, ok := pvc.Spec.Resources.Requests[corev1.ResourceStorage]; ok {
+				requestedBytes = storage.Value()
+			}
+		}
+
+		usedBytes := int64(0)
+		if pvc.Status.Capacity != nil {
+			if storage, ok := pvc.Status.Capacity[corev1.ResourceStorage]; ok {
+				usedBytes = storage.Value()
+			}
+		}
+
+		storageClassName := ""
+		if pvc.Spec.StorageClassName != nil {
+			storageClassName = *pvc.Spec.StorageClassName
+		}
+
+		pvcDetails = append(pvcDetails, map[string]interface{}{
+			"name":            pvc.Name,
+			"namespace":       pvc.Namespace,
+			"storage_class":   storageClassName,
+			"status":          string(pvc.Status.Phase),
+			"requested_bytes": requestedBytes,
+			"used_bytes":      usedBytes,
+			"created_at":      pvc.CreationTimestamp.Time,
+		})
+	}
+
+	log.Printf("📦 Collected %d PVCs", len(pvcDetails))
+	return pvcDetails
+}
+
+// ---------------------------------------------
+// STORAGE METRICS COLLECTION
+// ---------------------------------------------
+func collectStorageMetrics(clientset *kubernetes.Clientset) map[string]interface{} {
+	nodes, err := clientset.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		log.Printf("⚠️  Error collecting storage metrics: %v", err)
+		return map[string]interface{}{
+			"total_bytes":       int64(0),
+			"allocatable_bytes": int64(0),
+		}
+	}
+
+	var totalStorage, allocatableStorage int64
+
+	for _, node := range nodes.Items {
+		if storage, ok := node.Status.Capacity[corev1.ResourceEphemeralStorage]; ok {
+			totalStorage += storage.Value()
+		}
+		if storage, ok := node.Status.Allocatable[corev1.ResourceEphemeralStorage]; ok {
+			allocatableStorage += storage.Value()
+		}
+	}
+
+	log.Printf("💾 Storage metrics: total=%.2fGB, allocatable=%.2fGB",
+		float64(totalStorage)/(1024*1024*1024),
+		float64(allocatableStorage)/(1024*1024*1024))
+
+	return map[string]interface{}{
+		"total_bytes":       totalStorage,
+		"allocatable_bytes": allocatableStorage,
+	}
+}
+
+// ---------------------------------------------
 // MÉTRICAS
 // ---------------------------------------------
 func sendMetrics(clientset *kubernetes.Clientset, config AgentConfig) {
@@ -285,6 +366,18 @@ func sendMetrics(clientset *kubernetes.Clientset, config AgentConfig) {
 			"data": map[string]interface{}{
 				"events": collectKubernetesEvents(clientset),
 			},
+			"collected_at": time.Now().UTC().Format(time.RFC3339),
+		},
+		{
+			"type": "pvcs",
+			"data": map[string]interface{}{
+				"pvcs": collectPVCs(clientset),
+			},
+			"collected_at": time.Now().UTC().Format(time.RFC3339),
+		},
+		{
+			"type":         "storage",
+			"data":         collectStorageMetrics(clientset),
 			"collected_at": time.Now().UTC().Format(time.RFC3339),
 		},
 	}
