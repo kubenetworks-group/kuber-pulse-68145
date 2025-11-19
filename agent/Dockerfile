@@ -1,4 +1,9 @@
-FROM golang:1.22-alpine AS builder
+# Build stage
+FROM --platform=$BUILDPLATFORM golang:1.22-alpine AS builder
+
+# Argumentos para cross-compilation
+ARG TARGETARCH
+ARG TARGETOS
 
 WORKDIR /app
 
@@ -9,11 +14,12 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build the binary
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o kuberpulse-agent .
+# Build the binary for the target platform
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
+    go build -a -installsuffix cgo -ldflags '-w -s' -o kuberpulse-agent .
 
 # Final stage
-FROM alpine:latest
+FROM --platform=$TARGETPLATFORM alpine:latest
 
 RUN apk --no-cache add ca-certificates
 

@@ -56,8 +56,8 @@ metadata:
   namespace: kuberpulse
 type: Opaque
 stringData:
-  API_KEY: "kp_192e810c02cf4f0f8456d535a7f7fca1"
-  CLUSTER_ID: "2ba92131-8573-4651-96e9-5ad888282a7b"
+  API_KEY: "kp_8b1c4ea59f6d4e50b26ffac15d844692"
+  CLUSTER_ID: "20bd982f-2bdc-47a6-8fd1-5482f18232e8"
 ---
 apiVersion: apps/v1
 kind: Deployment
