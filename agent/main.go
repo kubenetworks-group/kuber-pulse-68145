@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
 )
 
 // ---------------------------------------------
@@ -56,6 +57,12 @@ func main() {
 		log.Fatalf("❌ Failed to create Kubernetes client: %v", err)
 	}
 
+	metricsClient, err := metricsv.NewForConfig(kubeconfig)
+	if err != nil {
+		log.Printf("⚠️  Failed to create Metrics client: %v", err)
+		log.Println("⚠️  Metrics API not available - will use capacity values")
+	}
+
 	log.Println("✅ Connected to Kubernetes cluster")
 	log.Printf("📡 Sending metrics every %ds", config.Interval)
 	log.Printf("🔧 API Endpoint: %s", config.APIEndpoint)
@@ -67,7 +74,7 @@ func main() {
 	for {
 		select {
 		case <-ticker.C:
-			sendMetrics(clientset, config)
+			sendMetrics(clientset, metricsClient, config)
 			getCommands(clientset, config)
 		}
 	}
@@ -275,7 +282,7 @@ func collectStorageMetrics(clientset *kubernetes.Clientset) map[string]interface
 // ---------------------------------------------
 // MÉTRICAS
 // ---------------------------------------------
-func sendMetrics(clientset *kubernetes.Clientset, config AgentConfig) {
+func sendMetrics(clientset *kubernetes.Clientset, metricsClient *metricsv.Clientset, config AgentConfig) {
 	log.Println("📊 Collecting metrics...")
 
 	nodes, _ := clientset.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
@@ -346,7 +353,7 @@ func sendMetrics(clientset *kubernetes.Clientset, config AgentConfig) {
 			"type": "nodes",
 			"data": map[string]interface{}{
 				"count": len(nodes.Items),
-				"nodes": extractNodeInfo(nodes.Items),
+				"nodes": extractNodeInfo(nodes.Items, metricsClient),
 			},
 			"collected_at": time.Now().UTC().Format(time.RFC3339),
 		},
@@ -418,16 +425,54 @@ func sendMetrics(clientset *kubernetes.Clientset, config AgentConfig) {
 	}
 }
 
-// Extrai cpu/mem simples e informações do OS
-func extractNodeInfo(nodes []corev1.Node) []map[string]interface{} {
+// Extrai cpu/mem com usage real da Metrics API
+func extractNodeInfo(nodes []corev1.Node, metricsClient *metricsv.Clientset) []map[string]interface{} {
 	var result []map[string]interface{}
 
+	// Try to get node metrics from Metrics API
+	var nodeMetricsMap map[string]map[string]int64
+	if metricsClient != nil {
+		nodeMetricsList, err := metricsClient.MetricsV1beta1().NodeMetricses().List(context.Background(), metav1.ListOptions{})
+		if err == nil {
+			nodeMetricsMap = make(map[string]map[string]int64)
+			for _, nm := range nodeMetricsList.Items {
+				nodeMetricsMap[nm.Name] = map[string]int64{
+					"cpu":    nm.Usage.Cpu().MilliValue(),
+					"memory": nm.Usage.Memory().Value(),
+				}
+			}
+			log.Printf("✅ Fetched metrics for %d nodes from Metrics API", len(nodeMetricsMap))
+		} else {
+			log.Printf("⚠️  Failed to fetch node metrics: %v", err)
+		}
+	}
+
 	for _, node := range nodes {
+		// Capacity values
+		cpuCapacity := node.Status.Capacity.Cpu().MilliValue()
+		memCapacity := node.Status.Capacity.Memory().Value()
+
 		nodeInfo := map[string]interface{}{
 			"name":   node.Name,
-			"cpu":    node.Status.Capacity.Cpu().Value(),
-			"memory": node.Status.Capacity.Memory().String(),
 			"status": getNodeStatus(node),
+			"capacity": map[string]interface{}{
+				"cpu":    cpuCapacity,
+				"memory": memCapacity,
+			},
+		}
+
+		// Usage values from Metrics API
+		if metrics, ok := nodeMetricsMap[node.Name]; ok {
+			nodeInfo["usage"] = map[string]interface{}{
+				"cpu":    metrics["cpu"],
+				"memory": metrics["memory"],
+			}
+		} else {
+			// Fallback: use allocatable as approximation
+			nodeInfo["usage"] = map[string]interface{}{
+				"cpu":    cpuCapacity - node.Status.Allocatable.Cpu().MilliValue(),
+				"memory": memCapacity - node.Status.Allocatable.Memory().Value(),
+			}
 		}
 
 		// Add OS information

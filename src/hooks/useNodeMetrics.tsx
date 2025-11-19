@@ -6,10 +6,14 @@ interface NodeInfo {
   cpu: number;
   memory: string | number;
   memoryGB: number;
+  memoryUsageGB?: number;
+  cpuCapacity?: number;
+  memoryCapacity?: number;
+  cpuPercent?: number;
+  memoryPercent?: number;
   status: string;
   osImage?: string;
   kernelVersion?: string;
-  containerRuntime?: string;
   pool: string;
   labels?: Record<string, string>;
 }
@@ -71,63 +75,86 @@ export const useNodeMetrics = (clusterId: string | undefined) => {
           const nodeMetrics = nodesData.metric_data as any;
           const nodes = nodeMetrics.nodes || [];
           
-          // Calculate total CPU and memory
-          const totalCPU = nodes.reduce((sum: number, node: any) => sum + (node.cpu || 0), 0);
-          const totalMemoryKi = nodes.reduce((sum: number, node: any) => {
-            const memory = node.memory || '0';
-            const memoryValue = parseInt(memory.replace('Ki', ''));
-            return sum + memoryValue;
-          }, 0);
-          const totalMemoryGB = totalMemoryKi / (1024 * 1024);
+          // Calculate total CPU and memory from capacity and usage
+          let totalCPUCapacity = 0;
+          let totalCPUUsage = 0;
+          let totalMemoryCapacity = 0;
+          let totalMemoryUsage = 0;
 
-          // Extract pool information from node names and labels
+          // Process each node with new capacity/usage structure
           const processedNodes = nodes.map((node: any) => {
-            let pool = 'default';
+            // Extract capacity and usage
+            const cpuCapacity = node.capacity?.cpu || 0; // in millicores
+            const memoryCapacity = node.capacity?.memory || 0; // in bytes
+            const cpuUsage = node.usage?.cpu || 0; // in millicores
+            const memoryUsage = node.usage?.memory || 0; // in bytes
+
+            // Accumulate totals
+            totalCPUCapacity += cpuCapacity;
+            totalCPUUsage += cpuUsage;
+            totalMemoryCapacity += memoryCapacity;
+            totalMemoryUsage += memoryUsage;
+
+            // Determine pool from labels and name
+            let pool = 'worker';
             
-            // Try to get pool from labels first
             if (node.labels) {
-              if (node.labels['pool']) {
-                pool = node.labels['pool'];
+              if (node.labels['node-role.kubernetes.io/control-plane'] || 
+                  node.labels['node-role.kubernetes.io/master']) {
+                pool = 'control-plane';
               } else if (node.labels['agentpool']) {
                 pool = node.labels['agentpool'];
-              } else if (node.labels['node-role.kubernetes.io/control-plane'] || 
-                         node.labels['node-role.kubernetes.io/master']) {
-                pool = 'control-plane';
+              } else if (node.labels['pool']) {
+                pool = node.labels['pool'];
               }
             }
             
-            // Fallback to name-based detection
-            if (pool === 'default') {
+            // Fallback to name-based detection for pool
+            if (pool === 'worker' && node.name) {
               if (node.name.includes('control-plane') || node.name.includes('master')) {
                 pool = 'control-plane';
-              } else if (node.name.includes('pool-')) {
-                const match = node.name.match(/pool-[^-]+/);
-                pool = match ? match[0] : 'worker';
+              } else {
+                // Extract pool name like "pool-k8s-78ff849f5f" from node name
+                const poolMatch = node.name.match(/pool-[a-z0-9]+-[a-z0-9]+/);
+                if (poolMatch) {
+                  pool = poolMatch[0];
+                }
               }
             }
 
-            const memoryValue = typeof node.memory === 'string' 
-              ? parseInt(node.memory.replace('Ki', '')) 
-              : node.memory;
+            // Calculate individual node percentages
+            const cpuPercent = cpuCapacity > 0 ? (cpuUsage / cpuCapacity) * 100 : 0;
+            const memoryPercent = memoryCapacity > 0 ? (memoryUsage / memoryCapacity) * 100 : 0;
 
             return {
-              ...node,
-              pool,
-              memoryGB: memoryValue / (1024 * 1024),
+              name: node.name,
+              cpu: cpuUsage, // millicores used
+              cpuCapacity: cpuCapacity, // millicores total
+              cpuPercent: cpuPercent,
+              memory: memoryUsage, // bytes used
+              memoryCapacity: memoryCapacity, // bytes total
+              memoryGB: memoryCapacity / (1024 * 1024 * 1024), // GB total
+              memoryUsageGB: memoryUsage / (1024 * 1024 * 1024), // GB used
+              memoryPercent: memoryPercent,
+              status: node.status,
               osImage: node.osImage,
               kernelVersion: node.kernelVersion,
+              containerRuntime: node.containerRuntime,
+              pool,
+              labels: node.labels,
             };
           });
 
-          const cpuUsage = (cpuData?.metric_data as any)?.usage_percent || 0;
-          const memoryUsage = (memoryData?.metric_data as any)?.usage_percent || 0;
+          // Calculate overall usage percentages
+          const overallCpuUsage = totalCPUCapacity > 0 ? (totalCPUUsage / totalCPUCapacity) * 100 : 0;
+          const overallMemoryUsage = totalMemoryCapacity > 0 ? (totalMemoryUsage / totalMemoryCapacity) * 100 : 0;
 
           setMetrics({
             nodes: processedNodes,
-            totalCPU,
-            totalMemory: totalMemoryGB,
-            cpuUsage,
-            memoryUsage,
+            totalCPU: totalCPUCapacity / 1000, // convert millicores to cores
+            totalMemory: totalMemoryCapacity / (1024 * 1024 * 1024), // convert bytes to GB
+            cpuUsage: overallCpuUsage,
+            memoryUsage: overallMemoryUsage,
             loading: false,
           });
         }

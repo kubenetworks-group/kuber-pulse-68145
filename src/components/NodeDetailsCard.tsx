@@ -9,6 +9,11 @@ interface NodeInfo {
   cpu: number;
   memory: string | number;
   memoryGB: number;
+  memoryUsageGB?: number;
+  cpuCapacity?: number;
+  memoryCapacity?: number;
+  cpuPercent?: number;
+  memoryPercent?: number;
   status: string;
   pool: string;
   osImage?: string;
@@ -98,9 +103,16 @@ export const NodeDetailsCard = ({
             </div>
             <span className="text-xs font-medium text-muted-foreground">CPU</span>
           </div>
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-2xl font-bold tabular-nums text-blue-500">{node.cpu}</span>
-            <span className="text-xs text-muted-foreground font-medium">cores</span>
+          <div className="space-y-2">
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-2xl font-bold tabular-nums text-blue-500">
+                {((node.cpu || 0) / 1000).toFixed(2)}
+              </span>
+              <span className="text-xs text-muted-foreground">/ {(((node as any).cpuCapacity || 0) / 1000).toFixed(2)}</span>
+              <span className="text-xs text-muted-foreground font-medium">cores</span>
+            </div>
+            <Progress value={(node as any).cpuPercent || 0} className="h-1.5" />
+            <p className="text-xs text-muted-foreground">{((node as any).cpuPercent || 0).toFixed(1)}%</p>
           </div>
         </div>
 
@@ -111,9 +123,16 @@ export const NodeDetailsCard = ({
             </div>
             <span className="text-xs font-medium text-muted-foreground">RAM</span>
           </div>
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-2xl font-bold tabular-nums text-purple-500">{node.memoryGB.toFixed(1)}</span>
-            <span className="text-xs text-muted-foreground font-medium">GB</span>
+          <div className="space-y-2">
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-2xl font-bold tabular-nums text-purple-500">
+                {((node as any).memoryUsageGB || 0).toFixed(2)}
+              </span>
+              <span className="text-xs text-muted-foreground">/ {node.memoryGB.toFixed(2)}</span>
+              <span className="text-xs text-muted-foreground font-medium">GB</span>
+            </div>
+            <Progress value={(node as any).memoryPercent || 0} className="h-1.5" />
+            <p className="text-xs text-muted-foreground">{((node as any).memoryPercent || 0).toFixed(1)}%</p>
           </div>
         </div>
       </div>
