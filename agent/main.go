@@ -13,6 +13,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
@@ -425,14 +426,16 @@ func executeCommands(clientset *kubernetes.Clientset, config AgentConfig, comman
 		var result map[string]interface{}
 		var err error
 		
-		switch cmd.CommandType {
-		case "restart_pod", "delete_pod":
-			result, err = deletePod(clientset, cmd.CommandParams)
-		case "scale_deployment":
-			result, err = scaleDeployment(clientset, cmd.CommandParams)
-		default:
-			err = fmt.Errorf("unknown command type: %s", cmd.CommandType)
-		}
+	switch cmd.CommandType {
+	case "restart_pod", "delete_pod":
+		result, err = deletePod(clientset, cmd.CommandParams)
+	case "scale_deployment":
+		result, err = scaleDeployment(clientset, cmd.CommandParams)
+	case "update_deployment_resources":
+		result, err = updateDeploymentResources(clientset, cmd.CommandParams)
+	default:
+		err = fmt.Errorf("unknown command type: %s", cmd.CommandType)
+	}
 		
 		updateCommandStatus(config, cmd.ID, result, err)
 	}
@@ -491,6 +494,85 @@ func scaleDeployment(clientset *kubernetes.Clientset, params map[string]interfac
 		"deployment": deploymentName,
 		"namespace":  namespace,
 		"replicas":   replicas,
+	}, nil
+}
+
+func updateDeploymentResources(clientset *kubernetes.Clientset, params map[string]interface{}) (map[string]interface{}, error) {
+	deploymentName := params["deployment_name"].(string)
+	namespace := params["namespace"].(string)
+	containerName := params["container_name"].(string)
+	
+	deployment, err := clientset.AppsV1().Deployments(namespace).Get(
+		context.Background(),
+		deploymentName,
+		metav1.GetOptions{},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get deployment: %v", err)
+	}
+	
+	// Find the container and update its resources
+	containerFound := false
+	for i, container := range deployment.Spec.Template.Spec.Containers {
+		if container.Name == containerName {
+			containerFound = true
+			
+			// Initialize resource requirements if nil
+			if deployment.Spec.Template.Spec.Containers[i].Resources.Limits == nil {
+				deployment.Spec.Template.Spec.Containers[i].Resources.Limits = corev1.ResourceList{}
+			}
+			if deployment.Spec.Template.Spec.Containers[i].Resources.Requests == nil {
+				deployment.Spec.Template.Spec.Containers[i].Resources.Requests = corev1.ResourceList{}
+			}
+			
+			// Update CPU if provided
+			if cpuLimit, ok := params["cpu_limit"].(string); ok && cpuLimit != "" {
+				deployment.Spec.Template.Spec.Containers[i].Resources.Limits[corev1.ResourceCPU] = 
+					*apiresource.MustParse(cpuLimit)
+			}
+			if cpuRequest, ok := params["cpu_request"].(string); ok && cpuRequest != "" {
+				deployment.Spec.Template.Spec.Containers[i].Resources.Requests[corev1.ResourceCPU] = 
+					*apiresource.MustParse(cpuRequest)
+			}
+			
+			// Update Memory if provided
+			if memLimit, ok := params["memory_limit"].(string); ok && memLimit != "" {
+				deployment.Spec.Template.Spec.Containers[i].Resources.Limits[corev1.ResourceMemory] = 
+					*apiresource.MustParse(memLimit)
+			}
+			if memRequest, ok := params["memory_request"].(string); ok && memRequest != "" {
+				deployment.Spec.Template.Spec.Containers[i].Resources.Requests[corev1.ResourceMemory] = 
+					*apiresource.MustParse(memRequest)
+			}
+			
+			break
+		}
+	}
+	
+	if !containerFound {
+		return nil, fmt.Errorf("container %s not found in deployment %s", containerName, deploymentName)
+	}
+	
+	_, err = clientset.AppsV1().Deployments(namespace).Update(
+		context.Background(),
+		deployment,
+		metav1.UpdateOptions{},
+	)
+	
+	if err != nil {
+		return nil, fmt.Errorf("failed to update deployment: %v", err)
+	}
+	
+	return map[string]interface{}{
+		"action":      "resources_updated",
+		"deployment":  deploymentName,
+		"namespace":   namespace,
+		"container":   containerName,
+		"cpu_limit":   params["cpu_limit"],
+		"cpu_request": params["cpu_request"],
+		"memory_limit": params["memory_limit"],
+		"memory_request": params["memory_request"],
+		"message":     "Recursos do deployment atualizados com sucesso. Pods serão recriados.",
 	}, nil
 }
 
