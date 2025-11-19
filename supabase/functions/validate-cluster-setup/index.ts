@@ -63,20 +63,20 @@ Retorne sua análise em formato JSON com:
   "validation_status": "success" | "warning" | "error"
 }`;
 
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY not configured');
+    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+    if (!OPENAI_API_KEY) {
+      throw new Error('OPENAI_API_KEY not configured');
     }
 
-    // Call Lovable AI for analysis
-    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    // Call OpenAI for analysis
+    const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'gpt-4o-mini',
         messages: [
           {
             role: 'system',
@@ -121,8 +121,19 @@ Retorne sua análise em formato JSON com:
 
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text();
-      console.error('AI API error:', errorText);
-      throw new Error('Failed to analyze cluster');
+      console.error('OpenAI API error:', aiResponse.status, errorText);
+      
+      if (aiResponse.status === 429) {
+        throw new Error('Rate limit exceeded. Please try again later.');
+      }
+      if (aiResponse.status === 401) {
+        throw new Error('Invalid OpenAI API key.');
+      }
+      if (aiResponse.status === 402 || aiResponse.status === 403) {
+        throw new Error('Insufficient OpenAI credits. Please add funds to your account.');
+      }
+      
+      throw new Error(`Failed to analyze cluster: ${errorText}`);
     }
 
     const aiData = await aiResponse.json();
