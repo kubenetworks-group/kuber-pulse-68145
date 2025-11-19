@@ -418,17 +418,48 @@ func sendMetrics(clientset *kubernetes.Clientset, config AgentConfig) {
 	}
 }
 
-// Extrai cpu/mem simples
+// Extrai cpu/mem simples e informações do OS
 func extractNodeInfo(nodes []corev1.Node) []map[string]interface{} {
 	var result []map[string]interface{}
 
 	for _, node := range nodes {
-		result = append(result, map[string]interface{}{
+		nodeInfo := map[string]interface{}{
 			"name":   node.Name,
-			"cpu":    node.Status.Capacity.Cpu().String(),
+			"cpu":    node.Status.Capacity.Cpu().Value(),
 			"memory": node.Status.Capacity.Memory().String(),
 			"status": getNodeStatus(node),
-		})
+		}
+
+		// Add OS information
+		if node.Status.NodeInfo.OSImage != "" {
+			nodeInfo["osImage"] = node.Status.NodeInfo.OSImage
+		}
+		if node.Status.NodeInfo.KernelVersion != "" {
+			nodeInfo["kernelVersion"] = node.Status.NodeInfo.KernelVersion
+		}
+		if node.Status.NodeInfo.ContainerRuntimeVersion != "" {
+			nodeInfo["containerRuntime"] = node.Status.NodeInfo.ContainerRuntimeVersion
+		}
+
+		// Add node labels (useful for pool identification)
+		if len(node.Labels) > 0 {
+			labels := make(map[string]string)
+			for k, v := range node.Labels {
+				// Include relevant labels
+				if k == "node.kubernetes.io/instance-type" ||
+					k == "topology.kubernetes.io/zone" ||
+					k == "node-role.kubernetes.io/master" ||
+					k == "node-role.kubernetes.io/control-plane" ||
+					k == "pool" || k == "agentpool" {
+					labels[k] = v
+				}
+			}
+			if len(labels) > 0 {
+				nodeInfo["labels"] = labels
+			}
+		}
+
+		result = append(result, nodeInfo)
 	}
 	return result
 }
