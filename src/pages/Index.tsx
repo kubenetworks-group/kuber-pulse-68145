@@ -2,7 +2,6 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { MetricCard } from "@/components/MetricCard";
 import { ClusterCard } from "@/components/ClusterCard";
 import { CostChart } from "@/components/CostChart";
-import { RecentEvents } from "@/components/RecentEvents";
 import { ClusterHealthMap } from "@/components/ClusterHealthMap";
 import { AIInsightsWidget } from "@/components/AIInsightsWidget";
 import { PodHealthByNamespace } from "@/components/PodHealthByNamespace";
@@ -246,11 +245,6 @@ const Index = () => {
             {/* Cluster Events */}
             <div className="animate-scale-in">
               <ClusterEvents />
-            </div>
-
-            {/* Recent Events */}
-            <div className="animate-scale-in">
-              <RecentEvents />
             </div>
           </div>
         </div>
