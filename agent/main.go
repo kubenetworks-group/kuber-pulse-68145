@@ -237,6 +237,13 @@ func sendMetrics(clientset *kubernetes.Clientset, config AgentConfig) {
 	}
 
 	// Formato esperado pela Edge Function
+	// Collect complex metrics first for logging
+	podDetails := collectPodDetails(clientset)
+	events := collectKubernetesEvents(clientset)
+	
+	log.Printf("📦 Coletados %d detalhes de pods", len(podDetails))
+	log.Printf("📅 Coletados %d eventos do Kubernetes", len(events))
+
 	metrics := []map[string]interface{}{
 		{
 			"type": "cpu",
@@ -275,14 +282,14 @@ func sendMetrics(clientset *kubernetes.Clientset, config AgentConfig) {
 		{
 			"type": "pod_details",
 			"data": map[string]interface{}{
-				"pods": collectPodDetails(clientset),
+				"pods": podDetails,
 			},
 			"collected_at": time.Now().UTC().Format(time.RFC3339),
 		},
 		{
 			"type": "events",
 			"data": map[string]interface{}{
-				"events": collectKubernetesEvents(clientset),
+				"events": events,
 			},
 			"collected_at": time.Now().UTC().Format(time.RFC3339),
 		},
@@ -295,10 +302,15 @@ func sendMetrics(clientset *kubernetes.Clientset, config AgentConfig) {
 	body, _ := json.Marshal(payload)
 
 	url := fmt.Sprintf("%s/agent-receive-metrics", config.APIEndpoint)
-	log.Printf("🔍 Sending to: %s", url)
-	log.Printf("🔍 Payload size: %d bytes", len(body))
-	log.Printf("🔍 Metrics: CPU=%.2f%%, Memory=%.2f%%, Pods=%d, Nodes=%d",
-		cpuPercent, memoryPercent, runningPods, len(nodes.Items))
+	log.Printf("📤 Enviando payload para: %s", url)
+	log.Printf("📤 Tamanho total do payload: %d bytes", len(body))
+	log.Printf("📤 Resumo das métricas:")
+	log.Printf("   - CPU: %.2f%%", cpuPercent)
+	log.Printf("   - Memory: %.2f%%", memoryPercent)
+	log.Printf("   - Pods: %d running", runningPods)
+	log.Printf("   - Nodes: %d total", len(nodes.Items))
+	log.Printf("   - Pod Details: %d pods", len(podDetails))
+	log.Printf("   - Events: %d eventos", len(events))
 
 	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(body))
 
@@ -318,13 +330,13 @@ func sendMetrics(clientset *kubernetes.Clientset, config AgentConfig) {
 	defer resp.Body.Close()
 
 	responseBody, _ := ioutil.ReadAll(resp.Body)
-	log.Printf("🔍 Response status: %d", resp.StatusCode)
-	log.Printf("🔍 Response body: %s", string(responseBody))
-
-	if resp.StatusCode != 200 {
-		log.Printf("❌ Failed to send metrics: %s", string(responseBody))
+	
+	if resp.StatusCode == 200 {
+		log.Printf("✅ Métricas enviadas com sucesso - Status: %d", resp.StatusCode)
+		log.Printf("📥 Resposta: %s", string(responseBody))
 	} else {
-		log.Println("✅ Metrics sent successfully")
+		log.Printf("❌ Erro ao enviar métricas - Status: %d", resp.StatusCode)
+		log.Printf("📥 Resposta de erro: %s", string(responseBody))
 	}
 }
 
