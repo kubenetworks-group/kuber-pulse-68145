@@ -6,6 +6,21 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Helper function to find container name from pod details
+function findContainerName(podName: string, podDetails: any[]): string {
+  for (const metricData of podDetails) {
+    const pods = metricData?.pods || [];
+    for (const pod of pods) {
+      if (pod.name === podName && pod.containers && pod.containers.length > 0) {
+        // Return the first container name (usually the main container)
+        return pod.containers[0].name;
+      }
+    }
+  }
+  // Fallback: extract deployment name from pod name if not found
+  return podName.replace(/-[a-z0-9]{5,10}-[a-z0-9]{5}$/, '');
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -335,20 +350,23 @@ If you see event: "Failed to pull image 'apache:2.5': image not found"
                 
                 // Extract deployment and container info from affected pods
                 if (anomaly.affected_pods && anomaly.affected_pods.length > 0) {
-                  const podName = anomaly.affected_pods[0].split('/')[1] || anomaly.affected_pods[0];
+                  const fullPodName = anomaly.affected_pods[0].split('/')[1] || anomaly.affected_pods[0];
                   // Extract deployment name from pod name (e.g., "nginx-deploy-abc123" -> "nginx-deploy")
-                  const deploymentName = podName.replace(/-[a-z0-9]{5,10}-[a-z0-9]{5}$/, '');
+                  const deploymentName = fullPodName.replace(/-[a-z0-9]{5,10}-[a-z0-9]{5}$/, '');
                   const namespace = anomaly.affected_pods[0].split('/')[0] || 'default';
+                  
+                  // Get real container name from pod details
+                  const containerName = findContainerName(fullPodName, metricsSummary.pod_details);
                   
                   anomaly.auto_heal_params = {
                     deployment_name: deploymentName,
                     namespace: namespace,
-                    container_name: deploymentName, // Assuming container name matches deployment
+                    container_name: containerName, // Using real container name from pod details
                     new_image: suggested_image,
                     old_image: failedImage
                   };
                   
-                  console.log(`Auto-heal configured for ${deploymentName}: ${failedImage} -> ${suggested_image}`);
+                  console.log(`Auto-heal configured for ${deploymentName}/${containerName}: ${failedImage} -> ${suggested_image}`);
                 }
               } else if (exists) {
                 console.log(`Image ${failedImage} exists on Docker Hub`);
