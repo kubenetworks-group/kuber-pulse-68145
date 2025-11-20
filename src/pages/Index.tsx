@@ -161,7 +161,7 @@ const Index = () => {
         </div>
 
         {/* Metrics Cards */}
-        <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="grid gap-4 grid-cols-2 sm:grid-cols-2 lg:grid-cols-4">
           <MetricCard
             title={t('dashboard.totalClusters')}
             value={clusters.length.toString()}
@@ -179,16 +179,6 @@ const Index = () => {
             value={clusterData?.pods?.toString() || '0'}
             icon={Database}
             trend={{ value: 15, isPositive: true }}
-          />
-          <MetricCard
-            title={t('clusters.storage')}
-            value={`${storageMetrics.used.toFixed(1)} / ${storageMetrics.total.toFixed(0)} GB`}
-            subtitle={`${t('dashboard.allocated')}: ${storageMetrics.allocated.toFixed(1)} GB | ${t('dashboard.available')}: ${storageMetrics.available.toFixed(1)} GB`}
-            icon={HardDrive}
-            trend={{ 
-              value: storageMetrics.total > 0 ? Math.round((storageMetrics.used / storageMetrics.total) * 100) : 0, 
-              isPositive: false 
-            }}
           />
           <MetricCard
             title={t('aiMonitor.title')}
