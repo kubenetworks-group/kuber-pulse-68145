@@ -79,7 +79,7 @@ spec:
       serviceAccountName: kuberpulse-agent
       containers:
       - name: agent
-        image: docker.io/denercavalcante/kuberpulse-agent:v0.0.24
+        image: docker.io/denercavalcante/kuberpulse-agent:v0.0.26
         imagePullPolicy: Always
         envFrom:
         - configMapRef:
