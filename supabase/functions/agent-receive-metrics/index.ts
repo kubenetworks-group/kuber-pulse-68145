@@ -263,7 +263,7 @@ serve(async (req) => {
       }
     }
 
-    // Process storage metrics
+    // Process storage metrics (from PVs - will be replaced by node_storage)
     const storageMetric = metrics.find(m => m.type === 'storage');
     if (storageMetric) {
       const storageData = storageMetric.data as any;
@@ -273,15 +273,38 @@ serve(async (req) => {
         const allocatableGB = (storageData.allocatable_bytes || 0) / (1024 ** 3);
         const availableGB = allocatableGB;
         
+        // Only update if node_storage is not available (fallback)
+        const nodeStorageMetric = metrics.find(m => m.type === 'node_storage');
+        if (!nodeStorageMetric) {
+          await supabaseClient
+            .from('clusters')
+            .update({
+              storage_total_gb: totalGB,
+              storage_available_gb: availableGB,
+            })
+            .eq('id', cluster_id);
+          
+          console.log(`✅ Updated cluster storage (from PVs): ${totalGB.toFixed(2)}GB total`);
+        }
+      }
+    }
+
+    // Process node storage (physical disk from nodes) - PRIORITY
+    const nodeStorageMetric = metrics.find(m => m.type === 'node_storage');
+    if (nodeStorageMetric) {
+      const nodeStorageData = nodeStorageMetric.data as any;
+      
+      if (nodeStorageData?.total_physical_bytes !== undefined) {
+        const physicalStorageGB = nodeStorageData.total_physical_bytes / (1024 ** 3);
+        
         await supabaseClient
           .from('clusters')
           .update({
-            storage_total_gb: totalGB,
-            storage_available_gb: availableGB,
+            storage_total_gb: physicalStorageGB,
           })
           .eq('id', cluster_id);
         
-        console.log(`✅ Updated cluster storage: ${totalGB.toFixed(2)}GB total, ${availableGB.toFixed(2)}GB available`);
+        console.log(`✅ Updated physical storage from nodes: ${physicalStorageGB.toFixed(2)}GB`);
       }
     }
 

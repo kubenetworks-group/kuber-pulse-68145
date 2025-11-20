@@ -280,6 +280,46 @@ func collectStorageMetrics(clientset *kubernetes.Clientset) map[string]interface
 }
 
 // ---------------------------------------------
+// NODE STORAGE METRICS COLLECTION (Physical disk from nodes)
+// ---------------------------------------------
+func collectNodeStorageMetrics(clientset *kubernetes.Clientset) map[string]interface{} {
+	nodes, err := clientset.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		log.Printf("⚠️  Error collecting node storage: %v", err)
+		return map[string]interface{}{
+			"total_physical_bytes": int64(0),
+			"nodes":                []map[string]interface{}{},
+		}
+	}
+
+	var totalPhysicalStorage int64
+	var nodeStorageDetails []map[string]interface{}
+
+	for _, node := range nodes.Items {
+		// Get ephemeral-storage capacity (physical disk)
+		storageCapacity := int64(0)
+		if ephemeralStorage, ok := node.Status.Capacity[corev1.ResourceEphemeralStorage]; ok {
+			storageCapacity = ephemeralStorage.Value()
+		}
+
+		totalPhysicalStorage += storageCapacity
+
+		nodeStorageDetails = append(nodeStorageDetails, map[string]interface{}{
+			"node_name":      node.Name,
+			"capacity_bytes": storageCapacity,
+		})
+	}
+
+	log.Printf("💿 Node physical storage: total=%.2fGB across %d nodes",
+		float64(totalPhysicalStorage)/(1024*1024*1024), len(nodes.Items))
+
+	return map[string]interface{}{
+		"total_physical_bytes": totalPhysicalStorage,
+		"nodes":                nodeStorageDetails,
+	}
+}
+
+// ---------------------------------------------
 // MÉTRICAS
 // ---------------------------------------------
 func sendMetrics(clientset *kubernetes.Clientset, metricsClient *metricsv.Clientset, config AgentConfig) {
@@ -381,6 +421,11 @@ func sendMetrics(clientset *kubernetes.Clientset, metricsClient *metricsv.Client
 		{
 			"type":         "storage",
 			"data":         collectStorageMetrics(clientset),
+			"collected_at": time.Now().UTC().Format(time.RFC3339),
+		},
+		{
+			"type":         "node_storage",
+			"data":         collectNodeStorageMetrics(clientset),
 			"collected_at": time.Now().UTC().Format(time.RFC3339),
 		},
 	}

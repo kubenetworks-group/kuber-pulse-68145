@@ -1,5 +1,4 @@
 import { DashboardLayout } from "@/components/DashboardLayout";
-import { MetricCard } from "@/components/MetricCard";
 import { NodeDetailsCard } from "@/components/NodeDetailsCard";
 import { CostChart } from "@/components/CostChart";
 import { ClusterHealthMap } from "@/components/ClusterHealthMap";
@@ -7,7 +6,6 @@ import { AIInsightsWidget } from "@/components/AIInsightsWidget";
 import { PodHealthByNamespace } from "@/components/PodHealthByNamespace";
 import { ClusterEvents } from "@/components/ClusterEvents";
 import { StorageChart } from "@/components/StorageChart";
-import { Server, DollarSign, Database, HardDrive, Bot } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCluster } from "@/contexts/ClusterContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -100,17 +98,20 @@ const Index = () => {
         if (pvcsError) {
           console.error('Error fetching PVCs:', pvcsError);
         } else if (pvcsData) {
-          // Calculate storage metrics
+          // Calculate storage metrics with 3 distinct values:
+          // 1. Physical Capacity (from cluster.storage_total_gb - actual disk on nodes)
+          // 2. Allocated (from PVCs requested_bytes - what was promised in PVCs)
+          // 3. Used Real (from PVCs used_bytes - what is actually written)
           const allocatedBytes = pvcsData.reduce((sum, pvc) => sum + (pvc.requested_bytes || 0), 0);
           const usedBytes = pvcsData.reduce((sum, pvc) => sum + (pvc.used_bytes || 0), 0);
-          const totalGB = cluster?.storage_total_gb || 0;
-          const allocatedGB = allocatedBytes / (1024 ** 3); // Convert bytes to GB
-          const usedGB = usedBytes / (1024 ** 3);
-          const availableGB = totalGB - allocatedGB;
+          const physicalCapacityGB = cluster?.storage_total_gb || 0; // Physical disk
+          const allocatedGB = allocatedBytes / (1024 ** 3); // Allocated in PVCs
+          const usedGB = usedBytes / (1024 ** 3); // Actually used
+          const availableGB = Math.max(0, physicalCapacityGB - usedGB); // Available based on real usage
 
           setStorageMetrics({
-            total: totalGB,
-            allocated: allocatedGB,
+            total: physicalCapacityGB,    // Physical capacity
+            allocated: allocatedGB,        // Allocated in PVCs
             used: usedGB,
             available: Math.max(0, availableGB) // Ensure non-negative
           });
@@ -137,11 +138,6 @@ const Index = () => {
     }
   };
 
-  const aiActionsToday = incidents.filter(i => {
-    const today = new Date().toDateString();
-    return new Date(i.created_at).toDateString() === today && i.action_taken;
-  }).length;
-
   return (
     <DashboardLayout>
       <div className="p-4 sm:p-6 lg:p-8 space-y-6 animate-fade-in">
@@ -155,44 +151,6 @@ const Index = () => {
               {clusterData ? `${clusterData.name} - ${clusterData.environment}` : t('dashboard.overview')}
             </p>
           </div>
-        </div>
-
-        {/* Metrics Cards */}
-        <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
-          <MetricCard
-            title={t('dashboard.totalClusters')}
-            value={clusters.length.toString()}
-            icon={Server}
-            trend={{ value: 12, isPositive: true }}
-          />
-          <MetricCard
-            title={t('dashboard.activeNodes')}
-            value={clusterData?.nodes?.toString() || '0'}
-            icon={Server}
-            trend={{ value: 8, isPositive: true }}
-          />
-          <MetricCard
-            title={t('dashboard.runningPods')}
-            value={clusterData?.pods?.toString() || '0'}
-            icon={Database}
-            trend={{ value: 15, isPositive: true }}
-          />
-          <MetricCard
-            title={t('clusters.storage')}
-            value={`${storageMetrics.used.toFixed(1)} / ${storageMetrics.total.toFixed(0)} GB`}
-            subtitle={`${t('dashboard.allocated')}: ${storageMetrics.allocated.toFixed(1)} GB | ${t('dashboard.available')}: ${storageMetrics.available.toFixed(1)} GB`}
-            icon={HardDrive}
-            trend={{ 
-              value: storageMetrics.total > 0 ? Math.round((storageMetrics.used / storageMetrics.total) * 100) : 0, 
-              isPositive: false 
-            }}
-          />
-          <MetricCard
-            title={t('aiMonitor.title')}
-            value={aiActionsToday.toString()}
-            icon={Bot}
-            trend={{ value: 23, isPositive: true }}
-          />
         </div>
 
         {/* Main Content Grid */}
