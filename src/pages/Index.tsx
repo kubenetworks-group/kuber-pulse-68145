@@ -6,6 +6,9 @@ import { AIInsightsWidget } from "@/components/AIInsightsWidget";
 import { PodHealthByNamespace } from "@/components/PodHealthByNamespace";
 import { ClusterEvents } from "@/components/ClusterEvents";
 import { StorageChart } from "@/components/StorageChart";
+import { DashboardGrid } from "@/components/DashboardGrid";
+import { DraggableCard } from "@/components/DraggableCard";
+import { useDashboardLayout } from "@/hooks/useDashboardLayout";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCluster } from "@/contexts/ClusterContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -27,6 +30,7 @@ const Index = () => {
     available: 0
   });
   const nodeMetrics = useNodeMetrics(selectedClusterId);
+  const { layout, isEditMode, handleLayoutChange, handleEditModeChange, handleResetLayout } = useDashboardLayout();
 
   useEffect(() => {
     if (user && selectedClusterId) {
@@ -153,60 +157,64 @@ const Index = () => {
           </div>
         </div>
 
-        {/* Main Content Grid */}
-        <div className="grid gap-6 lg:grid-cols-3">
-          {/* Left Column - 2 columns wide */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* AI Insights Widget */}
-            {incidents.length > 0 && (
-              <div className="animate-scale-in">
+        {/* Dashboard Grid with Drag & Drop */}
+        <DashboardGrid
+          layout={layout}
+          onLayoutChange={handleLayoutChange}
+          isEditMode={isEditMode}
+          onEditModeChange={handleEditModeChange}
+          onResetLayout={handleResetLayout}
+        >
+          {incidents.length > 0 && (
+            <div key="ai-insights" data-grid={layout.find(l => l.i === 'ai-insights')}>
+              <DraggableCard isEditMode={isEditMode} noWrapper>
                 <AIInsightsWidget recentIncidents={incidents} />
-              </div>
-            )}
-
-            {/* Node Details */}
-            {selectedClusterId && (
-              <div className="animate-scale-in">
-                <NodeDetailsCard
-                  nodes={nodeMetrics.nodes}
-                  totalCPU={nodeMetrics.totalCPU}
-                  totalMemory={nodeMetrics.totalMemory}
-                  cpuUsage={nodeMetrics.cpuUsage}
-                  memoryUsage={nodeMetrics.memoryUsage}
-                  loading={nodeMetrics.loading}
-                />
-              </div>
-            )}
-
-            {/* Cost Chart */}
-            <div className="animate-scale-in">
-              <CostChart />
+              </DraggableCard>
             </div>
+          )}
+          
+          <div key="node-details" data-grid={layout.find(l => l.i === 'node-details')}>
+            <DraggableCard isEditMode={isEditMode} noWrapper>
+              <NodeDetailsCard 
+                nodes={nodeMetrics.nodes}
+                totalCPU={nodeMetrics.totalCPU}
+                totalMemory={nodeMetrics.totalMemory}
+                cpuUsage={nodeMetrics.cpuUsage}
+                memoryUsage={nodeMetrics.memoryUsage}
+                loading={nodeMetrics.loading}
+              />
+            </DraggableCard>
+          </div>
 
-            {/* Storage Chart */}
-            <div className="animate-scale-in">
+          <div key="cost-chart" data-grid={layout.find(l => l.i === 'cost-chart')}>
+            <DraggableCard isEditMode={isEditMode} noWrapper>
+              <CostChart />
+            </DraggableCard>
+          </div>
+
+          <div key="storage-chart" data-grid={layout.find(l => l.i === 'storage-chart')}>
+            <DraggableCard isEditMode={isEditMode} noWrapper>
               <StorageChart 
                 total={storageMetrics.total}
                 allocated={storageMetrics.allocated}
                 used={storageMetrics.used}
                 available={storageMetrics.available}
               />
-            </div>
+            </DraggableCard>
           </div>
 
-          {/* Right Column - 1 column wide */}
-          <div className="space-y-6">
-            {/* Pod Health by Namespace */}
-            <div className="animate-scale-in">
+          <div key="pod-health" data-grid={layout.find(l => l.i === 'pod-health')}>
+            <DraggableCard isEditMode={isEditMode} noWrapper>
               <PodHealthByNamespace />
-            </div>
-
-            {/* Cluster Events */}
-            <div className="animate-scale-in">
-              <ClusterEvents />
-            </div>
+            </DraggableCard>
           </div>
-        </div>
+
+          <div key="cluster-events" data-grid={layout.find(l => l.i === 'cluster-events')}>
+            <DraggableCard isEditMode={isEditMode} noWrapper>
+              <ClusterEvents />
+            </DraggableCard>
+          </div>
+        </DashboardGrid>
       </div>
     </DashboardLayout>
   );
