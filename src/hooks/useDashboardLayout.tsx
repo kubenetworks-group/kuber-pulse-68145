@@ -2,12 +2,12 @@ import { useState, useEffect } from 'react';
 import { Layout } from 'react-grid-layout';
 
 const DEFAULT_LAYOUT: Layout[] = [
-  { i: 'ai-insights', x: 0, y: 0, w: 12, h: 3, minW: 6, minH: 2 },
-  { i: 'node-details', x: 0, y: 3, w: 6, h: 4, minW: 4, minH: 3 },
-  { i: 'cost-chart', x: 6, y: 3, w: 6, h: 4, minW: 4, minH: 3 },
-  { i: 'storage-chart', x: 0, y: 7, w: 6, h: 4, minW: 4, minH: 3 },
-  { i: 'pod-health', x: 6, y: 7, w: 6, h: 4, minW: 4, minH: 3 },
-  { i: 'cluster-events', x: 0, y: 11, w: 12, h: 4, minW: 6, minH: 3 },
+  { i: 'ai-insights', x: 0, y: 0, w: 12, h: 3, minW: 4, minH: 2 },
+  { i: 'node-details', x: 0, y: 3, w: 6, h: 4, minW: 3, minH: 3 },
+  { i: 'cost-chart', x: 6, y: 3, w: 6, h: 4, minW: 3, minH: 3 },
+  { i: 'storage-chart', x: 0, y: 7, w: 6, h: 4, minW: 3, minH: 3 },
+  { i: 'pod-health', x: 6, y: 7, w: 6, h: 4, minW: 3, minH: 3 },
+  { i: 'cluster-events', x: 0, y: 11, w: 12, h: 4, minW: 4, minH: 3 },
 ];
 
 const STORAGE_KEY = 'dashboard-layout';

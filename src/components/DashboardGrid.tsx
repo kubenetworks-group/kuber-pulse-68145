@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { ReactNode, useState, useEffect, useRef } from 'react';
 import GridLayout, { Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
@@ -24,6 +24,21 @@ export const DashboardGrid = ({
   onEditModeChange,
   onResetLayout,
 }: DashboardGridProps) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(1200);
+
+  useEffect(() => {
+    const updateWidth = () => {
+      if (containerRef.current) {
+        setContainerWidth(containerRef.current.offsetWidth);
+      }
+    };
+
+    updateWidth();
+    window.addEventListener('resize', updateWidth);
+    return () => window.removeEventListener('resize', updateWidth);
+  }, []);
+
   const handleLayoutChange = (newLayout: Layout[]) => {
     if (isEditMode) {
       onLayoutChange(newLayout);
@@ -116,24 +131,20 @@ export const DashboardGrid = ({
       )}
 
       {/* Grid Layout - Responsive */}
-      <div className="w-full overflow-hidden">
+      <div ref={containerRef} className="w-full">
         <GridLayout
           className="layout"
           layout={layout}
           cols={12}
           rowHeight={80}
-          width={1200}
-          onLayoutChange={handleLayoutChange}
+          width={containerWidth}
+          containerPadding={[8, 8]}
+          margin={[16, 16]}
           isDraggable={isEditMode}
           isResizable={isEditMode}
-          compactType="vertical"
-          preventCollision={false}
+          onLayoutChange={handleLayoutChange}
           draggableHandle=".drag-handle"
-          margin={[16, 16]}
-          containerPadding={[0, 0]}
-          style={{
-            transition: 'all 0.3s ease',
-          }}
+          compactType="vertical"
         >
           {children}
         </GridLayout>
