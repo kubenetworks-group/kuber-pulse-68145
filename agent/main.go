@@ -57,10 +57,19 @@ func main() {
 		log.Fatalf("❌ Failed to create Kubernetes client: %v", err)
 	}
 
-	metricsClient, err := metricsv.NewForConfig(kubeconfig)
+	// Create metrics client with insecure TLS (common for local clusters)
+	metricsConfig := *kubeconfig
+	metricsConfig.TLSClientConfig.Insecure = true
+	metricsConfig.TLSClientConfig.CAData = nil
+	metricsConfig.TLSClientConfig.CAFile = ""
+	
+	metricsClient, err := metricsv.NewForConfig(&metricsConfig)
 	if err != nil {
 		log.Printf("⚠️  Failed to create Metrics client: %v", err)
 		log.Println("⚠️  Metrics API not available - will use capacity values")
+		metricsClient = nil
+	} else {
+		log.Println("✅ Metrics Server client created (TLS verification disabled for local clusters)")
 	}
 
 	log.Println("✅ Connected to Kubernetes cluster")
