@@ -100,17 +100,20 @@ const Index = () => {
         if (pvcsError) {
           console.error('Error fetching PVCs:', pvcsError);
         } else if (pvcsData) {
-          // Calculate storage metrics
+          // Calculate storage metrics with 3 distinct values:
+          // 1. Physical Capacity (from cluster.storage_total_gb - actual disk on nodes)
+          // 2. Allocated (from PVCs requested_bytes - what was promised in PVCs)
+          // 3. Used Real (from PVCs used_bytes - what is actually written)
           const allocatedBytes = pvcsData.reduce((sum, pvc) => sum + (pvc.requested_bytes || 0), 0);
           const usedBytes = pvcsData.reduce((sum, pvc) => sum + (pvc.used_bytes || 0), 0);
-          const totalGB = cluster?.storage_total_gb || 0;
-          const allocatedGB = allocatedBytes / (1024 ** 3); // Convert bytes to GB
-          const usedGB = usedBytes / (1024 ** 3);
-          const availableGB = totalGB - allocatedGB;
+          const physicalCapacityGB = cluster?.storage_total_gb || 0; // Physical disk
+          const allocatedGB = allocatedBytes / (1024 ** 3); // Allocated in PVCs
+          const usedGB = usedBytes / (1024 ** 3); // Actually used
+          const availableGB = Math.max(0, physicalCapacityGB - usedGB); // Available based on real usage
 
           setStorageMetrics({
-            total: totalGB,
-            allocated: allocatedGB,
+            total: physicalCapacityGB,    // Physical capacity
+            allocated: allocatedGB,        // Allocated in PVCs
             used: usedGB,
             available: Math.max(0, availableGB) // Ensure non-negative
           });

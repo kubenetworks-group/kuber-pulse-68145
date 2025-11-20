@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
-import { HardDrive } from "lucide-react";
+import { HardDrive, AlertTriangle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 interface StorageChartProps {
@@ -13,19 +14,15 @@ interface StorageChartProps {
 export const StorageChart = ({ total, allocated, used, available }: StorageChartProps) => {
   const { t } = useTranslation();
 
-  // Calculate unused allocated space
-  const allocatedUnused = Math.max(0, allocated - used);
+  // Check for overprovisioning
+  const hasOverprovisioning = allocated > total;
 
+  // Data for the pie chart showing actual usage vs available
   const data = [
     { 
       name: t('dashboard.storageUsed'), 
       value: parseFloat(used.toFixed(2)),
       color: 'hsl(var(--destructive))'
-    },
-    { 
-      name: t('dashboard.storageAllocatedUnused'), 
-      value: parseFloat(allocatedUnused.toFixed(2)),
-      color: 'hsl(var(--warning))'
     },
     { 
       name: t('dashboard.available'), 
@@ -111,21 +108,48 @@ export const StorageChart = ({ total, allocated, used, available }: StorageChart
           </ResponsiveContainer>
 
           <div className="pt-4 border-t border-border/50">
-            <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="grid grid-cols-3 gap-4 text-sm">
               <div>
-                <p className="text-muted-foreground">{t('dashboard.utilizationRate')}</p>
-                <p className="text-lg font-semibold text-foreground">
-                  {total > 0 ? ((used / total) * 100).toFixed(1) : 0}%
+                <p className="text-xs text-muted-foreground">{t('dashboard.physicalCapacity')}</p>
+                <p className="text-lg font-bold text-foreground">
+                  {total.toFixed(1)} GB
                 </p>
+                <p className="text-xs text-muted-foreground">{t('dashboard.physicalDisk')}</p>
               </div>
               <div>
-                <p className="text-muted-foreground">{t('dashboard.allocationRate')}</p>
-                <p className="text-lg font-semibold text-foreground">
-                  {total > 0 ? ((allocated / total) * 100).toFixed(1) : 0}%
+                <p className="text-xs text-muted-foreground">{t('dashboard.allocatedPVCs')}</p>
+                <p className={`text-lg font-bold ${hasOverprovisioning ? 'text-warning' : 'text-foreground'}`}>
+                  {allocated.toFixed(1)} GB
+                </p>
+                {hasOverprovisioning && (
+                  <p className="text-xs text-warning">⚠️ {t('dashboard.overprovisioning')}</p>
+                )}
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">{t('dashboard.actuallyUsed')}</p>
+                <p className="text-lg font-bold text-foreground">
+                  {used.toFixed(1)} GB
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {total > 0 ? ((used / total) * 100).toFixed(1) : 0}% {t('dashboard.ofPhysical')}
                 </p>
               </div>
             </div>
           </div>
+
+          {/* Overprovisioning Alert */}
+          {hasOverprovisioning && (
+            <Alert variant="destructive" className="mt-4">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>{t('dashboard.overprovisioningDetected')}</AlertTitle>
+              <AlertDescription>
+                {t('dashboard.overprovisioningWarning', { 
+                  allocated: allocated.toFixed(1), 
+                  total: total.toFixed(1) 
+                })}
+              </AlertDescription>
+            </Alert>
+          )}
         </div>
       </CardContent>
     </Card>
