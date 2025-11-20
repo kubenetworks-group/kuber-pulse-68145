@@ -1,5 +1,4 @@
 import { DashboardLayout } from "@/components/DashboardLayout";
-import { MetricCard } from "@/components/MetricCard";
 import { NodeDetailsCard } from "@/components/NodeDetailsCard";
 import { CostChart } from "@/components/CostChart";
 import { ClusterHealthMap } from "@/components/ClusterHealthMap";
@@ -7,7 +6,6 @@ import { AIInsightsWidget } from "@/components/AIInsightsWidget";
 import { PodHealthByNamespace } from "@/components/PodHealthByNamespace";
 import { ClusterEvents } from "@/components/ClusterEvents";
 import { StorageChart } from "@/components/StorageChart";
-import { Server, DollarSign, Database, HardDrive, Bot } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCluster } from "@/contexts/ClusterContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -140,11 +138,6 @@ const Index = () => {
     }
   };
 
-  const aiActionsToday = incidents.filter(i => {
-    const today = new Date().toDateString();
-    return new Date(i.created_at).toDateString() === today && i.action_taken;
-  }).length;
-
   return (
     <DashboardLayout>
       <div className="p-4 sm:p-6 lg:p-8 space-y-6 animate-fade-in">
@@ -158,34 +151,6 @@ const Index = () => {
               {clusterData ? `${clusterData.name} - ${clusterData.environment}` : t('dashboard.overview')}
             </p>
           </div>
-        </div>
-
-        {/* Metrics Cards */}
-        <div className="grid gap-4 grid-cols-2 sm:grid-cols-2 lg:grid-cols-4">
-          <MetricCard
-            title={t('dashboard.totalClusters')}
-            value={clusters.length.toString()}
-            icon={Server}
-            trend={{ value: 12, isPositive: true }}
-          />
-          <MetricCard
-            title={t('dashboard.activeNodes')}
-            value={clusterData?.nodes?.toString() || '0'}
-            icon={Server}
-            trend={{ value: 8, isPositive: true }}
-          />
-          <MetricCard
-            title={t('dashboard.runningPods')}
-            value={clusterData?.pods?.toString() || '0'}
-            icon={Database}
-            trend={{ value: 15, isPositive: true }}
-          />
-          <MetricCard
-            title={t('aiMonitor.title')}
-            value={aiActionsToday.toString()}
-            icon={Bot}
-            trend={{ value: 23, isPositive: true }}
-          />
         </div>
 
         {/* Main Content Grid */}
