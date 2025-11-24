@@ -20,11 +20,18 @@ const Index = () => {
   const [clusterData, setClusterData] = useState<any>(null);
   const [incidents, setIncidents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [storageMetrics, setStorageMetrics] = useState({
+  const [storageMetrics, setStorageMetrics] = useState<{
+    total: number;
+    allocated: number;
+    used: number;
+    available: number;
+    pvcs: any[];
+  }>({
     total: 0,
     allocated: 0,
     used: 0,
-    available: 0
+    available: 0,
+    pvcs: []
   });
   const nodeMetrics = useNodeMetrics(selectedClusterId);
 
@@ -113,7 +120,8 @@ const Index = () => {
             total: physicalCapacityGB,    // Physical capacity
             allocated: allocatedGB,        // Allocated in PVCs
             used: usedGB,
-            available: Math.max(0, availableGB) // Ensure non-negative
+            available: Math.max(0, availableGB), // Ensure non-negative
+            pvcs: pvcsData || []
           });
         }
       }
@@ -190,6 +198,7 @@ const Index = () => {
                 allocated={storageMetrics.allocated}
                 used={storageMetrics.used}
                 available={storageMetrics.available}
+                pvcs={storageMetrics.pvcs || []}
               />
             </div>
           </div>
