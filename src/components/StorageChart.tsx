@@ -1,18 +1,37 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
-import { HardDrive, AlertTriangle } from "lucide-react";
+import { HardDrive, AlertTriangle, Package } from "lucide-react";
 import { useTranslation } from "react-i18next";
+
+interface PVC {
+  id: string;
+  name: string;
+  namespace: string;
+  status: string;
+  requested_bytes: number;
+  used_bytes: number;
+  storage_class: string | null;
+}
 
 interface StorageChartProps {
   total: number;
   allocated: number;
   used: number;
   available: number;
+  pvcs: PVC[];
 }
 
-export const StorageChart = ({ total, allocated, used, available }: StorageChartProps) => {
+export const StorageChart = ({ total, allocated, used, available, pvcs }: StorageChartProps) => {
   const { t } = useTranslation();
+
+  // Count PVCs by status
+  const totalPVCs = pvcs.length;
+  const boundPVCs = pvcs.filter(p => p.status.toLowerCase() === 'bound');
+  const availablePVCs = pvcs.filter(p => p.status.toLowerCase() === 'available');
+  const releasedPVCs = pvcs.filter(p => p.status.toLowerCase() === 'released');
 
   // Check for overprovisioning
   const hasOverprovisioning = allocated > total;
@@ -108,7 +127,7 @@ export const StorageChart = ({ total, allocated, used, available }: StorageChart
           </ResponsiveContainer>
 
           <div className="pt-4 border-t border-border/50">
-            <div className="grid grid-cols-3 gap-4 text-sm">
+            <div className="grid grid-cols-4 gap-4 text-sm">
               <div>
                 <p className="text-xs text-muted-foreground">{t('dashboard.physicalCapacity')}</p>
                 <p className="text-lg font-bold text-foreground">
@@ -134,7 +153,108 @@ export const StorageChart = ({ total, allocated, used, available }: StorageChart
                   {total > 0 ? ((used / total) * 100).toFixed(1) : 0}% {t('dashboard.ofPhysical')}
                 </p>
               </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Total PVCs</p>
+                <p className="text-lg font-bold text-foreground flex items-center gap-2">
+                  <Package className="w-4 h-4" />
+                  {totalPVCs}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {boundPVCs.length} bound
+                </p>
+              </div>
             </div>
+          </div>
+
+          {/* PVCs Tabs */}
+          <div className="pt-4 border-t border-border/50">
+            <Tabs defaultValue="bound" className="w-full">
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="bound">
+                  Bound ({boundPVCs.length})
+                </TabsTrigger>
+                <TabsTrigger value="available">
+                  Available ({availablePVCs.length})
+                </TabsTrigger>
+                <TabsTrigger value="released">
+                  Released ({releasedPVCs.length})
+                </TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="bound" className="mt-4 space-y-2 max-h-60 overflow-y-auto">
+                {boundPVCs.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">No bound PVCs</p>
+                ) : (
+                  boundPVCs.map(pvc => (
+                    <div key={pvc.id} className="p-3 rounded-lg border border-border/50 hover:bg-accent/50 transition-colors">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <p className="font-medium text-sm text-foreground">{pvc.name}</p>
+                          <p className="text-xs text-muted-foreground">Namespace: {pvc.namespace}</p>
+                          {pvc.storage_class && (
+                            <p className="text-xs text-muted-foreground">Class: {pvc.storage_class}</p>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <Badge variant="outline" className="mb-1">
+                            {(pvc.requested_bytes / (1024**3)).toFixed(2)} GB
+                          </Badge>
+                          <p className="text-xs text-muted-foreground">
+                            Used: {(pvc.used_bytes / (1024**3)).toFixed(2)} GB
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </TabsContent>
+              
+              <TabsContent value="available" className="mt-4 space-y-2 max-h-60 overflow-y-auto">
+                {availablePVCs.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">No available PVCs</p>
+                ) : (
+                  availablePVCs.map(pvc => (
+                    <div key={pvc.id} className="p-3 rounded-lg border border-border/50 hover:bg-accent/50 transition-colors">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <p className="font-medium text-sm text-foreground">{pvc.name}</p>
+                          <p className="text-xs text-muted-foreground">Namespace: {pvc.namespace}</p>
+                          {pvc.storage_class && (
+                            <p className="text-xs text-muted-foreground">Class: {pvc.storage_class}</p>
+                          )}
+                        </div>
+                        <Badge variant="outline">
+                          {(pvc.requested_bytes / (1024**3)).toFixed(2)} GB
+                        </Badge>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </TabsContent>
+              
+              <TabsContent value="released" className="mt-4 space-y-2 max-h-60 overflow-y-auto">
+                {releasedPVCs.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">No released PVCs</p>
+                ) : (
+                  releasedPVCs.map(pvc => (
+                    <div key={pvc.id} className="p-3 rounded-lg border border-border/50 hover:bg-accent/50 transition-colors">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <p className="font-medium text-sm text-foreground">{pvc.name}</p>
+                          <p className="text-xs text-muted-foreground">Namespace: {pvc.namespace}</p>
+                          {pvc.storage_class && (
+                            <p className="text-xs text-muted-foreground">Class: {pvc.storage_class}</p>
+                          )}
+                        </div>
+                        <Badge variant="outline">
+                          {(pvc.requested_bytes / (1024**3)).toFixed(2)} GB
+                        </Badge>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </TabsContent>
+            </Tabs>
           </div>
 
           {/* Overprovisioning Alert */}
