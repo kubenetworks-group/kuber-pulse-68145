@@ -29,9 +29,9 @@ export const StorageChart = ({ total, allocated, used, available, pvcs }: Storag
 
   // Count PVCs by status
   const totalPVCs = pvcs.length;
-  const boundPVCs = pvcs.filter(p => p.status.toLowerCase() === 'bound');
-  const availablePVCs = pvcs.filter(p => p.status.toLowerCase() === 'available');
-  const releasedPVCs = pvcs.filter(p => p.status.toLowerCase() === 'released');
+  const boundPVCs = pvcs.filter(p => p.status?.toLowerCase() === 'bound');
+  const availablePVCs = pvcs.filter(p => p.status?.toLowerCase() === 'available');
+  const releasedPVCs = pvcs.filter(p => p.status?.toLowerCase() === 'released');
 
   // Check for overprovisioning
   const hasOverprovisioning = allocated > total;
