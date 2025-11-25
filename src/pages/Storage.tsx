@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { StorageChart } from "@/components/StorageChart";
 import { ReleasedPVsCard } from "@/components/ReleasedPVsCard";
+import { PVCleanupRecommendations } from "@/components/PVCleanupRecommendations";
 import { useCluster } from "@/contexts/ClusterContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useTranslation } from "react-i18next";
@@ -177,6 +178,8 @@ const Storage = () => {
               available={storageMetrics.available}
               pvcs={storageMetrics.pvcs}
             />
+            
+            <PVCleanupRecommendations pvs={standalonePVs} />
             
             <ReleasedPVsCard 
               pvs={standalonePVs} 
