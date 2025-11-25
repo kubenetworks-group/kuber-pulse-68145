@@ -7,10 +7,12 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Database, Loader2, Sparkles } from "lucide-react";
+import { Database, Loader2, Sparkles, GraduationCap } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 const Settings = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [demoLoading, setDemoLoading] = useState(false);
   const [savingsLoading, setSavingsLoading] = useState(false);
@@ -166,6 +168,31 @@ const Settings = () => {
                 >
                   {savingsLoading && <Loader2 className="h-4 w-4 animate-spin" />}
                   {savingsLoading ? 'Generating AI Savings...' : 'Generate AI Savings Data'}
+                </Button>
+              </div>
+            </div>
+          </Card>
+
+          {/* Welcome Tutorial Card */}
+          <Card className="p-6 bg-gradient-to-br from-accent/5 to-accent/10 border-accent/20">
+            <div className="flex items-start gap-4">
+              <div className="p-3 rounded-lg bg-accent/20">
+                <GraduationCap className="h-6 w-6 text-accent" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold mb-2">Tutorial de Boas-Vindas</h3>
+                <p className="text-muted-foreground mb-4">
+                  Reveja o tutorial interativo que mostra todas as funcionalidades do Kodo e aprenda
+                  como aproveitar ao máximo a plataforma.
+                </p>
+                <Button 
+                  onClick={() => navigate('/welcome')} 
+                  variant="outline"
+                  className="gap-2 border-accent/50 hover:bg-accent/10"
+                  size="lg"
+                >
+                  <GraduationCap className="h-4 w-4" />
+                  Ver Tutorial Novamente
                 </Button>
               </div>
             </div>
