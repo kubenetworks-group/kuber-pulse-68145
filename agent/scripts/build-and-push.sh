@@ -5,15 +5,19 @@
 
 set -e
 
-VERSION=${1:-v0.0.13}
+VERSION=${1:-v0.0.14}
 IMAGE_NAME="denercavalcante/kuberpulse-agent"
 FULL_IMAGE="${IMAGE_NAME}:${VERSION}"
 
-echo "🔨 Building Docker image: ${FULL_IMAGE}"
-docker build -t ${FULL_IMAGE} .
+echo "🔨 Building multi-platform Docker image: ${FULL_IMAGE}"
+docker buildx create --use --name kuberpulse-builder 2>/dev/null || docker buildx use kuberpulse-builder
 
-echo "📤 Pushing to Docker Hub: ${FULL_IMAGE}"
-docker push ${FULL_IMAGE}
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  -t ${FULL_IMAGE} \
+  -t ${IMAGE_NAME}:latest \
+  --push \
+  .
 
 echo "✅ Build and push completed successfully!"
 echo "📝 Next step: Run ./scripts/deploy.sh to deploy to Kubernetes"
