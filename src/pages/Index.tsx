@@ -11,15 +11,30 @@ import { supabase } from "@/integrations/supabase/client";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNodeMetrics } from "@/hooks/useNodeMetrics";
+import { useNavigate } from "react-router-dom";
 
 const Index = () => {
   const { user } = useAuth();
   const { selectedClusterId, clusters } = useCluster();
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [clusterData, setClusterData] = useState<any>(null);
   const [incidents, setIncidents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const nodeMetrics = useNodeMetrics(selectedClusterId);
+
+  // Check if user has completed onboarding
+  useEffect(() => {
+    if (user) {
+      const hasCompletedOnboarding = localStorage.getItem(`onboarding_completed_${user.id}`);
+      const hasSeenWelcome = localStorage.getItem(`welcome_shown_${user.id}`);
+      
+      // If user is new (seen welcome but not completed onboarding), redirect to welcome
+      if (hasSeenWelcome && !hasCompletedOnboarding) {
+        navigate('/welcome');
+      }
+    }
+  }, [user, navigate]);
 
   useEffect(() => {
     if (user && selectedClusterId) {
