@@ -99,7 +99,7 @@ const Index = () => {
         // Fetch PVCs for storage calculation
         const { data: pvcsData, error: pvcsError } = await supabase
           .from('pvcs')
-          .select('requested_bytes, used_bytes')
+          .select('id, name, namespace, status, requested_bytes, used_bytes, storage_class')
           .eq('cluster_id', selectedClusterId);
 
         if (pvcsError) {
