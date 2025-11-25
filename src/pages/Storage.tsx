@@ -151,40 +151,53 @@ const Storage = () => {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+      <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+        <div className="flex items-center justify-between animate-in slide-in-from-left duration-500">
+          <div className="space-y-2">
+            <h1 className="text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent drop-shadow-sm">
               {t('common.storage')}
             </h1>
             {selectedCluster && (
-              <p className="text-sm text-muted-foreground mt-1">
-                {selectedCluster.name}
-              </p>
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
+                <p className="text-sm text-muted-foreground">
+                  {selectedCluster.name}
+                </p>
+              </div>
             )}
           </div>
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <div className="flex flex-col items-center justify-center py-20 gap-4">
+            <div className="relative">
+              <Loader2 className="w-12 h-12 animate-spin text-primary" />
+              <div className="absolute inset-0 w-12 h-12 rounded-full bg-primary/20 animate-ping" />
+            </div>
+            <p className="text-sm text-muted-foreground animate-pulse">Loading storage data...</p>
           </div>
         ) : (
           <div className="space-y-6">
-            <StorageChart
-              total={storageMetrics.total}
-              allocated={storageMetrics.allocated}
-              used={storageMetrics.used}
-              available={storageMetrics.available}
-              pvcs={storageMetrics.pvcs}
-            />
+            <div className="animate-in fade-in slide-in-from-bottom-5 duration-700" style={{ animationDelay: '100ms' }}>
+              <StorageChart
+                total={storageMetrics.total}
+                allocated={storageMetrics.allocated}
+                used={storageMetrics.used}
+                available={storageMetrics.available}
+                pvcs={storageMetrics.pvcs}
+              />
+            </div>
             
-            <PVCleanupRecommendations pvs={standalonePVs} />
+            <div className="animate-in fade-in slide-in-from-bottom-5 duration-700" style={{ animationDelay: '200ms' }}>
+              <PVCleanupRecommendations pvs={standalonePVs} />
+            </div>
             
-            <ReleasedPVsCard 
-              pvs={standalonePVs} 
-              totalPVsCount={totalPVsCount}
-            />
+            <div className="animate-in fade-in slide-in-from-bottom-5 duration-700" style={{ animationDelay: '300ms' }}>
+              <ReleasedPVsCard 
+                pvs={standalonePVs} 
+                totalPVsCount={totalPVsCount}
+              />
+            </div>
           </div>
         )}
       </div>
