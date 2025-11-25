@@ -1,5 +1,8 @@
 project_id = "dadaeduevxyvkhjmwlel"
 
+[functions.cluster-assistant]
+verify_jwt = false
+
 [functions.agent-receive-metrics]
 verify_jwt = false
 
