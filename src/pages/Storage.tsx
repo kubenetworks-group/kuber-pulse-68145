@@ -1,0 +1,144 @@
+import { useState, useEffect } from "react";
+import { DashboardLayout } from "@/components/DashboardLayout";
+import { StorageChart } from "@/components/StorageChart";
+import { useCluster } from "@/contexts/ClusterContext";
+import { supabase } from "@/integrations/supabase/client";
+import { useTranslation } from "react-i18next";
+import { Loader2 } from "lucide-react";
+
+interface PVC {
+  id: string;
+  name: string;
+  namespace: string;
+  status: string;
+  requested_bytes: number;
+  used_bytes: number;
+  storage_class: string | null;
+}
+
+const Storage = () => {
+  const { t } = useTranslation();
+  const { selectedClusterId, clusters } = useCluster();
+  const [loading, setLoading] = useState(true);
+  const [storageMetrics, setStorageMetrics] = useState({
+    total: 0,
+    allocated: 0,
+    used: 0,
+    available: 0,
+    pvcs: [] as PVC[]
+  });
+
+  const selectedCluster = clusters.find(c => c.id === selectedClusterId);
+
+  useEffect(() => {
+    if (selectedClusterId) {
+      fetchStorageData();
+    }
+  }, [selectedClusterId]);
+
+  // Real-time subscription for PVCs updates
+  useEffect(() => {
+    if (!selectedClusterId) return;
+
+    const channel = supabase
+      .channel('pvcs-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'pvcs',
+          filter: `cluster_id=eq.${selectedClusterId}`
+        },
+        () => {
+          fetchStorageData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [selectedClusterId]);
+
+  const fetchStorageData = async () => {
+    setLoading(true);
+    try {
+      // Fetch cluster data
+      const { data: cluster, error: clusterError } = await supabase
+        .from('clusters')
+        .select('storage_total_gb')
+        .eq('id', selectedClusterId)
+        .single();
+
+      if (clusterError) {
+        console.error('Error fetching cluster:', clusterError);
+        return;
+      }
+
+      // Fetch PVCs for storage calculation
+      const { data: pvcsData, error: pvcsError } = await supabase
+        .from('pvcs')
+        .select('id, name, namespace, status, requested_bytes, used_bytes, storage_class')
+        .eq('cluster_id', selectedClusterId);
+
+      if (pvcsError) {
+        console.error('Error fetching PVCs:', pvcsError);
+      } else if (pvcsData) {
+        const allocatedBytes = pvcsData.reduce((sum, pvc) => sum + (pvc.requested_bytes || 0), 0);
+        const usedBytes = pvcsData.reduce((sum, pvc) => sum + (pvc.used_bytes || 0), 0);
+        const physicalCapacityGB = cluster?.storage_total_gb || 0;
+        const allocatedGB = allocatedBytes / (1024 ** 3);
+        const usedGB = usedBytes / (1024 ** 3);
+        const availableGB = Math.max(0, physicalCapacityGB - usedGB);
+
+        setStorageMetrics({
+          total: physicalCapacityGB,
+          allocated: allocatedGB,
+          used: usedGB,
+          available: Math.max(0, availableGB),
+          pvcs: pvcsData || []
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching storage data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <DashboardLayout>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+              {t('common.storage')}
+            </h1>
+            {selectedCluster && (
+              <p className="text-sm text-muted-foreground mt-1">
+                {selectedCluster.name}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          </div>
+        ) : (
+          <StorageChart
+            total={storageMetrics.total}
+            allocated={storageMetrics.allocated}
+            used={storageMetrics.used}
+            available={storageMetrics.available}
+            pvcs={storageMetrics.pvcs}
+          />
+        )}
+      </div>
+    </DashboardLayout>
+  );
+};
+
+export default Storage;

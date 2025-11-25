@@ -11,6 +11,7 @@ import Auth from "./pages/Auth";
 import Clusters from "./pages/Clusters";
 import AIMonitor from "./pages/AIMonitor";
 import Costs from "./pages/Costs";
+import Storage from "./pages/Storage";
 import Settings from "./pages/Settings";
 import Agents from "./pages/Agents";
 import NotFound from "./pages/NotFound";
@@ -56,6 +57,14 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <Costs />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/storage"
+                element={
+                  <ProtectedRoute>
+                    <Storage />
                   </ProtectedRoute>
                 }
               />

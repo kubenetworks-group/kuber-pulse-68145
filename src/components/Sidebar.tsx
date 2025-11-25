@@ -11,6 +11,7 @@ import {
   LogOut,
   LayoutDashboard,
   Bot,
+  HardDrive,
 } from "lucide-react";
 
 export const Sidebar = () => {
@@ -21,6 +22,7 @@ export const Sidebar = () => {
   const navigation = [
     { name: t('common.dashboard'), href: "/", icon: LayoutDashboard },
     { name: t('common.costs'), href: "/costs", icon: DollarSign },
+    { name: t('common.storage'), href: "/storage", icon: HardDrive },
     { name: t('common.aiMonitor'), href: "/ai-monitor", icon: Bot },
     { name: t('common.clusters'), href: "/clusters", icon: Server },
     { name: t('common.agents'), href: "/agents", icon: Bot },
