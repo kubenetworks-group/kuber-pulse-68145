@@ -4,6 +4,7 @@ import { CostChart } from "@/components/CostChart";
 import { AIInsightsWidget } from "@/components/AIInsightsWidget";
 import { PodHealthByNamespace } from "@/components/PodHealthByNamespace";
 import { ClusterEvents } from "@/components/ClusterEvents";
+import { WelcomeHeader } from "@/components/WelcomeHeader";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCluster } from "@/contexts/ClusterContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -105,17 +106,18 @@ const Index = () => {
   return (
     <DashboardLayout>
       <div className="p-4 sm:p-6 lg:p-8 space-y-6 animate-fade-in">
-        {/* Header Section */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-2 bg-gradient-to-r from-primary via-primary/80 to-primary/60 bg-clip-text text-transparent">
-              {t('dashboard.title')}
-            </h1>
-            <p className="text-muted-foreground text-sm sm:text-base lg:text-lg">
-              {clusterData ? `${clusterData.name} - ${clusterData.environment}` : t('dashboard.overview')}
-            </p>
+        {/* Welcome Header */}
+        <WelcomeHeader />
+
+        {/* Cluster Info Badge */}
+        {clusterData && (
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20 animate-in fade-in slide-in-from-top-3 duration-500">
+            <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
+            <span className="text-sm font-medium text-foreground">
+              {clusterData.name} - {clusterData.environment}
+            </span>
           </div>
-        </div>
+        )}
 
         {/* Main Content Grid */}
         <div className="grid gap-6 lg:grid-cols-3">
