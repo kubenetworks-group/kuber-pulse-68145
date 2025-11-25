@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { StorageChart } from "@/components/StorageChart";
+import { ReleasedPVsCard } from "@/components/ReleasedPVsCard";
 import { useCluster } from "@/contexts/ClusterContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useTranslation } from "react-i18next";
@@ -16,6 +17,17 @@ interface PVC {
   storage_class: string | null;
 }
 
+interface PersistentVolume {
+  id: string;
+  name: string;
+  status: string;
+  capacity_bytes: number;
+  storage_class: string | null;
+  reclaim_policy: string | null;
+  claim_ref_namespace: string | null;
+  claim_ref_name: string | null;
+}
+
 const Storage = () => {
   const { t } = useTranslation();
   const { selectedClusterId, clusters } = useCluster();
@@ -27,6 +39,8 @@ const Storage = () => {
     available: 0,
     pvcs: [] as PVC[]
   });
+  const [standalonePVs, setStandalonePVs] = useState<PersistentVolume[]>([]);
+  const [totalPVsCount, setTotalPVsCount] = useState(0);
 
   const selectedCluster = clusters.find(c => c.id === selectedClusterId);
 
@@ -41,13 +55,25 @@ const Storage = () => {
     if (!selectedClusterId) return;
 
     const channel = supabase
-      .channel('pvcs-changes')
+      .channel('storage-changes')
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'pvcs',
+          filter: `cluster_id=eq.${selectedClusterId}`
+        },
+        () => {
+          fetchStorageData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'persistent_volumes',
           filter: `cluster_id=eq.${selectedClusterId}`
         },
         () => {
@@ -100,6 +126,21 @@ const Storage = () => {
           pvcs: pvcsData || []
         });
       }
+
+      // Fetch standalone PVs (Released, Available, Failed)
+      const { data: pvsData, error: pvsError } = await supabase
+        .from('persistent_volumes')
+        .select('*')
+        .eq('cluster_id', selectedClusterId);
+
+      if (pvsError) {
+        console.error('Error fetching standalone PVs:', pvsError);
+      } else {
+        setStandalonePVs(pvsData || []);
+        // Total PVs = Bound PVCs + Standalone PVs
+        const boundPVCs = pvcsData?.filter(pvc => pvc.status?.toLowerCase() === 'bound').length || 0;
+        setTotalPVsCount(boundPVCs + (pvsData?.length || 0));
+      }
     } catch (error) {
       console.error('Error fetching storage data:', error);
     } finally {
@@ -128,13 +169,20 @@ const Storage = () => {
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
           </div>
         ) : (
-          <StorageChart
-            total={storageMetrics.total}
-            allocated={storageMetrics.allocated}
-            used={storageMetrics.used}
-            available={storageMetrics.available}
-            pvcs={storageMetrics.pvcs}
-          />
+          <div className="space-y-6">
+            <StorageChart
+              total={storageMetrics.total}
+              allocated={storageMetrics.allocated}
+              used={storageMetrics.used}
+              available={storageMetrics.available}
+              pvcs={storageMetrics.pvcs}
+            />
+            
+            <ReleasedPVsCard 
+              pvs={standalonePVs} 
+              totalPVsCount={totalPVsCount}
+            />
+          </div>
         )}
       </div>
     </DashboardLayout>

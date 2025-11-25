@@ -229,6 +229,7 @@ func collectPVCs(clientset *kubernetes.Clientset) []map[string]interface{} {
 
 	// Create a map of PV name to PV for quick lookup
 	pvMap := make(map[string]corev1.PersistentVolume)
+	boundPVs := make(map[string]bool) // Track which PVs are bound
 	if pvs != nil {
 		for _, pv := range pvs.Items {
 			pvMap[pv.Name] = pv
@@ -284,10 +285,84 @@ func collectPVCs(clientset *kubernetes.Clientset) []map[string]interface{} {
 			"volume_name":     pvc.Spec.VolumeName,
 			"created_at":      pvc.CreationTimestamp.Time,
 		})
+		
+		// Mark PV as bound
+		if pvc.Spec.VolumeName != "" {
+			boundPVs[pvc.Spec.VolumeName] = true
+		}
 	}
 
 	log.Printf("📦 Collected %d PVCs (matched with %d PVs)", len(pvcDetails), len(pvMap))
 	return pvcDetails
+}
+
+// ---------------------------------------------
+// STANDALONE PV COLLECTION (Released, Available, Failed)
+// ---------------------------------------------
+func collectStandalonePVs(clientset *kubernetes.Clientset) []map[string]interface{} {
+	pvs, err := clientset.CoreV1().PersistentVolumes().List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		log.Printf("⚠️  Error collecting PVs: %v", err)
+		return []map[string]interface{}{}
+	}
+
+	var pvDetails []map[string]interface{}
+
+	for _, pv := range pvs.Items {
+		// Only collect Released, Available, or Failed PVs
+		status := string(pv.Status.Phase)
+		if status != "Released" && status != "Available" && status != "Failed" {
+			continue
+		}
+
+		capacityBytes := int64(0)
+		if capacity, ok := pv.Spec.Capacity[corev1.ResourceStorage]; ok {
+			capacityBytes = capacity.Value()
+		}
+
+		storageClassName := ""
+		if pv.Spec.StorageClassName != "" {
+			storageClassName = pv.Spec.StorageClassName
+		}
+
+		reclaimPolicy := ""
+		if pv.Spec.PersistentVolumeReclaimPolicy != "" {
+			reclaimPolicy = string(pv.Spec.PersistentVolumeReclaimPolicy)
+		}
+
+		accessModes := []string{}
+		for _, mode := range pv.Spec.AccessModes {
+			accessModes = append(accessModes, string(mode))
+		}
+
+		volumeMode := ""
+		if pv.Spec.VolumeMode != nil {
+			volumeMode = string(*pv.Spec.VolumeMode)
+		}
+
+		claimRefNamespace := ""
+		claimRefName := ""
+		if pv.Spec.ClaimRef != nil {
+			claimRefNamespace = pv.Spec.ClaimRef.Namespace
+			claimRefName = pv.Spec.ClaimRef.Name
+		}
+
+		pvDetails = append(pvDetails, map[string]interface{}{
+			"name":                 pv.Name,
+			"status":               status,
+			"capacity_bytes":       capacityBytes,
+			"storage_class":        storageClassName,
+			"reclaim_policy":       reclaimPolicy,
+			"access_modes":         accessModes,
+			"volume_mode":          volumeMode,
+			"claim_ref_namespace":  claimRefNamespace,
+			"claim_ref_name":       claimRefName,
+			"created_at":           pv.CreationTimestamp.Time,
+		})
+	}
+
+	log.Printf("🔓 Collected %d standalone PVs (Released/Available/Failed)", len(pvDetails))
+	return pvDetails
 }
 
 // ---------------------------------------------
@@ -456,6 +531,13 @@ func sendMetrics(clientset *kubernetes.Clientset, metricsClient *metricsv.Client
 			"type": "pvcs",
 			"data": map[string]interface{}{
 				"pvcs": collectPVCs(clientset),
+			},
+			"collected_at": time.Now().UTC().Format(time.RFC3339),
+		},
+		{
+			"type": "standalone_pvs",
+			"data": map[string]interface{}{
+				"pvs": collectStandalonePVs(clientset),
 			},
 			"collected_at": time.Now().UTC().Format(time.RFC3339),
 		},
