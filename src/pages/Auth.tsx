@@ -12,6 +12,7 @@ import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
+import { Sparkles, Shield, Zap, Mail, Lock, User } from "lucide-react";
 
 // Password validation schema
 const passwordSchema = z.string()
@@ -113,25 +114,60 @@ const Auth = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20 flex items-center justify-center p-4">
-      <div className="w-full max-w-md space-y-8">
-        <div className="text-center">
-          <div className="inline-flex mb-4">
+    <div className="min-h-screen relative bg-background flex items-center justify-center p-4 overflow-hidden">
+      {/* Animated Background Grid */}
+      <div className="absolute inset-0 bg-grid-pattern opacity-[0.03]" />
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5" />
+      
+      {/* Floating Orbs */}
+      <div className="absolute top-1/4 left-1/4 w-72 h-72 bg-primary/20 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '4s' }} />
+      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-accent/20 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '6s' }} />
+      
+      <div className="w-full max-w-md space-y-8 relative z-10 animate-in fade-in slide-in-from-bottom-4 duration-1000">
+        {/* Header */}
+        <div className="text-center space-y-6">
+          <div className="inline-flex relative group">
+            <div className="absolute inset-0 bg-gradient-primary rounded-full blur-2xl opacity-50 group-hover:opacity-75 transition-opacity" />
             <img 
               src={kodoLogo} 
               alt="Kodo Logo" 
-              className="w-24 h-24 object-contain"
+              className="w-24 h-24 object-contain relative z-10 drop-shadow-2xl"
             />
           </div>
-          <h1 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-            Kodo
-          </h1>
-          <p className="text-muted-foreground mt-2">
-            AI-Powered Multi-Cloud Infrastructure Management
-          </p>
+          
+          <div className="space-y-3">
+            <h1 className="text-4xl font-bold tracking-tight">
+              <span className="bg-gradient-primary bg-clip-text text-transparent drop-shadow-sm">
+                Kodo
+              </span>
+            </h1>
+            <div className="flex items-center justify-center gap-2 text-muted-foreground">
+              <Sparkles className="w-4 h-4" />
+              <p className="text-sm font-medium">
+                AI-Powered Multi-Cloud Infrastructure Management
+              </p>
+            </div>
+            
+            {/* Feature Pills */}
+            <div className="flex flex-wrap gap-2 justify-center pt-2">
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 border border-primary/20">
+                <Shield className="w-3 h-3 text-primary" />
+                <span className="text-xs font-medium text-primary">Secure</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-accent/10 border border-accent/20">
+                <Zap className="w-3 h-3 text-accent" />
+                <span className="text-xs font-medium text-accent">Fast</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 border border-primary/20">
+                <Sparkles className="w-3 h-3 text-primary" />
+                <span className="text-xs font-medium text-primary">Smart</span>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <Card className="p-6 bg-card/80 backdrop-blur-xl border-border shadow-card">
+        {/* Auth Card */}
+        <Card className="p-6 bg-card/50 backdrop-blur-2xl border-border/50 shadow-2xl hover:shadow-primary/10 transition-all duration-500">
           <Tabs defaultValue="signin" className="w-full">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="signin">Sign In</TabsTrigger>
@@ -139,41 +175,60 @@ const Auth = () => {
             </TabsList>
 
             <TabsContent value="signin">
-              <form onSubmit={handleSignIn} className="space-y-4">
+              <form onSubmit={handleSignIn} className="space-y-5 pt-2">
                 <div className="space-y-2">
-                  <Label htmlFor="signin-email">Email</Label>
-                  <Input
-                    id="signin-email"
-                    type="email"
-                    placeholder="your@email.com"
-                    required
-                    value={signInForm.email}
-                    onChange={(e) =>
-                      setSignInForm({ ...signInForm, email: e.target.value })
-                    }
-                  />
+                  <Label htmlFor="signin-email" className="text-foreground font-medium">Email</Label>
+                  <div className="relative group">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
+                    <Input
+                      id="signin-email"
+                      type="email"
+                      placeholder="your@email.com"
+                      required
+                      value={signInForm.email}
+                      onChange={(e) =>
+                        setSignInForm({ ...signInForm, email: e.target.value })
+                      }
+                      className="pl-10 bg-background/50 border-border/50 focus:border-primary/50 focus:bg-background transition-all"
+                    />
+                  </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="signin-password">Password</Label>
-                  <Input
-                    id="signin-password"
-                    type="password"
-                    placeholder="••••••••"
-                    required
-                    value={signInForm.password}
-                    onChange={(e) =>
-                      setSignInForm({ ...signInForm, password: e.target.value })
-                    }
-                  />
+                  <Label htmlFor="signin-password" className="text-foreground font-medium">Password</Label>
+                  <div className="relative group">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
+                    <Input
+                      id="signin-password"
+                      type="password"
+                      placeholder="••••••••"
+                      required
+                      value={signInForm.password}
+                      onChange={(e) =>
+                        setSignInForm({ ...signInForm, password: e.target.value })
+                      }
+                      className="pl-10 bg-background/50 border-border/50 focus:border-primary/50 focus:bg-background transition-all"
+                    />
+                  </div>
                 </div>
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? "Signing in..." : "Sign In"}
+                <Button 
+                  type="submit" 
+                  className="w-full bg-gradient-primary hover:opacity-90 transition-all shadow-lg hover:shadow-primary/50" 
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <span className="flex items-center gap-2">
+                      <span className="w-4 h-4 border-2 border-background/30 border-t-background rounded-full animate-spin" />
+                      Signing in...
+                    </span>
+                  ) : (
+                    "Sign In"
+                  )}
                 </Button>
                 <div className="text-center mt-2">
                   <button
                     type="button"
                     onClick={() => setResetDialogOpen(true)}
-                    className="text-sm text-primary hover:underline"
+                    className="text-sm text-primary hover:text-primary/80 hover:underline transition-colors"
                   >
                     Esqueci minha senha
                   </button>
@@ -182,63 +237,90 @@ const Auth = () => {
             </TabsContent>
 
             <TabsContent value="signup">
-              <form onSubmit={handleSignUp} className="space-y-4">
+              <form onSubmit={handleSignUp} className="space-y-4 pt-2">
                 <div className="space-y-2">
-                  <Label htmlFor="signup-name">Full Name</Label>
-                  <Input
-                    id="signup-name"
-                    type="text"
-                    placeholder="John Doe"
-                    required
-                    value={signUpForm.fullName}
-                    onChange={(e) =>
-                      setSignUpForm({ ...signUpForm, fullName: e.target.value })
-                    }
-                  />
+                  <Label htmlFor="signup-name" className="text-foreground font-medium">Full Name</Label>
+                  <div className="relative group">
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
+                    <Input
+                      id="signup-name"
+                      type="text"
+                      placeholder="John Doe"
+                      required
+                      value={signUpForm.fullName}
+                      onChange={(e) =>
+                        setSignUpForm({ ...signUpForm, fullName: e.target.value })
+                      }
+                      className="pl-10 bg-background/50 border-border/50 focus:border-primary/50 focus:bg-background transition-all"
+                    />
+                  </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="signup-email">Email</Label>
-                  <Input
-                    id="signup-email"
-                    type="email"
-                    placeholder="your@email.com"
-                    required
-                    value={signUpForm.email}
-                    onChange={(e) =>
-                      setSignUpForm({ ...signUpForm, email: e.target.value })
-                    }
-                  />
+                  <Label htmlFor="signup-email" className="text-foreground font-medium">Email</Label>
+                  <div className="relative group">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
+                    <Input
+                      id="signup-email"
+                      type="email"
+                      placeholder="your@email.com"
+                      required
+                      value={signUpForm.email}
+                      onChange={(e) =>
+                        setSignUpForm({ ...signUpForm, email: e.target.value })
+                      }
+                      className="pl-10 bg-background/50 border-border/50 focus:border-primary/50 focus:bg-background transition-all"
+                    />
+                  </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="signup-password">Password</Label>
-                  <Input
-                    id="signup-password"
-                    type="password"
-                    placeholder="••••••••"
-                    required
-                    minLength={6}
-                    value={signUpForm.password}
-                    onChange={(e) =>
-                      setSignUpForm({ ...signUpForm, password: e.target.value })
-                    }
-                  />
+                  <Label htmlFor="signup-password" className="text-foreground font-medium">Password</Label>
+                  <div className="relative group">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
+                    <Input
+                      id="signup-password"
+                      type="password"
+                      placeholder="••••••••"
+                      required
+                      minLength={6}
+                      value={signUpForm.password}
+                      onChange={(e) =>
+                        setSignUpForm({ ...signUpForm, password: e.target.value })
+                      }
+                      className="pl-10 bg-background/50 border-border/50 focus:border-primary/50 focus:bg-background transition-all"
+                    />
+                  </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="signup-confirm">Confirm Password</Label>
-                  <Input
-                    id="signup-confirm"
-                    type="password"
-                    placeholder="••••••••"
-                    required
-                    minLength={6}
-                    value={signUpForm.confirmPassword}
-                    onChange={(e) =>
-                      setSignUpForm({ ...signUpForm, confirmPassword: e.target.value })
-                    }
-                  />
+                  <Label htmlFor="signup-confirm" className="text-foreground font-medium">Confirm Password</Label>
+                  <div className="relative group">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
+                    <Input
+                      id="signup-confirm"
+                      type="password"
+                      placeholder="••••••••"
+                      required
+                      minLength={6}
+                      value={signUpForm.confirmPassword}
+                      onChange={(e) =>
+                        setSignUpForm({ ...signUpForm, confirmPassword: e.target.value })
+                      }
+                      className="pl-10 bg-background/50 border-border/50 focus:border-primary/50 focus:bg-background transition-all"
+                    />
+                  </div>
                 </div>
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? "Creating account..." : "Create Account"}
+                <Button 
+                  type="submit" 
+                  className="w-full bg-gradient-primary hover:opacity-90 transition-all shadow-lg hover:shadow-primary/50" 
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <span className="flex items-center gap-2">
+                      <span className="w-4 h-4 border-2 border-background/30 border-t-background rounded-full animate-spin" />
+                      Creating account...
+                    </span>
+                  ) : (
+                    "Create Account"
+                  )}
                 </Button>
               </form>
             </TabsContent>
