@@ -146,10 +146,10 @@ const Storage = () => {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <div className="p-4 sm:p-6 lg:p-8 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
         <div className="flex items-center justify-between animate-in slide-in-from-left duration-500">
           <div className="space-y-2">
-            <h1 className="text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent drop-shadow-sm">
+            <h1 className="text-3xl sm:text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent drop-shadow-sm">
               {t('common.storage')}
             </h1>
             {selectedCluster && (

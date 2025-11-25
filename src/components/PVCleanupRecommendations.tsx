@@ -168,17 +168,17 @@ export const PVCleanupRecommendations = ({ pvs }: PVCleanupRecommendationsProps)
       <Card className="backdrop-blur-xl bg-card/80 border-border/50">
         <CardHeader>
           <div className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-primary" />
-            <CardTitle>Recomendações de Limpeza</CardTitle>
+            <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
+            <CardTitle className="text-base sm:text-lg">Recomendações de Limpeza</CardTitle>
           </div>
-          <CardDescription>
+          <CardDescription className="text-xs sm:text-sm">
             Análise inteligente de PVs para otimização de storage
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="text-center py-8 text-muted-foreground">
             <Sparkles className="w-12 h-12 mx-auto mb-2 opacity-50" />
-            <p>Nenhum PV Released encontrado para limpeza</p>
+            <p className="text-sm">Nenhum PV Released encontrado para limpeza</p>
             <p className="text-xs mt-1">Seu cluster está otimizado!</p>
           </div>
         </CardContent>
@@ -189,12 +189,12 @@ export const PVCleanupRecommendations = ({ pvs }: PVCleanupRecommendationsProps)
   return (
     <Card className="backdrop-blur-xl bg-card/80 border-border/50">
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-primary" />
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-2">
+            <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-primary flex-shrink-0 mt-1" />
             <div>
-              <CardTitle>Recomendações de Limpeza Inteligente</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-base sm:text-lg">Recomendações de Limpeza Inteligente</CardTitle>
+              <CardDescription className="text-xs sm:text-sm">
                 Análise baseada em idade e padrões de uso dos PVs Released
               </CardDescription>
             </div>
@@ -209,8 +209,8 @@ export const PVCleanupRecommendations = ({ pvs }: PVCleanupRecommendationsProps)
         {highPriorityCount > 0 && (
           <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>Atenção: {highPriorityCount} PVs com Alta Prioridade</AlertTitle>
-            <AlertDescription>
+            <AlertTitle className="text-sm">Atenção: {highPriorityCount} PVs com Alta Prioridade</AlertTitle>
+            <AlertDescription className="text-xs">
               Estes volumes estão Released há mais de 90 dias e desperdiçam storage.
               Recomenda-se deleção imediata se não houver necessidade de recuperação.
             </AlertDescription>
@@ -218,65 +218,68 @@ export const PVCleanupRecommendations = ({ pvs }: PVCleanupRecommendationsProps)
         )}
 
         {/* Summary Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <div className="space-y-1 p-3 rounded-lg bg-muted/50">
-            <p className="text-xs text-muted-foreground">Storage Desperdiçado</p>
-            <p className="text-xl font-bold text-red-500">{formatBytes(totalWastedStorage)}</p>
+            <p className="text-[10px] sm:text-xs text-muted-foreground truncate">Storage Desperdiçado</p>
+            <p className="text-lg sm:text-xl font-bold text-red-500">{formatBytes(totalWastedStorage)}</p>
           </div>
           <div className="space-y-1 p-3 rounded-lg bg-muted/50">
-            <p className="text-xs text-muted-foreground">Economia Potencial/Mês</p>
-            <p className="text-xl font-bold text-green-500">${totalPotentialSavings.toFixed(2)}</p>
+            <p className="text-[10px] sm:text-xs text-muted-foreground truncate">Economia/Mês</p>
+            <p className="text-lg sm:text-xl font-bold text-green-500">${totalPotentialSavings.toFixed(2)}</p>
           </div>
           <div className="space-y-1 p-3 rounded-lg bg-muted/50">
-            <p className="text-xs text-muted-foreground">Alta Prioridade</p>
-            <p className="text-xl font-bold text-red-500">{highPriorityCount}</p>
+            <p className="text-[10px] sm:text-xs text-muted-foreground truncate">Alta Prioridade</p>
+            <p className="text-lg sm:text-xl font-bold text-red-500">{highPriorityCount}</p>
           </div>
           <div className="space-y-1 p-3 rounded-lg bg-muted/50">
-            <p className="text-xs text-muted-foreground">Selecionados</p>
-            <p className="text-xl font-bold text-primary">{selectedPVs.size}</p>
+            <p className="text-[10px] sm:text-xs text-muted-foreground truncate">Selecionados</p>
+            <p className="text-lg sm:text-xl font-bold text-primary">{selectedPVs.size}</p>
           </div>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex flex-col sm:flex-row gap-2 flex-wrap">
           <Button
             variant="outline"
             size="sm"
             onClick={selectAllHighPriority}
             disabled={highPriorityCount === 0}
+            className="text-xs sm:text-sm"
           >
-            <AlertTriangle className="w-4 h-4 mr-2" />
-            Selecionar Alta Prioridade
+            <AlertTriangle className="w-3 h-3 sm:w-4 sm:h-4 mr-2" />
+            <span className="hidden sm:inline">Selecionar Alta Prioridade</span>
+            <span className="sm:hidden">Alta Prioridade</span>
           </Button>
           <Button
             variant="outline"
             size="sm"
             onClick={exportDeleteScript}
             disabled={selectedPVs.size === 0}
+            className="text-xs sm:text-sm"
           >
-            <Download className="w-4 h-4 mr-2" />
+            <Download className="w-3 h-3 sm:w-4 sm:h-4 mr-2" />
             Exportar Script ({selectedPVs.size})
           </Button>
           {selectedPVs.size > 0 && (
-            <div className="ml-auto text-sm text-muted-foreground flex items-center gap-2">
-              <span>Economia selecionada:</span>
+            <div className="sm:ml-auto text-xs sm:text-sm text-muted-foreground flex items-center gap-2 justify-center sm:justify-start">
+              <span>Economia:</span>
               <span className="font-bold text-green-500">${selectedSavings.toFixed(2)}/mês</span>
             </div>
           )}
         </div>
 
         {/* Recommendations Table */}
-        <div className="border rounded-lg overflow-hidden">
+        <div className="border rounded-lg overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-12"></TableHead>
-                <TableHead>PV</TableHead>
-                <TableHead>Prioridade</TableHead>
-                <TableHead>Idade</TableHead>
-                <TableHead>Tamanho</TableHead>
-                <TableHead>Economia/Mês</TableHead>
-                <TableHead>Recomendação</TableHead>
+                <TableHead className="w-8 sm:w-12"></TableHead>
+                <TableHead className="text-xs sm:text-sm min-w-[120px]">PV</TableHead>
+                <TableHead className="text-xs sm:text-sm">Prioridade</TableHead>
+                <TableHead className="text-xs sm:text-sm">Idade</TableHead>
+                <TableHead className="text-xs sm:text-sm">Tamanho</TableHead>
+                <TableHead className="text-xs sm:text-sm hidden sm:table-cell">Economia/Mês</TableHead>
+                <TableHead className="text-xs sm:text-sm hidden lg:table-cell">Recomendação</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -288,27 +291,28 @@ export const PVCleanupRecommendations = ({ pvs }: PVCleanupRecommendationsProps)
                       onCheckedChange={() => togglePV(rec.pv.id)}
                     />
                   </TableCell>
-                  <TableCell className="font-mono text-xs max-w-[200px] truncate">
+                  <TableCell className="font-mono text-[10px] sm:text-xs max-w-[120px] sm:max-w-[200px] truncate">
                     {rec.pv.name}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className={getPriorityColor(rec.priority)}>
-                      {getPriorityLabel(rec.priority)}
+                    <Badge variant="outline" className={`${getPriorityColor(rec.priority)} text-[10px] sm:text-xs whitespace-nowrap`}>
+                      <span className="hidden sm:inline">{getPriorityLabel(rec.priority)}</span>
+                      <span className="sm:hidden">{rec.priority.toUpperCase()}</span>
                     </Badge>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
-                      <Clock className="w-3 h-3 text-muted-foreground" />
-                      <span className="text-sm">{rec.ageInDays} dias</span>
+                      <Clock className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                      <span className="text-[10px] sm:text-sm whitespace-nowrap">{rec.ageInDays}d</span>
                     </div>
                   </TableCell>
-                  <TableCell className="font-semibold">
+                  <TableCell className="font-semibold text-[10px] sm:text-sm">
                     {formatBytes(rec.pv.capacity_bytes)}
                   </TableCell>
-                  <TableCell className="text-green-500 font-semibold">
+                  <TableCell className="text-green-500 font-semibold text-[10px] sm:text-sm hidden sm:table-cell">
                     ${rec.potentialSavings.toFixed(2)}
                   </TableCell>
-                  <TableCell className="text-xs text-muted-foreground max-w-[300px]">
+                  <TableCell className="text-[10px] sm:text-xs text-muted-foreground max-w-[200px] sm:max-w-[300px] truncate hidden lg:table-cell">
                     {rec.reason}
                   </TableCell>
                 </TableRow>
@@ -320,8 +324,8 @@ export const PVCleanupRecommendations = ({ pvs }: PVCleanupRecommendationsProps)
         {/* Warning Footer */}
         <Alert>
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Aviso Importante</AlertTitle>
-          <AlertDescription>
+          <AlertTitle className="text-sm">Aviso Importante</AlertTitle>
+          <AlertDescription className="text-xs">
             Antes de deletar PVs, certifique-se de que:
             <ul className="list-disc list-inside mt-2 space-y-1">
               <li>Os dados não são mais necessários para recuperação</li>
