@@ -43,11 +43,6 @@ export const AnimatedParticles = () => {
           }}
         />
       ))}
-      
-      {/* Shooting stars */}
-      <div className="shooting-star" style={{ animationDelay: '2s' }} />
-      <div className="shooting-star" style={{ animationDelay: '8s', left: '70%' }} />
-      <div className="shooting-star" style={{ animationDelay: '15s', left: '30%' }} />
     </div>
   );
 };
