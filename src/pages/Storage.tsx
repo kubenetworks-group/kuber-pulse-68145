@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { StorageChart } from "@/components/StorageChart";
-import { ReleasedPVsCard } from "@/components/ReleasedPVsCard";
 import { PVCleanupRecommendations } from "@/components/PVCleanupRecommendations";
 import { useCluster } from "@/contexts/ClusterContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -41,7 +40,6 @@ const Storage = () => {
     pvcs: [] as PVC[]
   });
   const [standalonePVs, setStandalonePVs] = useState<PersistentVolume[]>([]);
-  const [totalPVsCount, setTotalPVsCount] = useState(0);
 
   const selectedCluster = clusters.find(c => c.id === selectedClusterId);
 
@@ -138,9 +136,6 @@ const Storage = () => {
         console.error('Error fetching standalone PVs:', pvsError);
       } else {
         setStandalonePVs(pvsData || []);
-        // Total PVs = Bound PVCs + Standalone PVs
-        const boundPVCs = pvcsData?.filter(pvc => pvc.status?.toLowerCase() === 'bound').length || 0;
-        setTotalPVsCount(boundPVCs + (pvsData?.length || 0));
       }
     } catch (error) {
       console.error('Error fetching storage data:', error);
@@ -190,13 +185,6 @@ const Storage = () => {
             
             <div className="animate-in fade-in slide-in-from-bottom-5 duration-700" style={{ animationDelay: '200ms' }}>
               <PVCleanupRecommendations pvs={standalonePVs} />
-            </div>
-            
-            <div className="animate-in fade-in slide-in-from-bottom-5 duration-700" style={{ animationDelay: '300ms' }}>
-              <ReleasedPVsCard 
-                pvs={standalonePVs} 
-                totalPVsCount={totalPVsCount}
-              />
             </div>
           </div>
         )}
