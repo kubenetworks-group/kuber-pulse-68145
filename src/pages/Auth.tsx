@@ -14,6 +14,8 @@ import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
 import { Sparkles, Shield, Zap, Mail, Lock, User } from "lucide-react";
 import { AnimatedParticles } from "@/components/AnimatedParticles";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Link } from "react-router-dom";
 
 // Password validation schema
 const passwordSchema = z.string()
@@ -48,6 +50,9 @@ const Auth = () => {
     email: "",
     password: "",
     confirmPassword: "",
+    termsAccepted: false,
+    privacyAccepted: false,
+    marketingConsent: false,
   });
 
   const handleSignIn = async (e: React.FormEvent) => {
@@ -59,6 +64,16 @@ const Auth = () => {
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate terms acceptance
+    if (!signUpForm.termsAccepted || !signUpForm.privacyAccepted) {
+      toast({
+        title: "Aceite os termos",
+        description: "Você precisa aceitar os Termos de Uso e a Política de Privacidade para continuar.",
+        variant: "destructive",
+      });
+      return;
+    }
     
     // Validate password strength
     const passwordValidation = passwordSchema.safeParse(signUpForm.password);
@@ -81,8 +96,31 @@ const Auth = () => {
     }
 
     setLoading(true);
-    await signUp(signUpForm.email, signUpForm.password, signUpForm.fullName);
-    setLoading(false);
+    
+    try {
+      const { error } = await signUp(signUpForm.email, signUpForm.password, signUpForm.fullName);
+      
+      if (!error) {
+        // Get user session to save consent
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (session?.user) {
+          // Save user consent
+          await supabase.from('user_consents').insert({
+            user_id: session.user.id,
+            terms_accepted: signUpForm.termsAccepted,
+            privacy_policy_accepted: signUpForm.privacyAccepted,
+            marketing_consent: signUpForm.marketingConsent,
+            ip_address: null, // Could be captured if needed
+            user_agent: navigator.userAgent,
+          });
+        }
+      }
+    } catch (error: any) {
+      console.error('Error during signup:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleResetPassword = async (e: React.FormEvent) => {
@@ -312,6 +350,81 @@ const Auth = () => {
                     />
                   </div>
                 </div>
+
+                {/* LGPD Consents */}
+                <div className="space-y-3 pt-2 border-t border-border/50">
+                  <div className="flex items-start space-x-2">
+                    <Checkbox
+                      id="terms"
+                      checked={signUpForm.termsAccepted}
+                      onCheckedChange={(checked) =>
+                        setSignUpForm({ ...signUpForm, termsAccepted: checked === true })
+                      }
+                      className="mt-1"
+                    />
+                    <label
+                      htmlFor="terms"
+                      className="text-sm text-foreground leading-relaxed cursor-pointer"
+                    >
+                      Eu li e aceito os{" "}
+                      <Link
+                        to="/terms"
+                        target="_blank"
+                        className="text-primary hover:text-primary/80 underline font-medium"
+                      >
+                        Termos de Uso
+                      </Link>
+                      {" "}*
+                    </label>
+                  </div>
+
+                  <div className="flex items-start space-x-2">
+                    <Checkbox
+                      id="privacy"
+                      checked={signUpForm.privacyAccepted}
+                      onCheckedChange={(checked) =>
+                        setSignUpForm({ ...signUpForm, privacyAccepted: checked === true })
+                      }
+                      className="mt-1"
+                    />
+                    <label
+                      htmlFor="privacy"
+                      className="text-sm text-foreground leading-relaxed cursor-pointer"
+                    >
+                      Eu li e aceito a{" "}
+                      <Link
+                        to="/privacy"
+                        target="_blank"
+                        className="text-primary hover:text-primary/80 underline font-medium"
+                      >
+                        Política de Privacidade
+                      </Link>
+                      {" "}*
+                    </label>
+                  </div>
+
+                  <div className="flex items-start space-x-2">
+                    <Checkbox
+                      id="marketing"
+                      checked={signUpForm.marketingConsent}
+                      onCheckedChange={(checked) =>
+                        setSignUpForm({ ...signUpForm, marketingConsent: checked === true })
+                      }
+                      className="mt-1"
+                    />
+                    <label
+                      htmlFor="marketing"
+                      className="text-sm text-muted-foreground leading-relaxed cursor-pointer"
+                    >
+                      Desejo receber novidades e atualizações por e-mail (opcional)
+                    </label>
+                  </div>
+
+                  <p className="text-xs text-muted-foreground">
+                    * Campos obrigatórios
+                  </p>
+                </div>
+
                 <Button 
                   type="submit" 
                   className="w-full bg-gradient-primary hover:opacity-90 transition-all shadow-lg hover:shadow-primary/50" 
