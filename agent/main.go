@@ -221,6 +221,20 @@ func collectPVCs(clientset *kubernetes.Clientset) []map[string]interface{} {
 		return []map[string]interface{}{}
 	}
 
+	// Get PVs to match with PVCs
+	pvs, err := clientset.CoreV1().PersistentVolumes().List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		log.Printf("⚠️  Warning: Could not fetch PVs: %v", err)
+	}
+
+	// Create a map of PV name to PV for quick lookup
+	pvMap := make(map[string]corev1.PersistentVolume)
+	if pvs != nil {
+		for _, pv := range pvs.Items {
+			pvMap[pv.Name] = pv
+		}
+	}
+
 	var pvcDetails []map[string]interface{}
 
 	for _, pvc := range pvcs.Items {
@@ -232,10 +246,27 @@ func collectPVCs(clientset *kubernetes.Clientset) []map[string]interface{} {
 		}
 
 		usedBytes := int64(0)
+		actualCapacity := int64(0)
+		
+		// Get actual capacity from the bound PV
+		if pvc.Spec.VolumeName != "" {
+			if pv, exists := pvMap[pvc.Spec.VolumeName]; exists {
+				if capacity, ok := pv.Spec.Capacity[corev1.ResourceStorage]; ok {
+					actualCapacity = capacity.Value()
+				}
+			}
+		}
+
+		// Use PVC status capacity if available
 		if pvc.Status.Capacity != nil {
 			if storage, ok := pvc.Status.Capacity[corev1.ResourceStorage]; ok {
 				usedBytes = storage.Value()
 			}
+		}
+
+		// If we have actual capacity from PV and no used bytes, use it
+		if actualCapacity > 0 && usedBytes == 0 {
+			usedBytes = actualCapacity
 		}
 
 		storageClassName := ""
@@ -250,11 +281,12 @@ func collectPVCs(clientset *kubernetes.Clientset) []map[string]interface{} {
 			"status":          string(pvc.Status.Phase),
 			"requested_bytes": requestedBytes,
 			"used_bytes":      usedBytes,
+			"volume_name":     pvc.Spec.VolumeName,
 			"created_at":      pvc.CreationTimestamp.Time,
 		})
 	}
 
-	log.Printf("📦 Collected %d PVCs", len(pvcDetails))
+	log.Printf("📦 Collected %d PVCs (matched with %d PVs)", len(pvcDetails), len(pvMap))
 	return pvcDetails
 }
 
