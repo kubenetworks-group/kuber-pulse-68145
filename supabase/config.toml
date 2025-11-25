@@ -1,5 +1,8 @@
 project_id = "dadaeduevxyvkhjmwlel"
 
+[functions.docs-assistant]
+verify_jwt = false
+
 [functions.cluster-assistant]
 verify_jwt = false
 

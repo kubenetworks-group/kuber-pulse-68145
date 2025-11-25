@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   Bot,
   HardDrive,
+  BookOpen,
 } from "lucide-react";
 
 export const Sidebar = () => {
@@ -26,6 +27,7 @@ export const Sidebar = () => {
     { name: t('common.aiMonitor'), href: "/ai-monitor", icon: Bot },
     { name: t('common.clusters'), href: "/clusters", icon: Server },
     { name: t('common.agents'), href: "/agents", icon: Bot },
+    { name: "Documentação", href: "/documentation", icon: BookOpen },
     { name: t('common.settings'), href: "/settings", icon: Settings },
   ];
 
