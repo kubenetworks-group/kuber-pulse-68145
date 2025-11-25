@@ -2,6 +2,7 @@ import { Sidebar } from "./Sidebar";
 import { NotificationBell } from "./NotificationBell";
 import { ClusterSelector } from "./ClusterSelector";
 import { Footer } from "./Footer";
+import { DocsAssistantChat } from "./DocsAssistantChat";
 import { useState } from "react";
 import { Menu } from "lucide-react";
 import { Button } from "./ui/button";
@@ -51,6 +52,9 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
         </div>
         <Footer />
       </div>
+      
+      {/* Global Docs Assistant */}
+      <DocsAssistantChat />
     </div>
   );
 };
