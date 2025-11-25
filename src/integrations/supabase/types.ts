@@ -610,6 +610,65 @@ export type Database = {
         }
         Relationships: []
       }
+      persistent_volumes: {
+        Row: {
+          access_modes: string[] | null
+          capacity_bytes: number
+          claim_ref_name: string | null
+          claim_ref_namespace: string | null
+          cluster_id: string
+          created_at: string | null
+          id: string
+          last_sync: string | null
+          name: string
+          reclaim_policy: string | null
+          status: string
+          storage_class: string | null
+          user_id: string
+          volume_mode: string | null
+        }
+        Insert: {
+          access_modes?: string[] | null
+          capacity_bytes?: number
+          claim_ref_name?: string | null
+          claim_ref_namespace?: string | null
+          cluster_id: string
+          created_at?: string | null
+          id?: string
+          last_sync?: string | null
+          name: string
+          reclaim_policy?: string | null
+          status: string
+          storage_class?: string | null
+          user_id: string
+          volume_mode?: string | null
+        }
+        Update: {
+          access_modes?: string[] | null
+          capacity_bytes?: number
+          claim_ref_name?: string | null
+          claim_ref_namespace?: string | null
+          cluster_id?: string
+          created_at?: string | null
+          id?: string
+          last_sync?: string | null
+          name?: string
+          reclaim_policy?: string | null
+          status?: string
+          storage_class?: string | null
+          user_id?: string
+          volume_mode?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "persistent_volumes_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           company: string | null
