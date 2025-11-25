@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { ClusterAssistantChat } from "@/components/ClusterAssistantChat";
 
 const onboardingSteps = [
   {
@@ -149,6 +150,9 @@ export const ClusterOnboarding = () => {
 
   return (
     <div className="min-h-[calc(100vh-200px)] flex items-center justify-center p-4">
+      {/* AI Assistant Chat */}
+      <ClusterAssistantChat />
+      
       <div className="w-full max-w-4xl space-y-6 animate-in fade-in slide-in-from-bottom duration-700">
         {/* Progress Bar */}
         <div className="space-y-2">
