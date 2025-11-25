@@ -13,6 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
 import { Sparkles, Shield, Zap, Mail, Lock, User } from "lucide-react";
+import { AnimatedParticles } from "@/components/AnimatedParticles";
 
 // Password validation schema
 const passwordSchema = z.string()
@@ -118,6 +119,9 @@ const Auth = () => {
       {/* Animated Background Grid */}
       <div className="absolute inset-0 bg-grid-pattern opacity-[0.03]" />
       <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5" />
+      
+      {/* Animated Particles */}
+      <AnimatedParticles />
       
       {/* Floating Orbs */}
       <div className="absolute top-1/4 left-1/4 w-72 h-72 bg-primary/20 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '4s' }} />
