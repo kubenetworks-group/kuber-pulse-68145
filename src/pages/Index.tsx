@@ -5,6 +5,7 @@ import { AIInsightsWidget } from "@/components/AIInsightsWidget";
 import { PodHealthByNamespace } from "@/components/PodHealthByNamespace";
 import { ClusterEvents } from "@/components/ClusterEvents";
 import { WelcomeHeader } from "@/components/WelcomeHeader";
+import { ClusterOnboarding } from "@/components/ClusterOnboarding";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCluster } from "@/contexts/ClusterContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -124,18 +125,23 @@ const Index = () => {
         {/* Welcome Header */}
         <WelcomeHeader />
 
-        {/* Cluster Info Badge */}
-        {clusterData && (
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20 animate-in fade-in slide-in-from-top-3 duration-500">
-            <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
-            <span className="text-sm font-medium text-foreground">
-              {clusterData.name} - {clusterData.environment}
-            </span>
-          </div>
-        )}
+        {/* Show Onboarding if no clusters */}
+        {clusters.length === 0 ? (
+          <ClusterOnboarding />
+        ) : (
+          <>
+            {/* Cluster Info Badge */}
+            {clusterData && (
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20 animate-in fade-in slide-in-from-top-3 duration-500">
+                <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
+                <span className="text-sm font-medium text-foreground">
+                  {clusterData.name} - {clusterData.environment}
+                </span>
+              </div>
+            )}
 
-        {/* Main Content Grid */}
-        <div className="grid gap-6 lg:grid-cols-3">
+            {/* Main Content Grid */}
+            <div className="grid gap-6 lg:grid-cols-3">
           {/* Left Column - 2 columns wide */}
           <div className="lg:col-span-2 space-y-6">
             {/* AI Insights Widget */}
@@ -178,6 +184,8 @@ const Index = () => {
             </div>
           </div>
         </div>
+          </>
+        )}
       </div>
     </DashboardLayout>
   );
