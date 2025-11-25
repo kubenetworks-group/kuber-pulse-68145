@@ -1,11 +1,9 @@
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { NodeDetailsCard } from "@/components/NodeDetailsCard";
 import { CostChart } from "@/components/CostChart";
-import { ClusterHealthMap } from "@/components/ClusterHealthMap";
 import { AIInsightsWidget } from "@/components/AIInsightsWidget";
 import { PodHealthByNamespace } from "@/components/PodHealthByNamespace";
 import { ClusterEvents } from "@/components/ClusterEvents";
-import { StorageChart } from "@/components/StorageChart";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCluster } from "@/contexts/ClusterContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -20,19 +18,6 @@ const Index = () => {
   const [clusterData, setClusterData] = useState<any>(null);
   const [incidents, setIncidents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [storageMetrics, setStorageMetrics] = useState<{
-    total: number;
-    allocated: number;
-    used: number;
-    available: number;
-    pvcs: any[];
-  }>({
-    total: 0,
-    allocated: 0,
-    used: 0,
-    available: 0,
-    pvcs: []
-  });
   const nodeMetrics = useNodeMetrics(selectedClusterId);
 
   useEffect(() => {
@@ -95,35 +80,6 @@ const Index = () => {
         console.error('Error fetching cluster:', clusterError);
       } else {
         setClusterData(cluster);
-        
-        // Fetch PVCs for storage calculation
-        const { data: pvcsData, error: pvcsError } = await supabase
-          .from('pvcs')
-          .select('id, name, namespace, status, requested_bytes, used_bytes, storage_class')
-          .eq('cluster_id', selectedClusterId);
-
-        if (pvcsError) {
-          console.error('Error fetching PVCs:', pvcsError);
-        } else if (pvcsData) {
-          // Calculate storage metrics with 3 distinct values:
-          // 1. Physical Capacity (from cluster.storage_total_gb - actual disk on nodes)
-          // 2. Allocated (from PVCs requested_bytes - what was promised in PVCs)
-          // 3. Used Real (from PVCs used_bytes - what is actually written)
-          const allocatedBytes = pvcsData.reduce((sum, pvc) => sum + (pvc.requested_bytes || 0), 0);
-          const usedBytes = pvcsData.reduce((sum, pvc) => sum + (pvc.used_bytes || 0), 0);
-          const physicalCapacityGB = cluster?.storage_total_gb || 0; // Physical disk
-          const allocatedGB = allocatedBytes / (1024 ** 3); // Allocated in PVCs
-          const usedGB = usedBytes / (1024 ** 3); // Actually used
-          const availableGB = Math.max(0, physicalCapacityGB - usedGB); // Available based on real usage
-
-          setStorageMetrics({
-            total: physicalCapacityGB,    // Physical capacity
-            allocated: allocatedGB,        // Allocated in PVCs
-            used: usedGB,
-            available: Math.max(0, availableGB), // Ensure non-negative
-            pvcs: pvcsData || []
-          });
-        }
       }
 
       // Fetch recent AI incidents for selected cluster
@@ -189,17 +145,6 @@ const Index = () => {
             {/* Cost Chart */}
             <div className="animate-scale-in">
               <CostChart />
-            </div>
-
-            {/* Storage Chart */}
-            <div className="animate-scale-in">
-              <StorageChart 
-                total={storageMetrics.total}
-                allocated={storageMetrics.allocated}
-                used={storageMetrics.used}
-                available={storageMetrics.available}
-                pvcs={storageMetrics.pvcs || []}
-              />
             </div>
           </div>
 
