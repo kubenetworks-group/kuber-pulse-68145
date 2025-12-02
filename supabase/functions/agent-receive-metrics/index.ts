@@ -263,6 +263,55 @@ serve(async (req) => {
       }
     }
 
+    // Process standalone PVs (Released, Available, Failed)
+    const standalonePVsMetric = metrics.find(m => m.type === 'standalone_pvs');
+    if (standalonePVsMetric) {
+      const pvs = (standalonePVsMetric.data as any)?.pvs;
+      
+      if (Array.isArray(pvs) && pvs.length > 0) {
+        // Get user_id from cluster
+        const { data: clusterData } = await supabaseClient
+          .from('clusters')
+          .select('user_id')
+          .eq('id', cluster_id)
+          .single();
+        
+        if (clusterData) {
+          // Delete old PVs for this cluster
+          await supabaseClient
+            .from('persistent_volumes')
+            .delete()
+            .eq('cluster_id', cluster_id);
+          
+          // Insert new PVs
+          const pvsToInsert = pvs.map(pv => ({
+            cluster_id,
+            user_id: clusterData.user_id,
+            name: pv.name,
+            status: pv.status,
+            capacity_bytes: pv.capacity_bytes || 0,
+            storage_class: pv.storage_class || null,
+            reclaim_policy: pv.reclaim_policy || null,
+            access_modes: pv.access_modes || [],
+            volume_mode: pv.volume_mode || null,
+            claim_ref_namespace: pv.claim_ref_namespace || null,
+            claim_ref_name: pv.claim_ref_name || null,
+            last_sync: new Date().toISOString(),
+          }));
+          
+          const { error: pvError } = await supabaseClient
+            .from('persistent_volumes')
+            .insert(pvsToInsert);
+          
+          if (pvError) {
+            console.error('Error storing standalone PVs:', pvError);
+          } else {
+            console.log(`✅ Stored ${pvsToInsert.length} standalone PVs (Released/Available/Failed)`);
+          }
+        }
+      }
+    }
+
     // Process storage metrics (from PVs - will be replaced by node_storage)
     const storageMetric = metrics.find(m => m.type === 'storage');
     if (storageMetric) {

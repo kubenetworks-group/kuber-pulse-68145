@@ -1,39 +1,41 @@
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { NodeDetailsCard } from "@/components/NodeDetailsCard";
 import { CostChart } from "@/components/CostChart";
-import { ClusterHealthMap } from "@/components/ClusterHealthMap";
 import { AIInsightsWidget } from "@/components/AIInsightsWidget";
 import { PodHealthByNamespace } from "@/components/PodHealthByNamespace";
 import { ClusterEvents } from "@/components/ClusterEvents";
-import { StorageChart } from "@/components/StorageChart";
+import { WelcomeHeader } from "@/components/WelcomeHeader";
+import { ClusterOnboarding } from "@/components/ClusterOnboarding";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCluster } from "@/contexts/ClusterContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNodeMetrics } from "@/hooks/useNodeMetrics";
+import { useNavigate } from "react-router-dom";
 
 const Index = () => {
   const { user } = useAuth();
   const { selectedClusterId, clusters } = useCluster();
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [clusterData, setClusterData] = useState<any>(null);
   const [incidents, setIncidents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [storageMetrics, setStorageMetrics] = useState<{
-    total: number;
-    allocated: number;
-    used: number;
-    available: number;
-    pvcs: any[];
-  }>({
-    total: 0,
-    allocated: 0,
-    used: 0,
-    available: 0,
-    pvcs: []
-  });
   const nodeMetrics = useNodeMetrics(selectedClusterId);
+
+  // Check if user has completed onboarding
+  useEffect(() => {
+    if (user) {
+      const hasCompletedOnboarding = localStorage.getItem(`onboarding_completed_${user.id}`);
+      const hasSeenWelcome = localStorage.getItem(`welcome_shown_${user.id}`);
+      
+      // If user is new (seen welcome but not completed onboarding), redirect to welcome
+      if (hasSeenWelcome && !hasCompletedOnboarding) {
+        navigate('/welcome');
+      }
+    }
+  }, [user, navigate]);
 
   useEffect(() => {
     if (user && selectedClusterId) {
@@ -95,35 +97,6 @@ const Index = () => {
         console.error('Error fetching cluster:', clusterError);
       } else {
         setClusterData(cluster);
-        
-        // Fetch PVCs for storage calculation
-        const { data: pvcsData, error: pvcsError } = await supabase
-          .from('pvcs')
-          .select('requested_bytes, used_bytes')
-          .eq('cluster_id', selectedClusterId);
-
-        if (pvcsError) {
-          console.error('Error fetching PVCs:', pvcsError);
-        } else if (pvcsData) {
-          // Calculate storage metrics with 3 distinct values:
-          // 1. Physical Capacity (from cluster.storage_total_gb - actual disk on nodes)
-          // 2. Allocated (from PVCs requested_bytes - what was promised in PVCs)
-          // 3. Used Real (from PVCs used_bytes - what is actually written)
-          const allocatedBytes = pvcsData.reduce((sum, pvc) => sum + (pvc.requested_bytes || 0), 0);
-          const usedBytes = pvcsData.reduce((sum, pvc) => sum + (pvc.used_bytes || 0), 0);
-          const physicalCapacityGB = cluster?.storage_total_gb || 0; // Physical disk
-          const allocatedGB = allocatedBytes / (1024 ** 3); // Allocated in PVCs
-          const usedGB = usedBytes / (1024 ** 3); // Actually used
-          const availableGB = Math.max(0, physicalCapacityGB - usedGB); // Available based on real usage
-
-          setStorageMetrics({
-            total: physicalCapacityGB,    // Physical capacity
-            allocated: allocatedGB,        // Allocated in PVCs
-            used: usedGB,
-            available: Math.max(0, availableGB), // Ensure non-negative
-            pvcs: pvcsData || []
-          });
-        }
       }
 
       // Fetch recent AI incidents for selected cluster
@@ -149,20 +122,26 @@ const Index = () => {
   return (
     <DashboardLayout>
       <div className="p-4 sm:p-6 lg:p-8 space-y-6 animate-fade-in">
-        {/* Header Section */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-2 bg-gradient-to-r from-primary via-primary/80 to-primary/60 bg-clip-text text-transparent">
-              {t('dashboard.title')}
-            </h1>
-            <p className="text-muted-foreground text-sm sm:text-base lg:text-lg">
-              {clusterData ? `${clusterData.name} - ${clusterData.environment}` : t('dashboard.overview')}
-            </p>
-          </div>
-        </div>
+        {/* Welcome Header */}
+        <WelcomeHeader />
 
-        {/* Main Content Grid */}
-        <div className="grid gap-6 lg:grid-cols-3">
+        {/* Show Onboarding if no clusters */}
+        {clusters.length === 0 ? (
+          <ClusterOnboarding />
+        ) : (
+          <>
+            {/* Cluster Info Badge */}
+            {clusterData && (
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20 animate-in fade-in slide-in-from-top-3 duration-500">
+                <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
+                <span className="text-sm font-medium text-foreground">
+                  {clusterData.name} - {clusterData.environment}
+                </span>
+              </div>
+            )}
+
+            {/* Main Content Grid */}
+            <div className="grid gap-6 lg:grid-cols-3">
           {/* Left Column - 2 columns wide */}
           <div className="lg:col-span-2 space-y-6">
             {/* AI Insights Widget */}
@@ -190,17 +169,6 @@ const Index = () => {
             <div className="animate-scale-in">
               <CostChart />
             </div>
-
-            {/* Storage Chart */}
-            <div className="animate-scale-in">
-              <StorageChart 
-                total={storageMetrics.total}
-                allocated={storageMetrics.allocated}
-                used={storageMetrics.used}
-                available={storageMetrics.available}
-                pvcs={storageMetrics.pvcs || []}
-              />
-            </div>
           </div>
 
           {/* Right Column - 1 column wide */}
@@ -216,6 +184,8 @@ const Index = () => {
             </div>
           </div>
         </div>
+          </>
+        )}
       </div>
     </DashboardLayout>
   );

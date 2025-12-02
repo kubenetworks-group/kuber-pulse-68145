@@ -5,7 +5,7 @@ import "./index.css";
 import "./i18n/config";
 
 createRoot(document.getElementById("root")!).render(
-  <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+  <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
     <App />
   </ThemeProvider>
 );

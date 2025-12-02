@@ -247,20 +247,42 @@ const Clusters = () => {
   const handleDeleteCluster = async () => {
     if (!clusterToDelete) return;
 
-    const { error } = await supabase
-      .from("clusters")
-      .delete()
-      .eq("id", clusterToDelete);
+    try {
+      // Delete related records first (foreign key constraints)
+      await Promise.all([
+        supabase.from("cluster_events").delete().eq("cluster_id", clusterToDelete),
+        supabase.from("cluster_validation_results").delete().eq("cluster_id", clusterToDelete),
+        supabase.from("agent_metrics").delete().eq("cluster_id", clusterToDelete),
+        supabase.from("agent_api_keys").delete().eq("cluster_id", clusterToDelete),
+        supabase.from("agent_anomalies").delete().eq("cluster_id", clusterToDelete),
+        supabase.from("agent_commands").delete().eq("cluster_id", clusterToDelete),
+        supabase.from("ai_incidents").delete().eq("cluster_id", clusterToDelete),
+        supabase.from("ai_cost_savings").delete().eq("cluster_id", clusterToDelete),
+        supabase.from("cost_calculations").delete().eq("cluster_id", clusterToDelete),
+        supabase.from("persistent_volumes").delete().eq("cluster_id", clusterToDelete),
+        supabase.from("pvcs").delete().eq("cluster_id", clusterToDelete),
+        supabase.from("scan_history").delete().eq("cluster_id", clusterToDelete),
+      ]);
 
-    if (error) {
-      toast.error("Failed to delete cluster");
-      console.error(error);
-    } else {
-      toast.success("Cluster deleted successfully!");
-      setClusters(clusters.filter((c) => c.id !== clusterToDelete));
-      if (selectedClusterId === clusterToDelete) {
-        setSelectedClusterId(null);
+      // Now delete the cluster
+      const { error } = await supabase
+        .from("clusters")
+        .delete()
+        .eq("id", clusterToDelete);
+
+      if (error) {
+        toast.error("Falha ao excluir cluster");
+        console.error(error);
+      } else {
+        toast.success("Cluster excluído com sucesso!");
+        setClusters(clusters.filter((c) => c.id !== clusterToDelete));
+        if (selectedClusterId === clusterToDelete) {
+          setSelectedClusterId(null);
+        }
       }
+    } catch (err) {
+      toast.error("Falha ao excluir cluster e dados relacionados");
+      console.error(err);
     }
 
     setDeleteDialogOpen(false);

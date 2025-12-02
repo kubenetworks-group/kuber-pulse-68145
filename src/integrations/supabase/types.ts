@@ -541,6 +541,42 @@ export type Database = {
           },
         ]
       }
+      documentation: {
+        Row: {
+          category: string
+          content: string
+          created_at: string
+          id: string
+          is_public: boolean | null
+          tags: string[] | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category: string
+          content: string
+          created_at?: string
+          id?: string
+          is_public?: boolean | null
+          tags?: string[] | null
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          content?: string
+          created_at?: string
+          id?: string
+          is_public?: boolean | null
+          tags?: string[] | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           created_at: string
@@ -609,6 +645,65 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      persistent_volumes: {
+        Row: {
+          access_modes: string[] | null
+          capacity_bytes: number
+          claim_ref_name: string | null
+          claim_ref_namespace: string | null
+          cluster_id: string
+          created_at: string | null
+          id: string
+          last_sync: string | null
+          name: string
+          reclaim_policy: string | null
+          status: string
+          storage_class: string | null
+          user_id: string
+          volume_mode: string | null
+        }
+        Insert: {
+          access_modes?: string[] | null
+          capacity_bytes?: number
+          claim_ref_name?: string | null
+          claim_ref_namespace?: string | null
+          cluster_id: string
+          created_at?: string | null
+          id?: string
+          last_sync?: string | null
+          name: string
+          reclaim_policy?: string | null
+          status: string
+          storage_class?: string | null
+          user_id: string
+          volume_mode?: string | null
+        }
+        Update: {
+          access_modes?: string[] | null
+          capacity_bytes?: number
+          claim_ref_name?: string | null
+          claim_ref_namespace?: string | null
+          cluster_id?: string
+          created_at?: string | null
+          id?: string
+          last_sync?: string | null
+          name?: string
+          reclaim_policy?: string | null
+          status?: string
+          storage_class?: string | null
+          user_id?: string
+          volume_mode?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "persistent_volumes_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -727,6 +822,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_consents: {
+        Row: {
+          consent_date: string
+          created_at: string
+          id: string
+          ip_address: string | null
+          marketing_consent: boolean
+          privacy_policy_accepted: boolean
+          terms_accepted: boolean
+          updated_at: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          consent_date?: string
+          created_at?: string
+          id?: string
+          ip_address?: string | null
+          marketing_consent?: boolean
+          privacy_policy_accepted?: boolean
+          terms_accepted?: boolean
+          updated_at?: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          consent_date?: string
+          created_at?: string
+          id?: string
+          ip_address?: string | null
+          marketing_consent?: boolean
+          privacy_policy_accepted?: boolean
+          terms_accepted?: boolean
+          updated_at?: string
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
       }
     }
     Views: {

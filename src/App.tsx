@@ -8,11 +8,16 @@ import { ClusterProvider } from "@/contexts/ClusterContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
+import Welcome from "./pages/Welcome";
 import Clusters from "./pages/Clusters";
 import AIMonitor from "./pages/AIMonitor";
 import Costs from "./pages/Costs";
+import Storage from "./pages/Storage";
 import Settings from "./pages/Settings";
 import Agents from "./pages/Agents";
+import Documentation from "./pages/Documentation";
+import TermsOfService from "./pages/TermsOfService";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -27,6 +32,14 @@ const App = () => (
           <ClusterProvider>
             <Routes>
               <Route path="/auth" element={<Auth />} />
+              <Route
+                path="/welcome"
+                element={
+                  <ProtectedRoute>
+                    <Welcome />
+                  </ProtectedRoute>
+                }
+              />
               <Route
                 path="/"
                 element={
@@ -60,6 +73,14 @@ const App = () => (
                 }
               />
               <Route
+                path="/storage"
+                element={
+                  <ProtectedRoute>
+                    <Storage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
                 path="/settings"
                 element={
                   <ProtectedRoute>
@@ -75,6 +96,16 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
+              <Route
+                path="/documentation"
+                element={
+                  <ProtectedRoute>
+                    <Documentation />
+                  </ProtectedRoute>
+                }
+              />
+              <Route path="/terms" element={<TermsOfService />} />
+              <Route path="/privacy" element={<PrivacyPolicy />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </ClusterProvider>
