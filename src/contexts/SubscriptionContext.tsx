@@ -14,6 +14,10 @@ interface Subscription {
   trial_ends_at: string;
   ai_analyses_used: number;
   ai_analyses_reset_at: string;
+  stripe_customer_id?: string;
+  stripe_subscription_id?: string;
+  stripe_price_id?: string;
+  current_period_end?: string;
 }
 
 interface PlanLimits {
