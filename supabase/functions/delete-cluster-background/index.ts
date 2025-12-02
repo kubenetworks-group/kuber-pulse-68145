@@ -24,8 +24,7 @@ Deno.serve(async (req) => {
       )
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const supabase = createClient(supabaseUrl, supabaseServiceKey) as any
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
     // Start background task
     EdgeRuntime.waitUntil(deleteClusterInBackground(supabase, cluster_id, cluster_name, user_id, notification_id))
@@ -44,8 +43,8 @@ Deno.serve(async (req) => {
   }
 })
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function deleteClusterInBackground(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
   clusterId: string,
   clusterName: string,
@@ -53,91 +52,31 @@ async function deleteClusterInBackground(
   notificationId: string
 ) {
   const startTime = Date.now()
-  let deletedMetrics = 0
   
   try {
     console.log(`Starting background deletion for cluster ${clusterId}`)
 
-    // Delete agent_metrics in batches
-    const BATCH_SIZE = 5000
-    let hasMoreMetrics = true
-    
-    while (hasMoreMetrics) {
-      const { data: metricsToDelete, error: selectError } = await supabase
-        .from("agent_metrics")
-        .select("id")
-        .eq("cluster_id", clusterId)
-        .limit(BATCH_SIZE)
+    // Update notification to show processing
+    await supabase
+      .from('notifications')
+      .update({
+        message: `Excluindo cluster "${clusterName}"... Processando dados.`
+      })
+      .eq('id', notificationId)
 
-      if (selectError) {
-        console.error('Error selecting metrics:', selectError)
-        throw selectError
-      }
+    // Call the database function to delete all cluster data efficiently
+    const { data: deletedCount, error: rpcError } = await supabase.rpc('delete_cluster_data', {
+      p_cluster_id: clusterId
+    })
 
-      if (metricsToDelete && metricsToDelete.length > 0) {
-        const ids = metricsToDelete.map((m: { id: string }) => m.id)
-        const { error: deleteError } = await supabase
-          .from("agent_metrics")
-          .delete()
-          .in("id", ids)
-
-        if (deleteError) {
-          console.error('Error deleting metrics batch:', deleteError)
-          throw deleteError
-        }
-        
-        deletedMetrics += ids.length
-        console.log(`Deleted ${deletedMetrics} metrics so far...`)
-
-        // Update notification with progress every 10000 records
-        if (deletedMetrics % 10000 === 0) {
-          await supabase
-            .from('notifications')
-            .update({
-              message: `Excluindo cluster "${clusterName}"... ${deletedMetrics.toLocaleString()} métricas removidas.`
-            })
-            .eq('id', notificationId)
-        }
-      } else {
-        hasMoreMetrics = false
-      }
-    }
-
-    console.log(`Finished deleting ${deletedMetrics} metrics, now deleting related records...`)
-
-    // Delete other related records
-    const tables = [
-      "cluster_events",
-      "cluster_validation_results",
-      "agent_api_keys",
-      "agent_anomalies",
-      "agent_commands",
-      "ai_incidents",
-      "ai_cost_savings",
-      "cost_calculations",
-      "persistent_volumes",
-      "pvcs",
-      "scan_history",
-    ]
-
-    for (const table of tables) {
-      const { error } = await supabase.from(table).delete().eq("cluster_id", clusterId)
-      if (error) {
-        console.error(`Error deleting from ${table}:`, error)
-      }
-    }
-
-    // Finally delete the cluster
-    const { error: clusterError } = await supabase
-      .from("clusters")
-      .delete()
-      .eq("id", clusterId)
-
-    if (clusterError) {
-      throw clusterError
+    if (rpcError) {
+      console.error('Error calling delete_cluster_data RPC:', rpcError)
+      throw rpcError
     }
 
     const elapsedTime = Math.round((Date.now() - startTime) / 1000)
+
+    console.log(`Successfully deleted cluster ${clusterId} with ${deletedCount} metrics in ${elapsedTime}s`)
 
     // Update notification to success
     await supabase
@@ -145,7 +84,7 @@ async function deleteClusterInBackground(
       .update({
         type: 'success',
         title: 'Cluster excluído com sucesso',
-        message: `O cluster "${clusterName}" foi excluído. ${deletedMetrics.toLocaleString()} métricas removidas em ${elapsedTime}s.`,
+        message: `O cluster "${clusterName}" foi excluído. ${deletedCount?.toLocaleString() || 0} métricas removidas em ${elapsedTime}s.`,
         related_entity_type: null,
         related_entity_id: null
       })
@@ -159,8 +98,6 @@ async function deleteClusterInBackground(
       message: `O cluster "${clusterName}" foi completamente removido do sistema.`,
       read: false
     })
-
-    console.log(`Successfully deleted cluster ${clusterId} in ${elapsedTime}s`)
 
   } catch (err) {
     const error = err as Error
