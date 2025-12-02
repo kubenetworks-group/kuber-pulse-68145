@@ -828,9 +828,13 @@ export type Database = {
           ai_analyses_reset_at: string
           ai_analyses_used: number
           created_at: string
+          current_period_end: string | null
           id: string
           plan: string
           status: string
+          stripe_customer_id: string | null
+          stripe_price_id: string | null
+          stripe_subscription_id: string | null
           trial_ends_at: string
           trial_started_at: string
           updated_at: string
@@ -840,9 +844,13 @@ export type Database = {
           ai_analyses_reset_at?: string
           ai_analyses_used?: number
           created_at?: string
+          current_period_end?: string | null
           id?: string
           plan?: string
           status?: string
+          stripe_customer_id?: string | null
+          stripe_price_id?: string | null
+          stripe_subscription_id?: string | null
           trial_ends_at?: string
           trial_started_at?: string
           updated_at?: string
@@ -852,9 +860,13 @@ export type Database = {
           ai_analyses_reset_at?: string
           ai_analyses_used?: number
           created_at?: string
+          current_period_end?: string | null
           id?: string
           plan?: string
           status?: string
+          stripe_customer_id?: string | null
+          stripe_price_id?: string | null
+          stripe_subscription_id?: string | null
           trial_ends_at?: string
           trial_started_at?: string
           updated_at?: string

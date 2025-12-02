@@ -1,14 +1,18 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { PlanCard } from '@/components/PlanCard';
+import { ManageSubscription } from '@/components/ManageSubscription';
 import { useSubscription, PlanType } from '@/contexts/SubscriptionContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
-import { Clock, Brain, Server, Calendar, Sparkles } from 'lucide-react';
+import { Clock, Brain, Server, Calendar, Sparkles, CheckCircle } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
 export default function Pricing() {
+  const [searchParams] = useSearchParams();
   const { 
     subscription, 
     currentPlan, 
@@ -16,27 +20,60 @@ export default function Pricing() {
     daysLeftInTrial, 
     planLimits, 
     changePlan,
-    isReadOnly
+    isReadOnly,
+    refetch
   } = useSubscription();
   const [loadingPlan, setLoadingPlan] = useState<PlanType | null>(null);
 
+  // Handle success/cancel redirects from Stripe
+  useEffect(() => {
+    if (searchParams.get('success') === 'true') {
+      toast.success('Assinatura ativada com sucesso!');
+      refetch();
+    } else if (searchParams.get('canceled') === 'true') {
+      toast.info('Checkout cancelado');
+    }
+  }, [searchParams, refetch]);
+
   const handleSelectPlan = async (plan: PlanType) => {
     if (plan === 'enterprise') {
-      // Open contact form or email
       window.open('mailto:contato@kuberpulse.com?subject=Interesse no plano Enterprise', '_blank');
       return;
     }
 
+    if (plan === 'free') {
+      // Direct change to free (downgrade)
+      setLoadingPlan(plan);
+      try {
+        const success = await changePlan(plan);
+        if (success) {
+          toast.success('Plano alterado para FREE com sucesso!');
+        } else {
+          toast.error('Erro ao alterar plano');
+        }
+      } catch (error) {
+        toast.error('Erro ao processar sua solicitação');
+      } finally {
+        setLoadingPlan(null);
+      }
+      return;
+    }
+
+    // For pro plan, redirect to Stripe checkout
     setLoadingPlan(plan);
     try {
-      const success = await changePlan(plan);
-      if (success) {
-        toast.success(`Plano alterado para ${plan.toUpperCase()} com sucesso!`);
-      } else {
-        toast.error('Erro ao alterar plano');
+      const { data, error } = await supabase.functions.invoke('create-checkout-session', {
+        body: { plan }
+      });
+
+      if (error) throw error;
+
+      if (data?.url) {
+        window.open(data.url, '_blank');
       }
-    } catch (error) {
-      toast.error('Erro ao processar sua solicitação');
+    } catch (error: any) {
+      console.error('Checkout error:', error);
+      toast.error('Erro ao iniciar checkout. Tente novamente.');
     } finally {
       setLoadingPlan(null);
     }
@@ -45,6 +82,8 @@ export default function Pricing() {
   const aiUsagePercent = planLimits.aiAnalysesPerMonth === Infinity 
     ? 0 
     : ((subscription?.ai_analyses_used || 0) / planLimits.aiAnalysesPerMonth) * 100;
+
+  const hasStripeSubscription = !!subscription?.stripe_subscription_id;
 
   return (
     <DashboardLayout>
@@ -63,13 +102,18 @@ export default function Pricing() {
         {/* Current Status Card */}
         <Card className="max-w-2xl mx-auto">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-primary" />
-              Seu Status Atual
-            </CardTitle>
-            <CardDescription>
-              Informações sobre sua assinatura
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-primary" />
+                  Seu Status Atual
+                </CardTitle>
+                <CardDescription>
+                  Informações sobre sua assinatura
+                </CardDescription>
+              </div>
+              {hasStripeSubscription && <ManageSubscription />}
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
@@ -89,6 +133,12 @@ export default function Pricing() {
                     {isReadOnly && (
                       <Badge variant="destructive" className="text-xs">
                         Somente leitura
+                      </Badge>
+                    )}
+                    {hasStripeSubscription && !isTrialActive && (
+                      <Badge variant="default" className="text-xs flex items-center gap-1">
+                        <CheckCircle className="w-3 h-3" />
+                        Ativo
                       </Badge>
                     )}
                   </p>
@@ -147,6 +197,7 @@ export default function Pricing() {
               isTrialActive={isTrialActive}
               onSelect={handleSelectPlan}
               isLoading={loadingPlan === plan}
+              hasStripeSubscription={hasStripeSubscription}
             />
           ))}
         </div>
@@ -154,8 +205,8 @@ export default function Pricing() {
         {/* FAQ or additional info */}
         <div className="max-w-2xl mx-auto text-center text-sm text-muted-foreground">
           <p>
-            Não é necessário cadastrar cartão de crédito. 
-            Você pode fazer upgrade ou downgrade a qualquer momento.
+            Plano Free não requer cartão de crédito. 
+            Planos Pro e Enterprise requerem cadastro de cartão para cobrança mensal.
           </p>
           <p className="mt-2">
             Precisa de ajuda? Entre em contato conosco em{' '}

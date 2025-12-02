@@ -1,7 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Check, X, Crown, Sparkles } from 'lucide-react';
+import { Check, X, Crown, Sparkles, CreditCard } from 'lucide-react';
 import { PlanType, PLAN_LIMITS } from '@/contexts/SubscriptionContext';
 import { cn } from '@/lib/utils';
 
@@ -11,28 +11,33 @@ interface PlanCardProps {
   isTrialActive: boolean;
   onSelect: (plan: PlanType) => void;
   isLoading?: boolean;
+  hasStripeSubscription?: boolean;
 }
 
-const planDetails: Record<PlanType, { name: string; price: string; description: string; highlight?: boolean }> = {
+const planDetails: Record<PlanType, { name: string; price: string; priceNote?: string; description: string; highlight?: boolean; requiresCard?: boolean }> = {
   free: {
     name: 'Free',
     price: 'R$ 0',
     description: 'Para explorar a plataforma',
+    requiresCard: false,
   },
   pro: {
     name: 'Pro',
-    price: 'R$ 99/mês',
+    price: 'R$ 99',
+    priceNote: '/mês',
     description: 'Para equipes em crescimento',
     highlight: true,
+    requiresCard: true,
   },
   enterprise: {
     name: 'Enterprise',
     price: 'Sob consulta',
     description: 'Para grandes organizações',
+    requiresCard: true,
   },
 };
 
-export const PlanCard = ({ plan, isCurrentPlan, isTrialActive, onSelect, isLoading }: PlanCardProps) => {
+export const PlanCard = ({ plan, isCurrentPlan, isTrialActive, onSelect, isLoading, hasStripeSubscription }: PlanCardProps) => {
   const details = planDetails[plan];
   const limits = PLAN_LIMITS[plan];
 
@@ -69,11 +74,21 @@ export const PlanCard = ({ plan, isCurrentPlan, isTrialActive, onSelect, isLoadi
     },
   ];
 
+  const getButtonText = () => {
+    if (isLoading) return "Processando...";
+    if (isCurrentPlan && !isTrialActive) return "Plano atual";
+    if (isTrialActive && isCurrentPlan) return "Em teste";
+    if (plan === 'enterprise') return "Falar com vendas";
+    if (plan === 'pro') return "Assinar agora";
+    if (plan === 'free' && hasStripeSubscription) return "Fazer downgrade";
+    return "Selecionar plano";
+  };
+
   return (
     <Card className={cn(
       "relative overflow-hidden transition-all",
       details.highlight && "border-primary shadow-lg scale-105",
-      isCurrentPlan && "ring-2 ring-primary"
+      isCurrentPlan && !isTrialActive && "ring-2 ring-primary"
     )}>
       {details.highlight && (
         <div className="absolute top-0 right-0 bg-primary text-primary-foreground px-3 py-1 text-xs font-medium rounded-bl-lg flex items-center gap-1">
@@ -82,13 +97,13 @@ export const PlanCard = ({ plan, isCurrentPlan, isTrialActive, onSelect, isLoadi
         </div>
       )}
       
-      {isCurrentPlan && (
+      {isCurrentPlan && !isTrialActive && (
         <Badge className="absolute top-3 left-3" variant="secondary">
           Plano atual
         </Badge>
       )}
 
-      <CardHeader className={cn("pt-8", isCurrentPlan && "pt-12")}>
+      <CardHeader className={cn("pt-8", isCurrentPlan && !isTrialActive && "pt-12")}>
         <CardTitle className="text-2xl flex items-center gap-2">
           {plan === 'enterprise' && <Crown className="w-5 h-5 text-primary" />}
           {details.name}
@@ -96,7 +111,16 @@ export const PlanCard = ({ plan, isCurrentPlan, isTrialActive, onSelect, isLoadi
         <CardDescription>{details.description}</CardDescription>
         <div className="mt-4">
           <span className="text-3xl font-bold">{details.price}</span>
+          {details.priceNote && (
+            <span className="text-muted-foreground text-sm">{details.priceNote}</span>
+          )}
         </div>
+        {details.requiresCard && (
+          <div className="flex items-center gap-1 text-xs text-muted-foreground mt-2">
+            <CreditCard className="w-3 h-3" />
+            <span>Requer cartão de crédito</span>
+          </div>
+        )}
       </CardHeader>
 
       <CardContent className="space-y-4">
@@ -124,19 +148,17 @@ export const PlanCard = ({ plan, isCurrentPlan, isTrialActive, onSelect, isLoadi
         <Button
           className="w-full"
           variant={details.highlight ? "default" : "outline"}
-          disabled={isCurrentPlan || isLoading}
+          disabled={(isCurrentPlan && !isTrialActive) || isLoading}
           onClick={() => onSelect(plan)}
         >
-          {isLoading ? (
-            "Processando..."
-          ) : isCurrentPlan ? (
-            isTrialActive ? "Em teste" : "Plano atual"
-          ) : plan === 'enterprise' ? (
-            "Falar com vendas"
-          ) : (
-            "Selecionar plano"
-          )}
+          {getButtonText()}
         </Button>
+
+        {plan === 'pro' && (
+          <p className="text-xs text-center text-muted-foreground">
+            Cobrança mensal • Cancele quando quiser
+          </p>
+        )}
       </CardContent>
     </Card>
   );
