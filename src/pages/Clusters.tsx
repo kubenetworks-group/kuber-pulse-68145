@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ClusterCard } from "@/components/ClusterCard";
 import { ClusterLogs } from "@/components/ClusterLogs";
+import { ClusterDeletionProgress } from "@/components/ClusterDeletionProgress";
 import { Plus, Trash2, RefreshCw, Edit } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -34,6 +35,7 @@ const Clusters = () => {
   const [clusterToDeleteName, setClusterToDeleteName] = useState<string>("");
   const [deleteConfirmName, setDeleteConfirmName] = useState<string>("");
   const [isDeleting, setIsDeleting] = useState(false);
+  const [deletingClusters, setDeletingClusters] = useState<{id: string, name: string, notificationId: string}[]>([]);
   const [clusterToEdit, setClusterToEdit] = useState<any | null>(null);
   const [refreshingCluster, setRefreshingCluster] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -253,80 +255,57 @@ const Clusters = () => {
     setIsDeleting(true);
 
     try {
-      toast.info("Excluindo dados do cluster... isso pode levar alguns segundos.");
+      // Create a notification for tracking progress
+      const { data: notification, error: notifError } = await supabase
+        .from('notifications')
+        .insert({
+          user_id: user?.id,
+          type: 'info',
+          title: 'Excluindo cluster...',
+          message: `Iniciando exclusão do cluster "${clusterToDeleteName}". Isso pode levar alguns minutos.`,
+          read: false,
+          related_entity_type: 'cluster_deletion',
+          related_entity_id: clusterToDelete
+        })
+        .select()
+        .single();
 
-      // Delete agent_metrics in larger parallel batches for speed
-      const BATCH_SIZE = 5000;
-      const PARALLEL_BATCHES = 5;
-      
-      let hasMoreMetrics = true;
-      let totalDeleted = 0;
-      
-      while (hasMoreMetrics) {
-        // Fetch multiple batches of IDs in parallel
-        const batchPromises = Array(PARALLEL_BATCHES).fill(null).map(() =>
-          supabase
-            .from("agent_metrics")
-            .select("id")
-            .eq("cluster_id", clusterToDelete)
-            .limit(BATCH_SIZE)
-        );
-        
-        const batchResults = await Promise.all(batchPromises);
-        const allIds: string[] = [];
-        
-        for (const result of batchResults) {
-          if (result.data && result.data.length > 0) {
-            allIds.push(...result.data.map(m => m.id));
-          }
+      if (notifError) throw notifError;
+
+      // Add to deleting clusters list for progress tracking
+      setDeletingClusters(prev => [...prev, {
+        id: clusterToDelete,
+        name: clusterToDeleteName,
+        notificationId: notification.id
+      }]);
+
+      // Call background deletion function
+      const { error: funcError } = await supabase.functions.invoke('delete-cluster-background', {
+        body: {
+          cluster_id: clusterToDelete,
+          cluster_name: clusterToDeleteName,
+          user_id: user?.id,
+          notification_id: notification.id
         }
-        
-        if (allIds.length > 0) {
-          // Delete all fetched IDs in parallel chunks
-          const deleteChunks = [];
-          for (let i = 0; i < allIds.length; i += BATCH_SIZE) {
-            const chunk = allIds.slice(i, i + BATCH_SIZE);
-            deleteChunks.push(
-              supabase.from("agent_metrics").delete().in("id", chunk)
-            );
-          }
-          await Promise.all(deleteChunks);
-          totalDeleted += allIds.length;
-        } else {
-          hasMoreMetrics = false;
-        }
+      });
+
+      if (funcError) {
+        console.error('Error calling delete function:', funcError);
+        throw funcError;
       }
 
-      // Delete all other related records in parallel (smaller tables)
-      await Promise.all([
-        supabase.from("cluster_events").delete().eq("cluster_id", clusterToDelete),
-        supabase.from("cluster_validation_results").delete().eq("cluster_id", clusterToDelete),
-        supabase.from("agent_api_keys").delete().eq("cluster_id", clusterToDelete),
-        supabase.from("agent_anomalies").delete().eq("cluster_id", clusterToDelete),
-        supabase.from("agent_commands").delete().eq("cluster_id", clusterToDelete),
-        supabase.from("ai_incidents").delete().eq("cluster_id", clusterToDelete),
-        supabase.from("ai_cost_savings").delete().eq("cluster_id", clusterToDelete),
-        supabase.from("cost_calculations").delete().eq("cluster_id", clusterToDelete),
-        supabase.from("persistent_volumes").delete().eq("cluster_id", clusterToDelete),
-        supabase.from("pvcs").delete().eq("cluster_id", clusterToDelete),
-        supabase.from("scan_history").delete().eq("cluster_id", clusterToDelete),
-      ]);
+      toast.success("Exclusão iniciada em segundo plano", {
+        description: "Você pode continuar usando o sistema normalmente. Acompanhe o progresso nas notificações."
+      });
 
-      // Finally delete the cluster
-      const { error } = await supabase
-        .from("clusters")
-        .delete()
-        .eq("id", clusterToDelete);
-
-      if (error) throw error;
-
-      toast.success("Cluster excluído com sucesso!");
+      // Remove cluster from local list immediately (optimistic update)
       setClusters(clusters.filter((c) => c.id !== clusterToDelete));
       if (selectedClusterId === clusterToDelete) {
         setSelectedClusterId(null);
       }
+
     } catch (err) {
-      toast.error("Falha ao excluir cluster");
+      toast.error("Falha ao iniciar exclusão do cluster");
       console.error(err);
     } finally {
       setIsDeleting(false);
@@ -336,6 +315,40 @@ const Clusters = () => {
       setDeleteConfirmName("");
     }
   };
+
+  // Listen for deletion completion via notifications
+  useEffect(() => {
+    if (!user || deletingClusters.length === 0) return;
+
+    const channel = supabase
+      .channel('deletion-progress')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`
+        },
+        (payload) => {
+          const notification = payload.new as any;
+          
+          // Check if this is a completed deletion
+          if (notification.related_entity_type === null && 
+              (notification.type === 'success' || notification.type === 'error')) {
+            // Find and remove from deleting list
+            setDeletingClusters(prev => 
+              prev.filter(c => c.notificationId !== notification.id)
+            );
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, deletingClusters]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -602,6 +615,7 @@ const Clusters = () => {
           </div>
         ) : (
           <div className="space-y-6">
+            <ClusterDeletionProgress deletingClusters={deletingClusters} />
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {clusters.map((cluster) => (
                 <div key={cluster.id} className="relative group">

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Bell, Check, X, AlertCircle, CheckCircle, AlertTriangle, Info } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Bell, Check, X, AlertCircle, CheckCircle, AlertTriangle, Info, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -40,9 +41,20 @@ const notificationColors = {
 
 export const NotificationBell = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [open, setOpen] = useState(false);
+
+  const handleNotificationClick = (notification: Notification) => {
+    markAsRead(notification.id);
+    
+    // If it's a cluster deletion notification, navigate to clusters page
+    if (notification.related_entity_type === 'cluster_deletion') {
+      setOpen(false);
+      navigate('/clusters');
+    }
+  };
 
   useEffect(() => {
     if (user) {
@@ -191,18 +203,24 @@ export const NotificationBell = () => {
           ) : (
             <div className="divide-y">
               {notifications.map(notification => {
-                const Icon = notificationIcons[notification.type];
+                const Icon = notification.related_entity_type === 'cluster_deletion' 
+                  ? Loader2 
+                  : notificationIcons[notification.type];
+                const isProcessing = notification.related_entity_type === 'cluster_deletion';
+                
                 return (
                   <div
                     key={notification.id}
+                    onClick={() => handleNotificationClick(notification)}
                     className={cn(
-                      "p-4 hover:bg-muted/50 transition-colors",
-                      !notification.read && "bg-primary/5"
+                      "p-4 hover:bg-muted/50 transition-colors cursor-pointer",
+                      !notification.read && "bg-primary/5",
+                      isProcessing && "bg-warning/10 border-l-2 border-warning"
                     )}
                   >
                     <div className="flex items-start gap-3">
-                      <div className={cn("mt-1", notificationColors[notification.type])}>
-                        <Icon className="h-5 w-5" />
+                      <div className={cn("mt-1", isProcessing ? "text-warning" : notificationColors[notification.type])}>
+                        <Icon className={cn("h-5 w-5", isProcessing && "animate-spin")} />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-2">
