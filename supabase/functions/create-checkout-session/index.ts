@@ -11,33 +11,63 @@ const PRICE_IDS = {
   pro: "price_1SZvJ1KqhwUY4V5zcXrVOLkS",
 };
 
+const logStep = (step: string, details?: any) => {
+  const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
+  console.log(`[CREATE-CHECKOUT] ${step}${detailsStr}`);
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const supabaseClient = createClient(
-    Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_ANON_KEY") ?? ""
-  );
-
   try {
-    const authHeader = req.headers.get("Authorization")!;
-    const token = authHeader.replace("Bearer ", "");
-    const { data } = await supabaseClient.auth.getUser(token);
-    const user = data.user;
-    
-    if (!user?.email) {
-      throw new Error("User not authenticated or email not available");
+    logStep("Function started");
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
+    const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      throw new Error("Missing Supabase configuration");
     }
 
+    if (!stripeKey) {
+      throw new Error("STRIPE_SECRET_KEY is not configured");
+    }
+
+    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      logStep("No authorization header");
+      throw new Error("No authorization header provided");
+    }
+    logStep("Authorization header found");
+
+    const token = authHeader.replace("Bearer ", "");
+    const { data: userData, error: userError } = await supabaseClient.auth.getUser(token);
+    
+    if (userError) {
+      logStep("Auth error", { error: userError.message });
+      throw new Error(`Authentication error: ${userError.message}`);
+    }
+
+    const user = userData.user;
+    if (!user?.email) {
+      logStep("No user or email found", { userId: user?.id, hasEmail: !!user?.email });
+      throw new Error("User not authenticated or email not available");
+    }
+    logStep("User authenticated", { userId: user.id, email: user.email });
+
     const { plan } = await req.json();
+    logStep("Plan requested", { plan });
     
     if (!plan || !PRICE_IDS[plan as keyof typeof PRICE_IDS]) {
       throw new Error("Invalid plan selected");
     }
 
-    const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
+    const stripe = new Stripe(stripeKey, {
       apiVersion: "2025-08-27.basil",
     });
 
@@ -47,6 +77,9 @@ serve(async (req) => {
     
     if (customers.data.length > 0) {
       customerId = customers.data[0].id;
+      logStep("Existing customer found", { customerId });
+    } else {
+      logStep("No existing customer, will create new");
     }
 
     const priceId = PRICE_IDS[plan as keyof typeof PRICE_IDS];
@@ -75,14 +108,14 @@ serve(async (req) => {
       },
     });
 
-    console.log(`[CREATE-CHECKOUT] Session created for user ${user.id}, plan: ${plan}`);
+    logStep("Session created successfully", { sessionId: session.id });
 
     return new Response(JSON.stringify({ url: session.url }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
     });
   } catch (error: any) {
-    console.error("[CREATE-CHECKOUT] Error:", error);
+    console.error("[CREATE-CHECKOUT] Error:", error.message || error);
     return new Response(JSON.stringify({ error: error.message || "Unknown error" }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,
