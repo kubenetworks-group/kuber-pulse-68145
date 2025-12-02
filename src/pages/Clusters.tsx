@@ -253,49 +253,64 @@ const Clusters = () => {
     setIsDeleting(true);
 
     try {
-      toast.info("Excluindo métricas do cluster...");
+      toast.info("Excluindo dados do cluster... isso pode levar alguns segundos.");
 
-      // Delete agent_metrics in batches to avoid timeout
+      // Delete agent_metrics in larger parallel batches for speed
+      const BATCH_SIZE = 5000;
+      const PARALLEL_BATCHES = 5;
+      
       let hasMoreMetrics = true;
-      let deletedBatches = 0;
+      let totalDeleted = 0;
       
       while (hasMoreMetrics) {
-        const { data: metricsToDelete } = await supabase
-          .from("agent_metrics")
-          .select("id")
-          .eq("cluster_id", clusterToDelete)
-          .limit(1000);
-
-        if (metricsToDelete && metricsToDelete.length > 0) {
-          const ids = metricsToDelete.map(m => m.id);
-          await supabase
+        // Fetch multiple batches of IDs in parallel
+        const batchPromises = Array(PARALLEL_BATCHES).fill(null).map(() =>
+          supabase
             .from("agent_metrics")
-            .delete()
-            .in("id", ids);
-          deletedBatches++;
-          
-          if (deletedBatches % 10 === 0) {
-            toast.info(`Progresso: ${deletedBatches * 1000}+ métricas excluídas...`);
+            .select("id")
+            .eq("cluster_id", clusterToDelete)
+            .limit(BATCH_SIZE)
+        );
+        
+        const batchResults = await Promise.all(batchPromises);
+        const allIds: string[] = [];
+        
+        for (const result of batchResults) {
+          if (result.data && result.data.length > 0) {
+            allIds.push(...result.data.map(m => m.id));
           }
+        }
+        
+        if (allIds.length > 0) {
+          // Delete all fetched IDs in parallel chunks
+          const deleteChunks = [];
+          for (let i = 0; i < allIds.length; i += BATCH_SIZE) {
+            const chunk = allIds.slice(i, i + BATCH_SIZE);
+            deleteChunks.push(
+              supabase.from("agent_metrics").delete().in("id", chunk)
+            );
+          }
+          await Promise.all(deleteChunks);
+          totalDeleted += allIds.length;
         } else {
           hasMoreMetrics = false;
         }
       }
 
-      toast.info("Excluindo demais dados relacionados...");
-
-      // Delete other related records sequentially to avoid timeout
-      await supabase.from("cluster_events").delete().eq("cluster_id", clusterToDelete);
-      await supabase.from("cluster_validation_results").delete().eq("cluster_id", clusterToDelete);
-      await supabase.from("agent_api_keys").delete().eq("cluster_id", clusterToDelete);
-      await supabase.from("agent_anomalies").delete().eq("cluster_id", clusterToDelete);
-      await supabase.from("agent_commands").delete().eq("cluster_id", clusterToDelete);
-      await supabase.from("ai_incidents").delete().eq("cluster_id", clusterToDelete);
-      await supabase.from("ai_cost_savings").delete().eq("cluster_id", clusterToDelete);
-      await supabase.from("cost_calculations").delete().eq("cluster_id", clusterToDelete);
-      await supabase.from("persistent_volumes").delete().eq("cluster_id", clusterToDelete);
-      await supabase.from("pvcs").delete().eq("cluster_id", clusterToDelete);
-      await supabase.from("scan_history").delete().eq("cluster_id", clusterToDelete);
+      // Delete all other related records in parallel (smaller tables)
+      await Promise.all([
+        supabase.from("cluster_events").delete().eq("cluster_id", clusterToDelete),
+        supabase.from("cluster_validation_results").delete().eq("cluster_id", clusterToDelete),
+        supabase.from("agent_api_keys").delete().eq("cluster_id", clusterToDelete),
+        supabase.from("agent_anomalies").delete().eq("cluster_id", clusterToDelete),
+        supabase.from("agent_commands").delete().eq("cluster_id", clusterToDelete),
+        supabase.from("ai_incidents").delete().eq("cluster_id", clusterToDelete),
+        supabase.from("ai_cost_savings").delete().eq("cluster_id", clusterToDelete),
+        supabase.from("cost_calculations").delete().eq("cluster_id", clusterToDelete),
+        supabase.from("persistent_volumes").delete().eq("cluster_id", clusterToDelete),
+        supabase.from("pvcs").delete().eq("cluster_id", clusterToDelete),
+        supabase.from("scan_history").delete().eq("cluster_id", clusterToDelete),
+      ]);
 
       // Finally delete the cluster
       const { error } = await supabase
