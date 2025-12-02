@@ -31,6 +31,9 @@ const Clusters = () => {
   const [selectedClusterId, setSelectedClusterId] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [clusterToDelete, setClusterToDelete] = useState<string | null>(null);
+  const [clusterToDeleteName, setClusterToDeleteName] = useState<string>("");
+  const [deleteConfirmName, setDeleteConfirmName] = useState<string>("");
+  const [isDeleting, setIsDeleting] = useState(false);
   const [clusterToEdit, setClusterToEdit] = useState<any | null>(null);
   const [refreshingCluster, setRefreshingCluster] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -245,48 +248,78 @@ const Clusters = () => {
   };
 
   const handleDeleteCluster = async () => {
-    if (!clusterToDelete) return;
+    if (!clusterToDelete || deleteConfirmName !== clusterToDeleteName) return;
+
+    setIsDeleting(true);
 
     try {
-      // Delete related records first (foreign key constraints)
-      await Promise.all([
-        supabase.from("cluster_events").delete().eq("cluster_id", clusterToDelete),
-        supabase.from("cluster_validation_results").delete().eq("cluster_id", clusterToDelete),
-        supabase.from("agent_metrics").delete().eq("cluster_id", clusterToDelete),
-        supabase.from("agent_api_keys").delete().eq("cluster_id", clusterToDelete),
-        supabase.from("agent_anomalies").delete().eq("cluster_id", clusterToDelete),
-        supabase.from("agent_commands").delete().eq("cluster_id", clusterToDelete),
-        supabase.from("ai_incidents").delete().eq("cluster_id", clusterToDelete),
-        supabase.from("ai_cost_savings").delete().eq("cluster_id", clusterToDelete),
-        supabase.from("cost_calculations").delete().eq("cluster_id", clusterToDelete),
-        supabase.from("persistent_volumes").delete().eq("cluster_id", clusterToDelete),
-        supabase.from("pvcs").delete().eq("cluster_id", clusterToDelete),
-        supabase.from("scan_history").delete().eq("cluster_id", clusterToDelete),
-      ]);
+      toast.info("Excluindo métricas do cluster...");
 
-      // Now delete the cluster
+      // Delete agent_metrics in batches to avoid timeout
+      let hasMoreMetrics = true;
+      let deletedBatches = 0;
+      
+      while (hasMoreMetrics) {
+        const { data: metricsToDelete } = await supabase
+          .from("agent_metrics")
+          .select("id")
+          .eq("cluster_id", clusterToDelete)
+          .limit(1000);
+
+        if (metricsToDelete && metricsToDelete.length > 0) {
+          const ids = metricsToDelete.map(m => m.id);
+          await supabase
+            .from("agent_metrics")
+            .delete()
+            .in("id", ids);
+          deletedBatches++;
+          
+          if (deletedBatches % 10 === 0) {
+            toast.info(`Progresso: ${deletedBatches * 1000}+ métricas excluídas...`);
+          }
+        } else {
+          hasMoreMetrics = false;
+        }
+      }
+
+      toast.info("Excluindo demais dados relacionados...");
+
+      // Delete other related records sequentially to avoid timeout
+      await supabase.from("cluster_events").delete().eq("cluster_id", clusterToDelete);
+      await supabase.from("cluster_validation_results").delete().eq("cluster_id", clusterToDelete);
+      await supabase.from("agent_api_keys").delete().eq("cluster_id", clusterToDelete);
+      await supabase.from("agent_anomalies").delete().eq("cluster_id", clusterToDelete);
+      await supabase.from("agent_commands").delete().eq("cluster_id", clusterToDelete);
+      await supabase.from("ai_incidents").delete().eq("cluster_id", clusterToDelete);
+      await supabase.from("ai_cost_savings").delete().eq("cluster_id", clusterToDelete);
+      await supabase.from("cost_calculations").delete().eq("cluster_id", clusterToDelete);
+      await supabase.from("persistent_volumes").delete().eq("cluster_id", clusterToDelete);
+      await supabase.from("pvcs").delete().eq("cluster_id", clusterToDelete);
+      await supabase.from("scan_history").delete().eq("cluster_id", clusterToDelete);
+
+      // Finally delete the cluster
       const { error } = await supabase
         .from("clusters")
         .delete()
         .eq("id", clusterToDelete);
 
-      if (error) {
-        toast.error("Falha ao excluir cluster");
-        console.error(error);
-      } else {
-        toast.success("Cluster excluído com sucesso!");
-        setClusters(clusters.filter((c) => c.id !== clusterToDelete));
-        if (selectedClusterId === clusterToDelete) {
-          setSelectedClusterId(null);
-        }
+      if (error) throw error;
+
+      toast.success("Cluster excluído com sucesso!");
+      setClusters(clusters.filter((c) => c.id !== clusterToDelete));
+      if (selectedClusterId === clusterToDelete) {
+        setSelectedClusterId(null);
       }
     } catch (err) {
-      toast.error("Falha ao excluir cluster e dados relacionados");
+      toast.error("Falha ao excluir cluster");
       console.error(err);
+    } finally {
+      setIsDeleting(false);
+      setDeleteDialogOpen(false);
+      setClusterToDelete(null);
+      setClusterToDeleteName("");
+      setDeleteConfirmName("");
     }
-
-    setDeleteDialogOpen(false);
-    setClusterToDelete(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -601,6 +634,8 @@ const Clusters = () => {
                       onClick={(e) => {
                         e.stopPropagation();
                         setClusterToDelete(cluster.id);
+                        setClusterToDeleteName(cluster.name);
+                        setDeleteConfirmName("");
                         setDeleteDialogOpen(true);
                       }}
                       title="Delete cluster"
@@ -748,19 +783,68 @@ const Clusters = () => {
           </DialogContent>
         </Dialog>
 
-        <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialog open={deleteDialogOpen} onOpenChange={(open) => {
+          if (!isDeleting) {
+            setDeleteDialogOpen(open);
+            if (!open) {
+              setDeleteConfirmName("");
+            }
+          }
+        }}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Delete Cluster</AlertDialogTitle>
-              <AlertDialogDescription>
-                Are you sure you want to delete this cluster? This action cannot be undone and will remove all associated data and logs.
+              <AlertDialogTitle className="text-destructive">
+                ⚠️ Confirmar Exclusão Permanente
+              </AlertDialogTitle>
+              <AlertDialogDescription asChild>
+                <div className="space-y-3">
+                  <p>Esta ação é <strong>irreversível</strong>. Todos os dados do cluster serão excluídos permanentemente:</p>
+                  <ul className="list-disc ml-4 text-sm space-y-1">
+                    <li>Métricas e histórico de monitoramento</li>
+                    <li>Eventos e logs do cluster</li>
+                    <li>Configurações e chaves de API</li>
+                    <li>Incidentes e anomalias detectadas</li>
+                    <li>Cálculos de custos e economias</li>
+                  </ul>
+                  <div className="pt-2">
+                    <p className="font-medium">Para confirmar, digite o nome do cluster:</p>
+                    <p className="text-sm font-mono bg-muted px-2 py-1 rounded mt-1">
+                      {clusterToDeleteName}
+                    </p>
+                  </div>
+                </div>
               </AlertDialogDescription>
             </AlertDialogHeader>
+            
+            <Input
+              placeholder="Digite o nome do cluster"
+              value={deleteConfirmName}
+              onChange={(e) => setDeleteConfirmName(e.target.value)}
+              disabled={isDeleting}
+              className="mt-2"
+            />
+            
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={handleDeleteCluster} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                Delete
-              </AlertDialogAction>
+              <AlertDialogCancel disabled={isDeleting}>
+                Cancelar
+              </AlertDialogCancel>
+              <Button
+                variant="destructive"
+                onClick={handleDeleteCluster}
+                disabled={deleteConfirmName !== clusterToDeleteName || isDeleting}
+              >
+                {isDeleting ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    Excluindo...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Excluir Cluster
+                  </>
+                )}
+              </Button>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
