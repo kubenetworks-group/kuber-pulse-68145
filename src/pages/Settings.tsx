@@ -4,14 +4,18 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSubscription } from "@/contexts/SubscriptionContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Database, Loader2, Sparkles, GraduationCap } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { Database, Loader2, Sparkles, GraduationCap, Crown, Clock, Brain, Server } from "lucide-react";
+import { useNavigate, Link } from "react-router-dom";
 
 const Settings = () => {
   const { user } = useAuth();
+  const { subscription, currentPlan, isTrialActive, daysLeftInTrial, planLimits, isReadOnly } = useSubscription();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [demoLoading, setDemoLoading] = useState(false);
@@ -20,6 +24,10 @@ const Settings = () => {
     full_name: "",
     company: "",
   });
+
+  const aiUsagePercent = planLimits.aiAnalysesPerMonth === Infinity 
+    ? 0 
+    : ((subscription?.ai_analyses_used || 0) / planLimits.aiAnalysesPerMonth) * 100;
 
   useEffect(() => {
     fetchProfile();
@@ -105,6 +113,77 @@ const Settings = () => {
         </div>
 
         <div className="max-w-2xl space-y-6">
+          {/* Subscription Status Card */}
+          <Card className="p-6 bg-gradient-to-br from-amber-500/5 to-amber-500/10 border-amber-500/20">
+            <div className="flex items-start gap-4">
+              <div className="p-3 rounded-lg bg-amber-500/20">
+                <Crown className="h-6 w-6 text-amber-500" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <h3 className="text-lg font-semibold">Plano & Assinatura</h3>
+                  <Badge variant="secondary" className="capitalize">
+                    {currentPlan}
+                  </Badge>
+                  {isTrialActive && (
+                    <Badge className="bg-amber-500/20 text-amber-600 border-amber-500/30">
+                      Trial
+                    </Badge>
+                  )}
+                  {isReadOnly && (
+                    <Badge variant="destructive">
+                      Somente leitura
+                    </Badge>
+                  )}
+                </div>
+                
+                <div className="grid gap-4 sm:grid-cols-2 mt-4">
+                  {isTrialActive && (
+                    <div className="flex items-center gap-3 p-3 rounded-lg bg-background/50">
+                      <Clock className="w-4 h-4 text-amber-500" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Trial restante</p>
+                        <p className="font-medium">{daysLeftInTrial} dias</p>
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div className="flex items-center gap-3 p-3 rounded-lg bg-background/50">
+                    <Brain className="w-4 h-4 text-blue-500" />
+                    <div className="flex-1">
+                      <p className="text-xs text-muted-foreground">Análises de IA</p>
+                      <p className="font-medium text-sm">
+                        {subscription?.ai_analyses_used || 0} / {planLimits.aiAnalysesPerMonth === Infinity ? '∞' : planLimits.aiAnalysesPerMonth}
+                      </p>
+                      {planLimits.aiAnalysesPerMonth !== Infinity && (
+                        <Progress value={aiUsagePercent} className="h-1 mt-1" />
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-3 p-3 rounded-lg bg-background/50">
+                    <Server className="w-4 h-4 text-green-500" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Limite de clusters</p>
+                      <p className="font-medium">
+                        {planLimits.clusters === Infinity ? 'Ilimitado' : `Até ${planLimits.clusters}`}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <Link to="/pricing">
+                    <Button variant="outline" className="gap-2">
+                      <Crown className="w-4 h-4" />
+                      {isTrialActive || currentPlan === 'free' ? 'Ver planos' : 'Gerenciar plano'}
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </Card>
+
           {/* Demo Data Card */}
           <Card className="p-6 bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
             <div className="flex items-start gap-4">

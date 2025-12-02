@@ -23,3 +23,6 @@ verify_jwt = false
 
 [functions.auto-analyze-clusters]
 verify_jwt = false
+
+[functions.check-trial-expiration]
+verify_jwt = false

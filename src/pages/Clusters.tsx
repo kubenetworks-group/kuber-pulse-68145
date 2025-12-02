@@ -18,13 +18,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ClusterCard } from "@/components/ClusterCard";
 import { ClusterLogs } from "@/components/ClusterLogs";
 import { ClusterDeletionProgress } from "@/components/ClusterDeletionProgress";
+import { LimitReachedModal } from "@/components/LimitReachedModal";
 import { Plus, Trash2, RefreshCw, Edit } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSubscription } from "@/contexts/SubscriptionContext";
 import { toast } from "sonner";
 
 const Clusters = () => {
   const { user } = useAuth();
+  const { canCreateCluster, isReadOnly } = useSubscription();
   const [clusters, setClusters] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
@@ -38,6 +41,7 @@ const Clusters = () => {
   const [deletingClusters, setDeletingClusters] = useState<{id: string, name: string, notificationId: string}[]>([]);
   const [clusterToEdit, setClusterToEdit] = useState<any | null>(null);
   const [refreshingCluster, setRefreshingCluster] = useState<string | null>(null);
+  const [limitModalOpen, setLimitModalOpen] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     environment: "production",
@@ -443,7 +447,16 @@ const Clusters = () => {
           </div>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-              <Button className="gap-2">
+              <Button 
+                className="gap-2" 
+                disabled={isReadOnly}
+                onClick={(e) => {
+                  if (!canCreateCluster(clusters.length)) {
+                    e.preventDefault();
+                    setLimitModalOpen(true);
+                  }
+                }}
+              >
                 <Plus className="w-4 h-4" />
                 Connect Cluster
               </Button>
@@ -877,6 +890,12 @@ const Clusters = () => {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        <LimitReachedModal 
+          open={limitModalOpen} 
+          onOpenChange={setLimitModalOpen} 
+          limitType="clusters" 
+        />
       </div>
     </DashboardLayout>
   );
