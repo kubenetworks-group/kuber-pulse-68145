@@ -4,11 +4,12 @@ import { ClusterSelector } from "./ClusterSelector";
 import { Footer } from "./Footer";
 import { DocsAssistantChat } from "./DocsAssistantChat";
 import { useState } from "react";
-import { Menu } from "lucide-react";
+import { Menu, PanelLeftClose, PanelLeft } from "lucide-react";
 import { Button } from "./ui/button";
 
 export const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   return (
     <div className="min-h-screen bg-background">
@@ -22,18 +23,20 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
       
       {/* Sidebar */}
       <div className={`
-        fixed left-0 top-0 bottom-0 z-50 transition-transform duration-300 lg:translate-x-0
+        fixed left-0 top-0 bottom-0 z-50 transition-all duration-300 lg:translate-x-0
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+        ${sidebarCollapsed ? 'lg:w-16' : 'lg:w-64'}
       `}>
-        <Sidebar />
+        <Sidebar collapsed={sidebarCollapsed} />
       </div>
 
       {/* Main content */}
-      <div className="lg:ml-64 flex flex-col min-h-screen">
+      <div className={`flex flex-col min-h-screen transition-all duration-300 ${sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64'}`}>
         {/* Top bar with cluster selector and notifications */}
         <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
           <div className="flex justify-between items-center px-4 sm:px-6 lg:px-8 py-3 gap-2">
             <div className="flex items-center gap-2">
+              {/* Mobile menu button */}
               <Button
                 variant="ghost"
                 size="icon"
@@ -41,6 +44,19 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
                 onClick={() => setSidebarOpen(!sidebarOpen)}
               >
                 <Menu className="h-5 w-5" />
+              </Button>
+              {/* Desktop collapse button */}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="hidden lg:flex"
+                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              >
+                {sidebarCollapsed ? (
+                  <PanelLeft className="h-5 w-5" />
+                ) : (
+                  <PanelLeftClose className="h-5 w-5" />
+                )}
               </Button>
               <ClusterSelector />
             </div>
