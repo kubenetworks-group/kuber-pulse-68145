@@ -3,6 +3,7 @@ import { NotificationBell } from "./NotificationBell";
 import { ClusterSelector } from "./ClusterSelector";
 import { Footer } from "./Footer";
 import { DocsAssistantChat } from "./DocsAssistantChat";
+import { TrialBanner } from "./TrialBanner";
 import { useState } from "react";
 import { Menu, PanelLeftClose, PanelLeft } from "lucide-react";
 import { Button } from "./ui/button";
@@ -32,6 +33,9 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
 
       {/* Main content */}
       <div className={`flex flex-col min-h-screen transition-all duration-300 ${sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64'}`}>
+        {/* Trial banner */}
+        <TrialBanner />
+        
         {/* Top bar with cluster selector and notifications */}
         <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
           <div className="flex justify-between items-center px-4 sm:px-6 lg:px-8 py-3 gap-2">

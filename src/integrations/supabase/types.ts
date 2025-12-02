@@ -823,6 +823,45 @@ export type Database = {
           },
         ]
       }
+      subscriptions: {
+        Row: {
+          ai_analyses_reset_at: string
+          ai_analyses_used: number
+          created_at: string
+          id: string
+          plan: string
+          status: string
+          trial_ends_at: string
+          trial_started_at: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ai_analyses_reset_at?: string
+          ai_analyses_used?: number
+          created_at?: string
+          id?: string
+          plan?: string
+          status?: string
+          trial_ends_at?: string
+          trial_started_at?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ai_analyses_reset_at?: string
+          ai_analyses_used?: number
+          created_at?: string
+          id?: string
+          plan?: string
+          status?: string
+          trial_ends_at?: string
+          trial_started_at?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_consents: {
         Row: {
           consent_date: string
