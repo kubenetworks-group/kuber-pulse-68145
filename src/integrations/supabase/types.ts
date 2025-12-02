@@ -867,6 +867,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      delete_cluster_data: { Args: { p_cluster_id: string }; Returns: number }
       get_cron_jobs_status: {
         Args: never
         Returns: {
