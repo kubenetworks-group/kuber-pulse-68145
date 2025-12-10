@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useTranslation } from "react-i18next";
+import { useAdminCheck } from "@/hooks/useAdminCheck";
 import kodoLogo from "@/assets/kodo-logo.png";
 import {
   Server,
@@ -13,6 +14,7 @@ import {
   HardDrive,
   BookOpen,
   Crown,
+  Shield,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -24,6 +26,7 @@ export const Sidebar = ({ collapsed = false }: SidebarProps) => {
   const location = useLocation();
   const { signOut } = useAuth();
   const { t } = useTranslation();
+  const { isAdmin } = useAdminCheck();
 
   const navigation = [
     { name: t('common.dashboard'), href: "/", icon: LayoutDashboard },
@@ -34,6 +37,7 @@ export const Sidebar = ({ collapsed = false }: SidebarProps) => {
     { name: "Documentação", href: "/documentation", icon: BookOpen },
     { name: "Planos", href: "/pricing", icon: Crown },
     { name: t('common.settings'), href: "/settings", icon: Settings },
+    ...(isAdmin ? [{ name: "Admin", href: "/admin", icon: Shield }] : []),
   ];
 
   return (
