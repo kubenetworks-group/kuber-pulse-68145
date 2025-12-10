@@ -121,7 +121,7 @@ const Index = () => {
 
   return (
     <DashboardLayout>
-      <div className="p-4 sm:p-6 lg:p-8 space-y-6 animate-fade-in">
+      <div className="p-4 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 animate-fade-in">
         {/* Welcome Header */}
         <WelcomeHeader />
 
@@ -129,68 +129,67 @@ const Index = () => {
         {clusters.length === 0 ? (
           <ClusterOnboarding />
         ) : (
-          <>
+          <div className="space-y-4 sm:space-y-6">
             {/* Cluster Info Badge */}
             {clusterData && (
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20 animate-in fade-in slide-in-from-top-3 duration-500">
+              <div className="inline-flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20 animate-in fade-in slide-in-from-top-3 duration-500">
                 <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
-                <span className="text-sm font-medium text-foreground">
+                <span className="text-xs sm:text-sm font-medium text-foreground">
                   {clusterData.name} - {clusterData.environment}
                 </span>
               </div>
             )}
 
-            {/* Cluster Status Summary */}
+            {/* Cluster Status Summary - Full Width */}
             {clusterData && (
               <div className="animate-scale-in">
                 <ClusterStatusSummary clusterData={clusterData} />
               </div>
             )}
 
-            {/* Main Content Grid */}
-            <div className="grid gap-6 lg:grid-cols-3">
-          {/* Left Column - 2 columns wide */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* AI Insights Widget */}
-            {incidents.length > 0 && (
-              <div className="animate-scale-in">
-                <AIInsightsWidget recentIncidents={incidents} />
+            {/* Main Content Grid - Responsive */}
+            <div className="grid gap-4 sm:gap-6 grid-cols-1 lg:grid-cols-12">
+              {/* Left Column - Node Details */}
+              <div className="lg:col-span-7 xl:col-span-8 space-y-4 sm:space-y-6">
+                {/* Node Details */}
+                {selectedClusterId && (
+                  <div className="animate-scale-in">
+                    <NodeDetailsCard
+                      nodes={nodeMetrics.nodes}
+                      totalCPU={nodeMetrics.totalCPU}
+                      totalMemory={nodeMetrics.totalMemory}
+                      cpuUsage={nodeMetrics.cpuUsage}
+                      memoryUsage={nodeMetrics.memoryUsage}
+                      loading={nodeMetrics.loading}
+                    />
+                  </div>
+                )}
+
+                {/* AI Insights Widget */}
+                {incidents.length > 0 && (
+                  <div className="animate-scale-in">
+                    <AIInsightsWidget recentIncidents={incidents} />
+                  </div>
+                )}
               </div>
-            )}
 
-            {/* Node Details */}
-            {selectedClusterId && (
-              <div className="animate-scale-in">
-                <NodeDetailsCard
-                  nodes={nodeMetrics.nodes}
-                  totalCPU={nodeMetrics.totalCPU}
-                  totalMemory={nodeMetrics.totalMemory}
-                  cpuUsage={nodeMetrics.cpuUsage}
-                  memoryUsage={nodeMetrics.memoryUsage}
-                  loading={nodeMetrics.loading}
-                />
+              {/* Right Column - Pod Health & Events */}
+              <div className="lg:col-span-5 xl:col-span-4 space-y-4 sm:space-y-6">
+                {/* Pod Health by Namespace */}
+                <div className="animate-scale-in">
+                  <PodHealthByNamespace />
+                </div>
+
+                {/* Cluster Events */}
+                <div className="animate-scale-in">
+                  <ClusterEvents />
+                </div>
               </div>
-            )}
-          </div>
-
-          {/* Right Column - 1 column wide */}
-          <div className="space-y-6">
-            {/* Pod Health by Namespace */}
-            <div className="animate-scale-in">
-              <PodHealthByNamespace />
-            </div>
-
-            {/* Cluster Events */}
-            <div className="animate-scale-in">
-              <ClusterEvents />
             </div>
           </div>
-        </div>
-          </>
         )}
       </div>
     </DashboardLayout>
   );
 };
-
 export default Index;
