@@ -12,8 +12,6 @@ import {
   LayoutDashboard,
   Bot,
   HardDrive,
-  
-  Crown,
   Shield,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -34,8 +32,6 @@ export const Sidebar = ({ collapsed = false }: SidebarProps) => {
     { name: t('common.aiMonitor'), href: "/ai-monitor", icon: Bot },
     { name: t('common.clusters'), href: "/clusters", icon: Server },
     { name: t('common.agents'), href: "/agents", icon: Bot },
-    
-    { name: "Planos", href: "/pricing", icon: Crown },
     { name: t('common.settings'), href: "/settings", icon: Settings },
     ...(isAdmin ? [{ name: "Admin", href: "/admin", icon: Shield }] : []),
   ];
