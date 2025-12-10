@@ -363,6 +363,80 @@ export type Database = {
           },
         ]
       }
+      cluster_security_scans: {
+        Row: {
+          ai_analysis: Json | null
+          cluster_id: string
+          created_at: string
+          has_network_policies: boolean | null
+          has_pod_security: boolean | null
+          has_rbac: boolean | null
+          has_resource_limits: boolean | null
+          has_secrets_encryption: boolean | null
+          id: string
+          network_policy_details: Json | null
+          pod_security_details: Json | null
+          rbac_details: Json | null
+          recommendations: string[] | null
+          resource_limits_details: Json | null
+          scan_date: string
+          secrets_details: Json | null
+          security_score: number | null
+          status: string | null
+          user_id: string
+        }
+        Insert: {
+          ai_analysis?: Json | null
+          cluster_id: string
+          created_at?: string
+          has_network_policies?: boolean | null
+          has_pod_security?: boolean | null
+          has_rbac?: boolean | null
+          has_resource_limits?: boolean | null
+          has_secrets_encryption?: boolean | null
+          id?: string
+          network_policy_details?: Json | null
+          pod_security_details?: Json | null
+          rbac_details?: Json | null
+          recommendations?: string[] | null
+          resource_limits_details?: Json | null
+          scan_date?: string
+          secrets_details?: Json | null
+          security_score?: number | null
+          status?: string | null
+          user_id: string
+        }
+        Update: {
+          ai_analysis?: Json | null
+          cluster_id?: string
+          created_at?: string
+          has_network_policies?: boolean | null
+          has_pod_security?: boolean | null
+          has_rbac?: boolean | null
+          has_resource_limits?: boolean | null
+          has_secrets_encryption?: boolean | null
+          id?: string
+          network_policy_details?: Json | null
+          pod_security_details?: Json | null
+          rbac_details?: Json | null
+          recommendations?: string[] | null
+          resource_limits_details?: Json | null
+          scan_date?: string
+          secrets_details?: Json | null
+          security_score?: number | null
+          status?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cluster_security_scans_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cluster_validation_results: {
         Row: {
           available_features: Json | null

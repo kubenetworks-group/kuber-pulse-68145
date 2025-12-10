@@ -7,6 +7,7 @@ import { AIIncidentCard } from "@/components/AIIncidentCard";
 import { MetricCard } from "@/components/MetricCard";
 import { CronJobsStatus } from "@/components/CronJobsStatus";
 import { ScanHistoryTab } from "@/components/ScanHistoryTab";
+import { ClusterSecurityAnalysis } from "@/components/ClusterSecurityAnalysis";
 import { Bot, Activity, CheckCircle, Clock, Sparkles, TrendingDown, Shield, Zap, Target, AlertCircle, History } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -465,6 +466,9 @@ export default function AIMonitor() {
             {t('aiMonitor.description')}
           </p>
         </div>
+
+        {/* Security Analysis - First Step */}
+        <ClusterSecurityAnalysis />
 
         {/* Cluster Analysis Section */}
         <div className="grid gap-6 lg:grid-cols-2">
