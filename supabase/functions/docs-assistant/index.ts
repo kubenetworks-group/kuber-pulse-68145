@@ -6,6 +6,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const MONTHLY_CHAT_LIMIT = 50; // Limite mensal de mensagens
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -21,7 +23,6 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    // Create Supabase client
     const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!);
 
     // Get authorization header to identify user
@@ -36,53 +37,109 @@ serve(async (req) => {
       }
     }
 
-    // Get user's last message to search documentation
-    const lastUserMessage = messages[messages.length - 1];
-    const searchQuery = lastUserMessage?.content || "";
-
-    // Search relevant documentation
-    let relevantDocs = "";
-    if (userId && searchQuery) {
-      const { data: docs, error: docsError } = await supabase
-        .from("documentation")
-        .select("title, content, category, tags")
-        .or(`user_id.eq.${userId},is_public.eq.true`)
-        .ilike("content", `%${searchQuery.slice(0, 100)}%`)
-        .limit(5);
-
-      if (!docsError && docs && docs.length > 0) {
-        relevantDocs = "\n\n**Documentação Relevante:**\n\n" + docs.map(doc => 
-          `### ${doc.title} (${doc.category})\n${doc.content}\n---`
-        ).join("\n\n");
-      }
+    if (!userId) {
+      return new Response(
+        JSON.stringify({ error: "Usuário não autenticado" }), 
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
-    const systemPrompt = `Você é um assistente especializado no sistema Kodo - uma plataforma de gerenciamento inteligente de infraestrutura Kubernetes multi-cloud.
+    // Check monthly usage limit
+    const { data: subscription, error: subError } = await supabase
+      .from("subscriptions")
+      .select("ai_analyses_used, ai_analyses_reset_at, plan")
+      .eq("user_id", userId)
+      .single();
+
+    if (subError) {
+      console.error("Error fetching subscription:", subError);
+      return new Response(
+        JSON.stringify({ error: "Erro ao verificar limite de uso" }), 
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    // Check if we need to reset the counter (new month)
+    const resetAt = new Date(subscription.ai_analyses_reset_at);
+    const now = new Date();
+    const shouldReset = now > resetAt;
+
+    let currentUsage = subscription.ai_analyses_used || 0;
+    
+    if (shouldReset) {
+      // Reset counter for new month
+      const nextReset = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      await supabase
+        .from("subscriptions")
+        .update({ 
+          ai_analyses_used: 1, 
+          ai_analyses_reset_at: nextReset.toISOString() 
+        })
+        .eq("user_id", userId);
+      currentUsage = 0;
+    }
+
+    // Calculate limit based on plan
+    let limit = MONTHLY_CHAT_LIMIT;
+    if (subscription.plan === "pro") limit = 200;
+    if (subscription.plan === "enterprise") limit = 1000;
+
+    if (currentUsage >= limit) {
+      return new Response(
+        JSON.stringify({ 
+          error: "Limite mensal de mensagens atingido",
+          usage: currentUsage,
+          limit: limit
+        }), 
+        {
+          status: 429,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    // Increment usage if not reset
+    if (!shouldReset) {
+      await supabase
+        .from("subscriptions")
+        .update({ ai_analyses_used: currentUsage + 1 })
+        .eq("user_id", userId);
+    }
+
+    const systemPrompt = `Você é o assistente oficial do Kodo - uma plataforma de gerenciamento inteligente de infraestrutura Kubernetes multi-cloud.
+
+**REGRA CRÍTICA:** Você APENAS responde perguntas relacionadas a:
+- Sistema Kodo e suas funcionalidades
+- Kubernetes (K8s) e conceitos relacionados
+- Configuração de clusters (EKS, GKE, AKS, etc)
+- Kodo Agent e métricas
+- AI Monitor, Auto-healing, Costs, Storage
+- Comandos kubectl e troubleshooting K8s
+- Melhores práticas de infraestrutura cloud
+
+**Se o usuário perguntar sobre qualquer outro assunto que NÃO seja relacionado ao Kodo ou Kubernetes, você DEVE responder:**
+"Desculpe, só posso ajudar com questões relacionadas ao sistema Kodo e Kubernetes. Por favor, faça uma pergunta sobre configuração de clusters, monitoramento, ou funcionalidades da plataforma."
 
 **Sobre o Kodo:**
 - Plataforma de monitoramento e gerenciamento de clusters Kubernetes
-- Suporte para múltiplos provedores: AWS EKS, GCP GKE, Azure AKS, DigitalOcean, on-premise
-- Recursos principais: AI Monitor, gestão de custos, análise de storage, auto-healing
-- Integração com agentes Kubernetes para coleta de métricas em tempo real
-- Interface React com Tailwind CSS e componentes Shadcn UI
-- Backend Supabase com edge functions e banco de dados PostgreSQL
-
-**Suas responsabilidades:**
-- Responder perguntas sobre funcionalidades do sistema
-- Explicar como usar recursos específicos (AI Monitor, Clusters, Costs, Storage, etc)
-- Fornecer exemplos de código quando relevante
-- Guiar na configuração e troubleshooting
-- Sugerir melhores práticas
+- Suporte para: AWS EKS, GCP GKE, Azure AKS, DigitalOcean, on-premise
+- AI Monitor: Análise inteligente de anomalias e auto-healing
+- Gestão de Custos: Estimativas e otimização de gastos
+- Storage: Monitoramento de PVs e PVCs
+- Kodo Agent: Coleta métricas do cluster em tempo real
 
 **Diretrizes:**
 - Seja claro, conciso e técnico quando apropriado
-- Use exemplos práticos e código quando relevante
-- Forneça links para documentação quando disponível
-- Mantenha respostas focadas (2-5 parágrafos)
-- Use formatação markdown para melhor legibilidade
-- Se não souber algo, seja honesto e sugira onde procurar
-
-${relevantDocs}`;
+- Use exemplos práticos e comandos quando relevante
+- Mantenha respostas focadas (2-4 parágrafos)
+- Use formatação markdown
+- Se não souber algo específico do Kodo, seja honesto`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",

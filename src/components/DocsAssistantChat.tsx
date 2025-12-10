@@ -3,8 +3,10 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Bot, Send, X, MessageCircle, Loader2, BookOpen } from "lucide-react";
+import { Bot, Send, X, MessageCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { useSubscription } from "@/contexts/SubscriptionContext";
 
 type Message = {
   role: "user" | "assistant";
@@ -16,12 +18,14 @@ export const DocsAssistantChat = () => {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
-      content: "Olá! 👋 Sou o assistente do Kodo. Posso ajudá-lo com:\n\n- Funcionalidades do sistema\n- Como usar recursos específicos\n- Configuração e troubleshooting\n- Melhores práticas\n\nComo posso ajudar?"
+      content: "Olá! 👋 Sou o assistente do Kodo. Posso ajudá-lo com:\n\n- Sistema Kodo e funcionalidades\n- Kubernetes e configuração de clusters\n- Kodo Agent e métricas\n- AI Monitor e Auto-healing\n\nComo posso ajudar?"
     }
   ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [usageInfo, setUsageInfo] = useState<{ used: number; limit: number } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { subscription } = useSubscription();
   const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/docs-assistant`;
 
   useEffect(() => {
@@ -30,6 +34,20 @@ export const DocsAssistantChat = () => {
     }
   }, [messages]);
 
+  useEffect(() => {
+    // Calculate usage based on subscription
+    if (subscription) {
+      let limit = 50; // free
+      if (subscription.plan === "pro") limit = 200;
+      if (subscription.plan === "enterprise") limit = 1000;
+      
+      setUsageInfo({
+        used: subscription.ai_analyses_used || 0,
+        limit
+      });
+    }
+  }, [subscription]);
+
   const streamChat = async (userMessage: string) => {
     const newMessages = [...messages, { role: "user" as const, content: userMessage }];
     setMessages(newMessages);
@@ -37,22 +55,33 @@ export const DocsAssistantChat = () => {
     setIsLoading(true);
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
       const resp = await fetch(CHAT_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          Authorization: `Bearer ${session?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
         body: JSON.stringify({ messages: newMessages }),
       });
 
       if (!resp.ok) {
+        const errorData = await resp.json().catch(() => null);
+        
         if (resp.status === 429) {
-          toast.error("Rate limit excedido. Aguarde um momento.");
+          if (errorData?.limit) {
+            toast.error(`Limite mensal atingido (${errorData.usage}/${errorData.limit} mensagens)`);
+            setUsageInfo({ used: errorData.usage, limit: errorData.limit });
+          } else {
+            toast.error("Rate limit excedido. Aguarde um momento.");
+          }
         } else if (resp.status === 402) {
           toast.error("Créditos insuficientes.");
+        } else if (resp.status === 401) {
+          toast.error("Sessão expirada. Faça login novamente.");
         } else {
-          toast.error("Erro ao comunicar com o assistente.");
+          toast.error(errorData?.error || "Erro ao comunicar com o assistente.");
         }
         setIsLoading(false);
         return;
@@ -69,6 +98,11 @@ export const DocsAssistantChat = () => {
       let assistantContent = "";
 
       setMessages(prev => [...prev, { role: "assistant", content: "" }]);
+
+      // Update usage after successful request
+      if (usageInfo) {
+        setUsageInfo(prev => prev ? { ...prev, used: prev.used + 1 } : null);
+      }
 
       while (!streamDone) {
         const { done, value } = await reader.read();
@@ -122,8 +156,16 @@ export const DocsAssistantChat = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
+    
+    if (usageInfo && usageInfo.used >= usageInfo.limit) {
+      toast.error("Limite mensal de mensagens atingido. Faça upgrade para continuar.");
+      return;
+    }
+    
     streamChat(input);
   };
+
+  const usagePercentage = usageInfo ? (usageInfo.used / usageInfo.limit) * 100 : 0;
 
   return (
     <>
@@ -142,11 +184,11 @@ export const DocsAssistantChat = () => {
           <div className="flex items-center justify-between p-4 border-b border-border/50 bg-gradient-to-r from-primary/10 to-accent/10">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-primary/20">
-                <BookOpen className="w-5 h-5 text-primary" />
+                <Bot className="w-5 h-5 text-primary" />
               </div>
               <div>
                 <h3 className="font-semibold text-sm">Assistente Kodo</h3>
-                <p className="text-xs text-muted-foreground">Documentação e Suporte</p>
+                <p className="text-xs text-muted-foreground">Suporte Kubernetes</p>
               </div>
             </div>
             <Button
@@ -159,6 +201,26 @@ export const DocsAssistantChat = () => {
             </Button>
           </div>
 
+          {/* Usage indicator */}
+          {usageInfo && (
+            <div className="px-4 pt-2">
+              <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                <span>Uso mensal</span>
+                <span>{usageInfo.used}/{usageInfo.limit} mensagens</span>
+              </div>
+              <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                <div 
+                  className={`h-full transition-all ${
+                    usagePercentage >= 90 ? 'bg-destructive' : 
+                    usagePercentage >= 70 ? 'bg-yellow-500' : 
+                    'bg-primary'
+                  }`}
+                  style={{ width: `${Math.min(usagePercentage, 100)}%` }}
+                />
+              </div>
+            </div>
+          )}
+
           <ScrollArea className="flex-1 p-4" ref={scrollRef}>
             <div className="space-y-4">
               {messages.map((message, index) => (
@@ -170,7 +232,7 @@ export const DocsAssistantChat = () => {
                 >
                   {message.role === "assistant" && (
                     <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-                      <BookOpen className="w-4 h-4 text-primary" />
+                      <Bot className="w-4 h-4 text-primary" />
                     </div>
                   )}
                   <div
@@ -187,7 +249,7 @@ export const DocsAssistantChat = () => {
               {isLoading && (
                 <div className="flex gap-3 justify-start animate-in fade-in duration-300">
                   <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-                    <BookOpen className="w-4 h-4 text-primary" />
+                    <Bot className="w-4 h-4 text-primary" />
                   </div>
                   <div className="bg-muted/50 rounded-lg px-4 py-2">
                     <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
@@ -202,19 +264,24 @@ export const DocsAssistantChat = () => {
               <Input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Digite sua pergunta..."
-                disabled={isLoading}
+                placeholder="Pergunte sobre Kodo ou K8s..."
+                disabled={isLoading || (usageInfo && usageInfo.used >= usageInfo.limit)}
                 className="flex-1 bg-background/50"
               />
               <Button
                 type="submit"
                 size="icon"
-                disabled={!input.trim() || isLoading}
+                disabled={!input.trim() || isLoading || (usageInfo && usageInfo.used >= usageInfo.limit)}
                 className="bg-gradient-primary hover:opacity-90"
               >
                 <Send className="w-4 h-4" />
               </Button>
             </div>
+            {usageInfo && usageInfo.used >= usageInfo.limit && (
+              <p className="text-xs text-destructive mt-2 text-center">
+                Limite atingido. Faça upgrade para mais mensagens.
+              </p>
+            )}
           </form>
         </Card>
       )}
