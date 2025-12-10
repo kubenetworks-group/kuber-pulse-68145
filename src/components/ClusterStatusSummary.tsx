@@ -1,17 +1,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useCluster } from "@/contexts/ClusterContext";
-import { useNodeMetrics } from "@/hooks/useNodeMetrics";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect, useState } from "react";
 import { 
   CheckCircle2, 
   AlertTriangle, 
   XCircle, 
-  Server, 
-  Box, 
-  Cpu, 
-  HardDrive,
   Activity,
   TrendingUp
 } from "lucide-react";
@@ -30,7 +25,6 @@ interface ClusterStatusSummaryProps {
 
 export const ClusterStatusSummary = ({ clusterData }: ClusterStatusSummaryProps) => {
   const { selectedClusterId } = useCluster();
-  const nodeMetrics = useNodeMetrics(selectedClusterId);
   const [podStatus, setPodStatus] = useState<PodStatus>({ healthy: 0, warning: 0, critical: 0, total: 0 });
   const [recentAnomalies, setRecentAnomalies] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -155,19 +149,14 @@ export const ClusterStatusSummary = ({ clusterData }: ClusterStatusSummaryProps)
   const config = statusConfig[overallStatus];
   const StatusIcon = config.icon;
 
-  if (loading || nodeMetrics.loading) {
+  if (loading) {
     return (
       <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
         <CardHeader className="pb-2">
           <Skeleton className="h-6 w-48" />
         </CardHeader>
-        <CardContent className="space-y-4">
-          <Skeleton className="h-20 w-full" />
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[1, 2, 3, 4].map((i) => (
-              <Skeleton key={i} className="h-16 w-full" />
-            ))}
-          </div>
+        <CardContent>
+          <Skeleton className="h-16 w-full" />
         </CardContent>
       </Card>
     );
@@ -197,75 +186,6 @@ export const ClusterStatusSummary = ({ clusterData }: ClusterStatusSummaryProps)
           <div>
             <p className={`font-medium ${config.color}`}>{config.label}</p>
             <p className="text-sm text-muted-foreground">{config.description}</p>
-          </div>
-        </div>
-
-        {/* Metrics Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {/* Nodes */}
-          <div className="p-3 rounded-lg bg-muted/30 border border-border/50">
-            <div className="flex items-center gap-2 mb-1">
-              <Server className="h-4 w-4 text-primary" />
-              <span className="text-xs text-muted-foreground">Nodes</span>
-            </div>
-            <p className="text-2xl font-bold">{nodeMetrics.nodes.length}</p>
-            <p className="text-xs text-success">
-              {nodeMetrics.nodes.filter(n => n.status === 'Ready').length} ativos
-            </p>
-          </div>
-
-          {/* Pods */}
-          <div className="p-3 rounded-lg bg-muted/30 border border-border/50">
-            <div className="flex items-center gap-2 mb-1">
-              <Box className="h-4 w-4 text-primary" />
-              <span className="text-xs text-muted-foreground">Pods</span>
-            </div>
-            <p className="text-2xl font-bold">{podStatus.total}</p>
-            <div className="flex items-center gap-1 text-xs">
-              <span className="text-success">{podStatus.healthy} ok</span>
-              {podStatus.warning > 0 && (
-                <span className="text-warning">• {podStatus.warning} aviso</span>
-              )}
-              {podStatus.critical > 0 && (
-                <span className="text-destructive">• {podStatus.critical} erro</span>
-              )}
-            </div>
-          </div>
-
-          {/* CPU */}
-          <div className="p-3 rounded-lg bg-muted/30 border border-border/50">
-            <div className="flex items-center gap-2 mb-1">
-              <Cpu className="h-4 w-4 text-primary" />
-              <span className="text-xs text-muted-foreground">CPU</span>
-            </div>
-            <p className="text-2xl font-bold">{nodeMetrics.cpuUsage.toFixed(0)}%</p>
-            <div className="w-full h-1.5 bg-muted rounded-full mt-1">
-              <div 
-                className={`h-full rounded-full transition-all ${
-                  nodeMetrics.cpuUsage > 80 ? 'bg-destructive' : 
-                  nodeMetrics.cpuUsage > 60 ? 'bg-warning' : 'bg-success'
-                }`}
-                style={{ width: `${Math.min(nodeMetrics.cpuUsage, 100)}%` }}
-              />
-            </div>
-          </div>
-
-          {/* Memory */}
-          <div className="p-3 rounded-lg bg-muted/30 border border-border/50">
-            <div className="flex items-center gap-2 mb-1">
-              <HardDrive className="h-4 w-4 text-primary" />
-              <span className="text-xs text-muted-foreground">Memória</span>
-            </div>
-            <p className="text-2xl font-bold">{nodeMetrics.memoryUsage.toFixed(0)}%</p>
-            <div className="w-full h-1.5 bg-muted rounded-full mt-1">
-              <div 
-                className={`h-full rounded-full transition-all ${
-                  nodeMetrics.memoryUsage > 80 ? 'bg-destructive' : 
-                  nodeMetrics.memoryUsage > 60 ? 'bg-warning' : 'bg-success'
-                }`}
-                style={{ width: `${Math.min(nodeMetrics.memoryUsage, 100)}%` }}
-              />
-            </div>
           </div>
         </div>
 
