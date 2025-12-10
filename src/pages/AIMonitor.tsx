@@ -526,82 +526,11 @@ export default function AIMonitor() {
                 <p className="text-sm text-foreground">
                   <span className="font-semibold">📊 Resumo da Análise:</span> {scanSummary}
                 </p>
-              </div>
-            )}
-
-            {anomalies.length > 0 && (
-              <div className="mt-4 space-y-2">
-                <h3 className="font-semibold flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4" />
-                  Anomalias Detectadas ({anomalies.length})
-                </h3>
-                <div className="space-y-3 max-h-96 overflow-y-auto">
-                  {anomalies.map((anomaly, idx) => (
-                    <Card 
-                      key={idx}
-                      className={`border-l-4 ${
-                        anomaly.severity === 'critical' ? 'border-l-destructive' :
-                        anomaly.severity === 'high' ? 'border-l-orange-500' :
-                        anomaly.severity === 'medium' ? 'border-l-yellow-500' :
-                        'border-l-blue-500'
-                      }`}
-                    >
-                      <CardContent className="p-4">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="space-y-2 flex-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <Badge variant={
-                                anomaly.severity === 'critical' ? 'destructive' :
-                                anomaly.severity === 'high' ? 'default' :
-                                'secondary'
-                              }>
-                                {anomaly.severity}
-                              </Badge>
-                              <span className="text-xs text-muted-foreground font-medium">{anomaly.type}</span>
-                              {anomaly.auto_heal && (
-                                <Badge variant="outline" className="text-xs">
-                                  <Zap className="w-3 h-3 mr-1" />
-                                  Auto-cura disponível
-                                </Badge>
-                              )}
-                            </div>
-                            <p className="text-sm font-medium">{anomaly.description}</p>
-                            <p className="text-xs text-muted-foreground">💡 {anomaly.recommendation}</p>
-                            {anomaly.event_messages && anomaly.event_messages.length > 0 && (
-                              <div className="mt-2 p-2 bg-destructive/10 rounded border border-destructive/20">
-                                <p className="text-xs font-semibold text-destructive mb-1">🔴 Erro do Kubernetes:</p>
-                                {anomaly.event_messages.map((msg: string, midx: number) => (
-                                  <p key={midx} className="text-xs font-mono text-destructive/90">{msg}</p>
-                                ))}
-                              </div>
-                            )}
-                            {anomaly.affected_pods && anomaly.affected_pods.length > 0 && (
-                              <div className="mt-2">
-                                <p className="text-xs font-semibold text-muted-foreground mb-1">Pods Afetados:</p>
-                                <div className="flex flex-wrap gap-1">
-                                  {anomaly.affected_pods.map((pod: string, pidx: number) => (
-                                    <Badge key={pidx} variant="outline" className="text-xs">
-                                      {pod}
-                                    </Badge>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                          {anomaly.auto_heal && autoHealEnabled && (
-                            <button 
-                              onClick={() => handleApplyAutoHeal(anomaly)}
-                              className="shrink-0 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 flex items-center gap-1 text-xs transition-colors"
-                            >
-                              <Zap className="w-3 h-3" />
-                              Aplicar Auto-cura
-                            </button>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
+                {anomalies.length > 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    ⚠️ {anomalies.length} anomalia{anomalies.length > 1 ? 's' : ''} detectada{anomalies.length > 1 ? 's' : ''} - veja detalhes na aba "Anomalias" abaixo
+                  </p>
+                )}
               </div>
             )}
           </CardContent>
