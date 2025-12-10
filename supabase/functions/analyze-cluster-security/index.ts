@@ -7,11 +7,14 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
+  console.log('analyze-cluster-security called');
+  
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
+    console.log('Creating Supabase client...');
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
@@ -22,17 +25,26 @@ serve(async (req) => {
       }
     );
 
-    const { data: { user } } = await supabaseClient.auth.getUser();
+    console.log('Getting user...');
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+    if (userError) {
+      console.error('User error:', userError);
+    }
     if (!user) {
+      console.log('No user found');
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+    console.log('User authenticated:', user.id);
 
-    const { cluster_id } = await req.json();
+    const body = await req.json();
+    console.log('Request body:', JSON.stringify(body));
+    const { cluster_id } = body;
 
     if (!cluster_id) {
+      console.log('Missing cluster_id');
       return new Response(JSON.stringify({ error: 'Missing cluster_id' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
