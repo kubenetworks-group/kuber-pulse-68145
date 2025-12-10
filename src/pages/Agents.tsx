@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,7 @@ interface AgentKey {
 const Agents = () => {
   const { user } = useAuth();
   const { clusters } = useCluster();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [agentKeys, setAgentKeys] = useState<AgentKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -42,6 +44,20 @@ const Agents = () => {
   const [selectedClusterId, setSelectedClusterId] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [showApiKey, setShowApiKey] = useState<string | null>(null);
+
+  // Handle cluster_id from URL (coming from Clusters page after creating a cluster)
+  useEffect(() => {
+    const clusterIdFromUrl = searchParams.get('cluster_id');
+    if (clusterIdFromUrl && clusters.length > 0) {
+      const clusterExists = clusters.find(c => c.id === clusterIdFromUrl);
+      if (clusterExists) {
+        setSelectedClusterId(clusterIdFromUrl);
+        setDialogOpen(true);
+        // Clear the URL param
+        setSearchParams({});
+      }
+    }
+  }, [searchParams, clusters, setSearchParams]);
 
   useEffect(() => {
     if (user) {
