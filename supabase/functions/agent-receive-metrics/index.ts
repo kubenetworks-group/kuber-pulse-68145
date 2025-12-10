@@ -24,6 +24,15 @@ function checkRateLimit(key: string, maxRequests: number, windowMs: number): boo
   return true;
 }
 
+// Hash function using Web Crypto API
+async function hashApiKey(apiKey: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(apiKey);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -40,8 +49,9 @@ serve(async (req) => {
       });
     }
 
-    // Rate limiting: 4 requests per minute
-    if (!checkRateLimit(agentKey, 4, 60000)) {
+    // Rate limiting: 4 requests per minute (using hash for rate limit key)
+    const rateLimitKey = await hashApiKey(agentKey);
+    if (!checkRateLimit(rateLimitKey, 4, 60000)) {
       console.warn('Rate limit exceeded');
       return new Response(JSON.stringify({ error: 'Rate limit exceeded' }), {
         status: 429,
@@ -59,14 +69,46 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Validate API key and get cluster_id
-    const { data: apiKeyData, error: keyError } = await supabaseClient
-      .from('agent_api_keys')
-      .select('cluster_id, is_active')
-      .eq('api_key', agentKey)
-      .single();
+    // Hash the provided key
+    const providedKeyHash = await hashApiKey(agentKey);
 
-    if (keyError || !apiKeyData || !apiKeyData.is_active) {
+    // Try to validate using hash first, fallback to plaintext for backward compatibility
+    let apiKeyData;
+    
+    // First, try hash-based authentication
+    const { data: hashData, error: hashError } = await supabaseClient
+      .from('agent_api_keys')
+      .select('cluster_id, is_active, id')
+      .eq('api_key_hash', providedKeyHash)
+      .single();
+    
+    if (hashData && !hashError) {
+      apiKeyData = hashData;
+    } else {
+      // Fallback: try plaintext (for keys created before hash implementation)
+      const { data: plainData, error: plainError } = await supabaseClient
+        .from('agent_api_keys')
+        .select('cluster_id, is_active, id, api_key')
+        .eq('api_key', agentKey)
+        .single();
+      
+      if (plainData && !plainError) {
+        apiKeyData = plainData;
+        
+        // Migrate this key to use hash
+        await supabaseClient
+          .from('agent_api_keys')
+          .update({
+            api_key_hash: providedKeyHash,
+            api_key_prefix: agentKey.substring(0, 12) + '...',
+          })
+          .eq('id', plainData.id);
+        
+        console.log('Migrated API key to hash-based authentication');
+      }
+    }
+
+    if (!apiKeyData || !apiKeyData.is_active) {
       console.error('Authentication failed');
       return new Response(JSON.stringify({ error: 'Invalid API key' }), {
         status: 401,
@@ -76,11 +118,11 @@ serve(async (req) => {
 
     const { cluster_id } = apiKeyData;
 
-    // Update last_seen
+    // Update last_seen using the ID (more secure than using the plaintext key)
     await supabaseClient
       .from('agent_api_keys')
       .update({ last_seen: new Date().toISOString() })
-      .eq('api_key', agentKey);
+      .eq('id', apiKeyData.id);
 
     // Parse and validate request body
     const body = await req.json();

@@ -70,6 +70,8 @@ export type Database = {
       agent_api_keys: {
         Row: {
           api_key: string
+          api_key_hash: string | null
+          api_key_prefix: string | null
           cluster_id: string
           created_at: string
           id: string
@@ -81,6 +83,8 @@ export type Database = {
         }
         Insert: {
           api_key: string
+          api_key_hash?: string | null
+          api_key_prefix?: string | null
           cluster_id: string
           created_at?: string
           id?: string
@@ -92,6 +96,8 @@ export type Database = {
         }
         Update: {
           api_key?: string
+          api_key_hash?: string | null
+          api_key_prefix?: string | null
           cluster_id?: string
           created_at?: string
           id?: string
@@ -956,6 +962,10 @@ export type Database = {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
+        Returns: boolean
+      }
+      verify_api_key_hash: {
+        Args: { p_api_key: string; p_stored_hash: string }
         Returns: boolean
       }
     }

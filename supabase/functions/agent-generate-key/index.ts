@@ -6,6 +6,15 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Hash function using Web Crypto API
+async function hashApiKey(apiKey: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(apiKey);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -53,14 +62,22 @@ serve(async (req) => {
 
     // Generate secure API key
     const apiKey = `kp_${crypto.randomUUID().replace(/-/g, '')}`;
+    
+    // Hash the API key for secure storage
+    const apiKeyHash = await hashApiKey(apiKey);
+    
+    // Store only a prefix for display purposes (first 12 characters)
+    const apiKeyPrefix = apiKey.substring(0, 12) + '...';
 
-    // Insert API key
+    // Insert API key with hash
     const { data: apiKeyData, error: insertError } = await supabaseClient
       .from('agent_api_keys')
       .insert({
         user_id: user.id,
         cluster_id,
-        api_key: apiKey,
+        api_key: apiKey, // Store full key temporarily for backward compatibility
+        api_key_hash: apiKeyHash,
+        api_key_prefix: apiKeyPrefix,
         name,
       })
       .select()
@@ -76,7 +93,10 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        api_key: apiKeyData,
+        api_key: {
+          ...apiKeyData,
+          api_key: apiKey, // Return full key only once at creation
+        },
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
