@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,13 +20,14 @@ import { ClusterCard } from "@/components/ClusterCard";
 import { ClusterLogs } from "@/components/ClusterLogs";
 import { ClusterDeletionProgress } from "@/components/ClusterDeletionProgress";
 import { LimitReachedModal } from "@/components/LimitReachedModal";
-import { Plus, Trash2, RefreshCw, Edit } from "lucide-react";
+import { Plus, Trash2, RefreshCw, Edit, Bot, ArrowRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { toast } from "sonner";
 
 const Clusters = () => {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { canCreateCluster, isReadOnly } = useSubscription();
   const [clusters, setClusters] = useState<any[]>([]);
@@ -42,6 +44,8 @@ const Clusters = () => {
   const [clusterToEdit, setClusterToEdit] = useState<any | null>(null);
   const [refreshingCluster, setRefreshingCluster] = useState<string | null>(null);
   const [limitModalOpen, setLimitModalOpen] = useState(false);
+  const [successDialogOpen, setSuccessDialogOpen] = useState(false);
+  const [createdCluster, setCreatedCluster] = useState<{ id: string; name: string } | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     environment: "production",
@@ -368,57 +372,11 @@ const Clusters = () => {
       toast.error("Failed to add cluster");
       console.error(error);
     } else {
-      toast.success("Cluster connection initiated!");
-      
       // Create initial log
       await createClusterLog(data.id, "info", "Cluster connection initiated", {
         cluster_type: formData.cluster_type,
         provider: formData.provider,
       });
-
-      // Call edge function to validate the cluster connection
-      try {
-        console.log('Calling validation for cluster:', data.id, 'type:', formData.cluster_type);
-        
-        const { data: validationData, error: validationError } = await supabase.functions.invoke('validate-cluster-connection', {
-          body: {
-            cluster_id: data.id,
-            config_file: formData.config_file,
-            cluster_type: formData.cluster_type,
-            api_endpoint: formData.api_endpoint,
-            skip_ssl_verify: formData.skip_ssl_verify,
-          },
-        });
-
-        console.log('Validation response:', { validationData, validationError });
-
-        if (validationError) {
-          console.error('Error calling validation function:', validationError);
-          toast.error('Failed to validate cluster connection');
-          
-          // Update status to error if validation failed
-          await supabase
-            .from("clusters")
-            .update({ status: 'error' })
-            .eq("id", data.id);
-            
-          await createClusterLog(data.id, "error", "Validation function failed", {
-            error: validationError.message || validationError
-          });
-        }
-      } catch (validationException) {
-        console.error('Exception during validation:', validationException);
-        toast.error('Failed to validate cluster connection');
-        
-        await supabase
-          .from("clusters")
-          .update({ status: 'error' })
-          .eq("id", data.id);
-          
-        await createClusterLog(data.id, "error", "Validation exception", {
-          error: validationException instanceof Error ? validationException.message : String(validationException)
-        });
-      }
 
       setOpen(false);
       setFormData({
@@ -434,6 +392,19 @@ const Clusters = () => {
         skip_ssl_verify: false,
       });
       fetchClusters();
+      
+      // Show success dialog with instructions to create agent
+      setCreatedCluster({ id: data.id, name: data.name });
+      setSuccessDialogOpen(true);
+    }
+  };
+
+  const handleGoToAgents = () => {
+    setSuccessDialogOpen(false);
+    if (createdCluster) {
+      navigate(`/agents?cluster_id=${createdCluster.id}`);
+    } else {
+      navigate('/agents');
     }
   };
 
@@ -896,6 +867,45 @@ const Clusters = () => {
           onOpenChange={setLimitModalOpen} 
           limitType="clusters" 
         />
+
+        {/* Success Dialog - Redirect to Agents */}
+        <Dialog open={successDialogOpen} onOpenChange={setSuccessDialogOpen}>
+          <DialogContent className="bg-card sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Bot className="w-5 h-5 text-primary" />
+                Cluster Cadastrado com Sucesso!
+              </DialogTitle>
+              <DialogDescription className="pt-4 space-y-3">
+                <p>
+                  O cluster <strong className="text-foreground">{createdCluster?.name}</strong> foi criado.
+                </p>
+                <p>
+                  Para que o Kodo possa monitorar seu cluster, você precisa criar um <strong className="text-foreground">Agent</strong> e instalá-lo no seu cluster Kubernetes.
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  O Agent é responsável por coletar métricas e enviar para o Kodo em tempo real.
+                </p>
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="flex-col sm:flex-row gap-2 mt-4">
+              <Button 
+                variant="outline" 
+                onClick={() => setSuccessDialogOpen(false)}
+                className="w-full sm:w-auto"
+              >
+                Fazer depois
+              </Button>
+              <Button 
+                onClick={handleGoToAgents}
+                className="w-full sm:w-auto gap-2"
+              >
+                Criar Agent
+                <ArrowRight className="w-4 h-4" />
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   );
