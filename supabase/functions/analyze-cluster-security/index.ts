@@ -6,6 +6,26 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Helper function to decode JWT and extract user ID
+function getUserIdFromToken(authHeader: string | null): string | null {
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return null;
+  }
+  
+  try {
+    const token = authHeader.replace('Bearer ', '');
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    
+    // Decode the payload (second part)
+    const payload = JSON.parse(atob(parts[1]));
+    return payload.sub || null;
+  } catch (e) {
+    console.error('Error decoding JWT:', e);
+    return null;
+  }
+}
+
 serve(async (req) => {
   console.log('analyze-cluster-security called');
   
@@ -14,30 +34,24 @@ serve(async (req) => {
   }
 
   try {
-    console.log('Creating Supabase client...');
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      {
-        global: {
-          headers: { Authorization: req.headers.get('Authorization')! },
-        },
-      }
-    );
-
-    console.log('Getting user...');
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
-    if (userError) {
-      console.error('User error:', userError);
-    }
-    if (!user) {
-      console.log('No user found');
+    // Extract user ID from the validated JWT (verify_jwt = true ensures it's valid)
+    const authHeader = req.headers.get('Authorization');
+    const userId = getUserIdFromToken(authHeader);
+    
+    if (!userId) {
+      console.log('No user ID found in token');
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-    console.log('User authenticated:', user.id);
+    console.log('User authenticated from JWT:', userId);
+
+    // Use service role key for database operations
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
 
     const body = await req.json();
     console.log('Request body:', JSON.stringify(body));
@@ -51,14 +65,16 @@ serve(async (req) => {
       });
     }
 
-    // Fetch cluster info
-    const { data: cluster, error: clusterError } = await supabaseClient
+    // Fetch cluster info - verify user owns this cluster
+    const { data: cluster, error: clusterError } = await supabaseAdmin
       .from('clusters')
       .select('*')
       .eq('id', cluster_id)
+      .eq('user_id', userId)
       .single();
 
     if (clusterError || !cluster) {
+      console.log('Cluster not found or not owned by user:', clusterError);
       return new Response(JSON.stringify({ error: 'Cluster not found' }), {
         status: 404,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -66,7 +82,7 @@ serve(async (req) => {
     }
 
     // Fetch latest metrics to analyze
-    const { data: metrics } = await supabaseClient
+    const { data: metrics } = await supabaseAdmin
       .from('agent_metrics')
       .select('metric_type, metric_data')
       .eq('cluster_id', cluster_id)
@@ -288,11 +304,11 @@ Retorne sua análise considerando que este é um cluster ${cluster.environment} 
     }
 
     // Save to database
-    const { data: scanResult, error: insertError } = await supabaseClient
+    const { data: scanResult, error: insertError } = await supabaseAdmin
       .from('cluster_security_scans')
       .insert({
         cluster_id,
-        user_id: user.id,
+        user_id: userId,
         has_rbac: analysis.has_rbac,
         rbac_details: analysis.rbac_details,
         has_network_policies: analysis.has_network_policies,
