@@ -5,6 +5,7 @@ import { PodHealthByNamespace } from "@/components/PodHealthByNamespace";
 import { ClusterEvents } from "@/components/ClusterEvents";
 import { WelcomeHeader } from "@/components/WelcomeHeader";
 import { ClusterOnboarding } from "@/components/ClusterOnboarding";
+import { ClusterStatusSummary } from "@/components/ClusterStatusSummary";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCluster } from "@/contexts/ClusterContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -136,6 +137,13 @@ const Index = () => {
                 <span className="text-sm font-medium text-foreground">
                   {clusterData.name} - {clusterData.environment}
                 </span>
+              </div>
+            )}
+
+            {/* Cluster Status Summary */}
+            {clusterData && (
+              <div className="animate-scale-in">
+                <ClusterStatusSummary clusterData={clusterData} />
               </div>
             )}
 
