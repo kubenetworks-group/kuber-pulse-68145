@@ -60,16 +60,36 @@ export default function AIMonitor() {
   const [scanSummary, setScanSummary] = useState<string>("");
   const [autoHealEnabled, setAutoHealEnabled] = useState(false);
   const [scanHistory, setScanHistory] = useState<any[]>([]);
+  const [agentCommands, setAgentCommands] = useState<any[]>([]);
 
   useEffect(() => {
     if (user) {
       fetchData();
       fetchScanHistory();
       fetchRecentAnomalies();
+      fetchAgentCommands();
       subscribeToIncidents();
       subscribeToAnomalies();
     }
   }, [user, selectedClusterId]);
+
+  const fetchAgentCommands = async () => {
+    if (!selectedClusterId) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('agent_commands')
+        .select('*')
+        .eq('cluster_id', selectedClusterId)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (error) throw error;
+      setAgentCommands(data || []);
+    } catch (error) {
+      console.error('Error fetching agent commands:', error);
+    }
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -695,38 +715,97 @@ export default function AIMonitor() {
             <div className="space-y-3">
               <h4 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
                 <Activity className="h-4 w-4" />
-                Ações Recentes
+                Atividades do Agente
               </h4>
-              {recentAnomalies.filter(a => a.auto_heal_applied || a.resolved).length === 0 && 
-               clusterIncidents.filter(i => i.action_taken).length === 0 ? (
+              
+              {recentAnomalies.length === 0 && agentCommands.length === 0 ? (
                 <div className="text-center py-6 text-muted-foreground">
                   <Bot className="h-10 w-10 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">Nenhuma ação executada ainda</p>
-                  <p className="text-xs">A IA executará ações automaticamente quando detectar anomalias</p>
+                  <p className="text-sm">Nenhuma atividade detectada ainda</p>
+                  <p className="text-xs">Execute uma varredura manual ou aguarde o monitoramento automático</p>
                 </div>
               ) : (
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {/* Anomalias com auto-heal aplicado */}
-                  {recentAnomalies.filter(a => a.auto_heal_applied || a.resolved).map((anomaly) => (
+                <div className="space-y-2 max-h-80 overflow-y-auto">
+                  {/* Comandos do agente */}
+                  {agentCommands.map((cmd) => (
                     <div 
-                      key={anomaly.id}
+                      key={cmd.id}
                       className={`p-3 rounded-lg border ${
-                        anomaly.resolved 
+                        cmd.status === 'completed' 
                           ? 'bg-success/5 border-success/20' 
+                          : cmd.status === 'failed'
+                          ? 'bg-destructive/5 border-destructive/20'
                           : 'bg-primary/5 border-primary/20'
                       }`}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
-                            <Badge variant={anomaly.resolved ? "default" : "secondary"} className="text-xs">
-                              {anomaly.resolved ? '✅ Resolvido' : '⏳ Em progresso'}
+                            <Badge variant={
+                              cmd.status === 'completed' ? "default" :
+                              cmd.status === 'failed' ? "destructive" :
+                              "secondary"
+                            } className="text-xs">
+                              {cmd.status === 'completed' ? '✅ Executado' : 
+                               cmd.status === 'failed' ? '❌ Falhou' :
+                               cmd.status === 'pending' ? '⏳ Pendente' : cmd.status}
+                            </Badge>
+                            <Badge variant="outline" className="text-xs">
+                              <Zap className="w-3 h-3 mr-1" />
+                              {cmd.command_type}
+                            </Badge>
+                          </div>
+                          <p className="text-sm font-medium">
+                            Comando: {cmd.command_type.replace(/_/g, ' ')}
+                          </p>
+                          {cmd.command_params && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {typeof cmd.command_params === 'object' 
+                                ? `Pod: ${cmd.command_params.pod_name || cmd.command_params.deployment_name || 'N/A'}`
+                                : cmd.command_params}
+                            </p>
+                          )}
+                        </div>
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">
+                          {format(new Date(cmd.created_at), 'dd/MM HH:mm', { locale: getDateLocale() })}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Anomalias detectadas */}
+                  {recentAnomalies.map((anomaly) => (
+                    <div 
+                      key={anomaly.id}
+                      className={`p-3 rounded-lg border ${
+                        anomaly.resolved 
+                          ? 'bg-success/5 border-success/20' 
+                          : anomaly.severity === 'critical'
+                          ? 'bg-destructive/5 border-destructive/20'
+                          : anomaly.severity === 'high'
+                          ? 'bg-orange-500/5 border-orange-500/20'
+                          : 'bg-yellow-500/5 border-yellow-500/20'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Badge variant={
+                              anomaly.resolved ? "default" :
+                              anomaly.severity === 'critical' ? "destructive" :
+                              "secondary"
+                            } className="text-xs">
+                              {anomaly.resolved ? '✅ Resolvido' : 
+                               anomaly.auto_heal_applied ? '🔧 Auto-curado' : '🔍 Detectado'}
+                            </Badge>
+                            <Badge variant="outline" className="text-xs">
+                              {anomaly.severity}
                             </Badge>
                             <Badge variant="outline" className="text-xs">
                               {anomaly.anomaly_type}
                             </Badge>
                           </div>
-                          <p className="text-sm font-medium truncate">{anomaly.description}</p>
+                          <p className="text-sm font-medium line-clamp-2">{anomaly.description}</p>
                           {anomaly.recommendation && (
                             <p className="text-xs text-muted-foreground mt-1">
                               💡 {anomaly.recommendation}
@@ -739,38 +818,6 @@ export default function AIMonitor() {
                       </div>
                     </div>
                   ))}
-                  
-                  {/* Incidentes com ação tomada */}
-                  {clusterIncidents.filter(i => i.action_taken).map((incident) => (
-                    <div 
-                      key={incident.id}
-                      className={`p-3 rounded-lg border ${
-                        incident.resolved_at 
-                          ? 'bg-success/5 border-success/20' 
-                          : 'bg-primary/5 border-primary/20'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Badge variant={incident.resolved_at ? "default" : "secondary"} className="text-xs">
-                              {incident.resolved_at ? '✅ Resolvido' : '⏳ Em progresso'}
-                            </Badge>
-                            <Badge variant="outline" className="text-xs">
-                              {incident.incident_type}
-                            </Badge>
-                          </div>
-                          <p className="text-sm font-medium truncate">{incident.title}</p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            🤖 {incident.auto_heal_action || 'Análise em andamento'}
-                          </p>
-                        </div>
-                        <span className="text-xs text-muted-foreground whitespace-nowrap">
-                          {format(new Date(incident.created_at), 'dd/MM HH:mm', { locale: getDateLocale() })}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
                 </div>
               )}
             </div>
@@ -778,15 +825,19 @@ export default function AIMonitor() {
         </Card>
 
         {/* Tabs para diferentes visualizações */}
-        <Tabs defaultValue="incidents" className="space-y-4">
+        <Tabs defaultValue="anomalies" className="space-y-4">
           <TabsList>
-            <TabsTrigger value="incidents" className="flex items-center gap-2">
+            <TabsTrigger value="anomalies" className="flex items-center gap-2">
               <AlertCircle className="h-4 w-4" />
-              {t('aiMonitor.incidents')}
+              Anomalias ({recentAnomalies.length})
             </TabsTrigger>
-            <TabsTrigger value="actions" className="flex items-center gap-2">
+            <TabsTrigger value="commands" className="flex items-center gap-2">
+              <Zap className="h-4 w-4" />
+              Comandos ({agentCommands.length})
+            </TabsTrigger>
+            <TabsTrigger value="incidents" className="flex items-center gap-2">
               <Activity className="h-4 w-4" />
-              {t('aiMonitor.detailedActions')}
+              {t('aiMonitor.incidents')}
             </TabsTrigger>
             <TabsTrigger value="history" className="flex items-center gap-2">
               <History className="h-4 w-4" />
@@ -794,6 +845,166 @@ export default function AIMonitor() {
             </TabsTrigger>
           </TabsList>
 
+          {/* Anomalies Tab */}
+          <TabsContent value="anomalies" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <AlertCircle className="h-5 w-5" />
+                  Anomalias Detectadas pelo Agente
+                </CardTitle>
+                <CardDescription>
+                  Problemas detectados automaticamente no cluster através do agente Kuberpulse
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {recentAnomalies.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Bot className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
+                    <h3 className="text-lg font-semibold mb-2">Nenhuma anomalia detectada</h3>
+                    <p className="text-muted-foreground text-sm">
+                      O agente está monitorando seu cluster. Anomalias aparecerão aqui quando detectadas.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {recentAnomalies.map((anomaly) => (
+                      <div 
+                        key={anomaly.id}
+                        className={`p-4 border rounded-lg border-l-4 ${
+                          anomaly.severity === 'critical' ? 'border-l-destructive bg-destructive/5' :
+                          anomaly.severity === 'high' ? 'border-l-orange-500 bg-orange-500/5' :
+                          anomaly.severity === 'medium' ? 'border-l-yellow-500 bg-yellow-500/5' :
+                          'border-l-blue-500 bg-blue-500/5'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 flex-wrap mb-2">
+                              <Badge variant={
+                                anomaly.severity === 'critical' ? 'destructive' :
+                                anomaly.severity === 'high' ? 'default' :
+                                'secondary'
+                              }>
+                                {anomaly.severity}
+                              </Badge>
+                              <Badge variant="outline">{anomaly.anomaly_type}</Badge>
+                              {anomaly.resolved && (
+                                <Badge className="bg-success/20 text-success border-success/30">
+                                  Resolvido
+                                </Badge>
+                              )}
+                              {anomaly.auto_heal_applied && (
+                                <Badge className="bg-primary/20 text-primary border-primary/30">
+                                  <Zap className="w-3 h-3 mr-1" />
+                                  Auto-curado
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-sm font-medium mb-2">{anomaly.description}</p>
+                            {anomaly.recommendation && (
+                              <p className="text-xs text-muted-foreground bg-background/50 p-2 rounded">
+                                💡 <strong>Recomendação:</strong> {anomaly.recommendation}
+                              </p>
+                            )}
+                          </div>
+                          <div className="text-right">
+                            <span className="text-xs text-muted-foreground">
+                              {format(new Date(anomaly.created_at), 'dd/MM/yyyy HH:mm', { locale: getDateLocale() })}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Commands Tab */}
+          <TabsContent value="commands" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Zap className="h-5 w-5" />
+                  Comandos Enviados ao Cluster
+                </CardTitle>
+                <CardDescription>
+                  Ações de auto-cura e comandos executados pelo agente no cluster
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {agentCommands.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Zap className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
+                    <h3 className="text-lg font-semibold mb-2">Nenhum comando enviado</h3>
+                    <p className="text-muted-foreground text-sm">
+                      Comandos de auto-cura aparecerão aqui quando forem executados.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {agentCommands.map((cmd) => (
+                      <div 
+                        key={cmd.id}
+                        className={`p-4 border rounded-lg ${
+                          cmd.status === 'completed' ? 'bg-success/5 border-success/20' :
+                          cmd.status === 'failed' ? 'bg-destructive/5 border-destructive/20' :
+                          cmd.status === 'executing' ? 'bg-primary/5 border-primary/20' :
+                          'bg-muted/50 border-border'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 flex-wrap mb-2">
+                              <Badge variant={
+                                cmd.status === 'completed' ? 'default' :
+                                cmd.status === 'failed' ? 'destructive' :
+                                'secondary'
+                              }>
+                                {cmd.status === 'completed' ? '✅ Completado' :
+                                 cmd.status === 'failed' ? '❌ Falhou' :
+                                 cmd.status === 'executing' ? '⚡ Executando' :
+                                 cmd.status === 'pending' ? '⏳ Pendente' : cmd.status}
+                              </Badge>
+                              <Badge variant="outline" className="gap-1">
+                                <Zap className="w-3 h-3" />
+                                {cmd.command_type.replace(/_/g, ' ')}
+                              </Badge>
+                            </div>
+                            <div className="text-sm space-y-1">
+                              <p className="font-medium">Tipo: {cmd.command_type}</p>
+                              {cmd.command_params && (
+                                <div className="bg-background/50 p-2 rounded text-xs font-mono">
+                                  {JSON.stringify(cmd.command_params, null, 2)}
+                                </div>
+                              )}
+                              {cmd.result && (
+                                <div className="mt-2 p-2 bg-success/10 rounded">
+                                  <p className="text-xs font-semibold text-success mb-1">Resultado:</p>
+                                  <pre className="text-xs overflow-auto">
+                                    {JSON.stringify(cmd.result, null, 2)}
+                                  </pre>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-right text-xs text-muted-foreground">
+                            <div>Criado: {format(new Date(cmd.created_at), 'dd/MM HH:mm', { locale: getDateLocale() })}</div>
+                            {cmd.executed_at && (
+                              <div>Executado: {format(new Date(cmd.executed_at), 'dd/MM HH:mm', { locale: getDateLocale() })}</div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+          {/* Incidents Tab */}
           <TabsContent value="incidents" className="space-y-4">
             {/* Filters */}
             <div className="flex gap-4">
@@ -850,171 +1061,7 @@ export default function AIMonitor() {
             </div>
           </TabsContent>
 
-          <TabsContent value="actions" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>{t('aiMonitor.actionHistory')}</CardTitle>
-                <CardDescription>
-                  {t('aiMonitor.actionHistoryDetail')}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {/* Anomalias com ações detalhadas */}
-                  {recentAnomalies.filter(a => a.auto_heal_applied || a.resolved).map((anomaly) => (
-                    <div 
-                      key={anomaly.id} 
-                      className="p-4 border rounded-lg space-y-3 bg-gradient-to-r from-background to-muted/20"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <Badge variant={anomaly.resolved ? "default" : "secondary"}>
-                              {anomaly.resolved ? t('aiMonitor.resolved') : t('aiMonitor.inProgress')}
-                            </Badge>
-                            <Badge variant="outline">{anomaly.severity}</Badge>
-                            <Badge variant="outline" className="text-xs">{anomaly.anomaly_type}</Badge>
-                          </div>
-                          <h4 className="font-semibold mb-1">{anomaly.description}</h4>
-                          
-                          {/* Análise da IA para anomalias */}
-                          <div className="bg-primary/5 border border-primary/10 rounded-lg p-3 space-y-2 mt-3">
-                            <div className="flex items-center gap-2 mb-2">
-                              <Bot className="h-4 w-4 text-primary" />
-                              <span className="text-sm font-medium">{t('aiMonitor.whatAIDid')}</span>
-                            </div>
-                            <div className="text-sm space-y-2">
-                              <div>
-                                <span className="font-medium text-primary">Análise: </span>
-                                <span>{typeof anomaly.ai_analysis === 'object' 
-                                  ? (anomaly.ai_analysis as any).root_cause || JSON.stringify(anomaly.ai_analysis) 
-                                  : anomaly.ai_analysis}</span>
-                              </div>
-                              {anomaly.auto_heal_applied && (
-                                <div>
-                                  <span className="font-medium text-primary">Auto-cura aplicada: </span>
-                                  <span className="text-success">✅ Sim</span>
-                                </div>
-                              )}
-                              {anomaly.recommendation && (
-                                <div>
-                                  <span className="font-medium text-primary">{t('aiMonitor.recommendation')} </span>
-                                  <span>{anomaly.recommendation}</span>
-                                </div>
-                              )}
-                              {anomaly.resolved && anomaly.resolved_at && (
-                                <div>
-                                  <span className="font-medium text-primary">{t('aiMonitor.result')} </span>
-                                  <span className="text-success">Anomalia resolvida com sucesso</span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {/* Timeline */}
-                      <div className="flex items-center gap-4 text-xs text-muted-foreground pt-2 border-t">
-                        <span>
-                          {t('aiMonitor.detected')} {new Date(anomaly.created_at).toLocaleString(i18n.language)}
-                        </span>
-                        {anomaly.resolved_at && (
-                          <span>
-                            {t('aiMonitor.resolvedAt')} {new Date(anomaly.resolved_at).toLocaleString(i18n.language)}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* Incidentes com ações */}
-                  {filteredIncidents
-                    .filter(i => i.action_taken)
-                    .map(incident => (
-                      <div 
-                        key={incident.id} 
-                        className="p-4 border rounded-lg space-y-3 bg-gradient-to-r from-background to-muted/20"
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
-                              <Badge variant={incident.resolved_at ? "default" : "secondary"}>
-                                {incident.resolved_at ? t('aiMonitor.resolved') : t('aiMonitor.inProgress')}
-                              </Badge>
-                              <Badge variant="outline">{incident.severity}</Badge>
-                              <span className="text-sm text-muted-foreground">
-                                {clusters.find(c => c.id === incident.cluster_id)?.name}
-                              </span>
-                            </div>
-                            <h4 className="font-semibold mb-1">{incident.title}</h4>
-                            <p className="text-sm text-muted-foreground mb-3">
-                              {incident.description}
-                            </p>
-                            
-                            {/* Análise da IA */}
-                            <div className="bg-primary/5 border border-primary/10 rounded-lg p-3 space-y-2">
-                              <div className="flex items-center gap-2 mb-2">
-                                <Bot className="h-4 w-4 text-primary" />
-                                <span className="text-sm font-medium">{t('aiMonitor.whatAIDid')}</span>
-                              </div>
-                              <div className="text-sm space-y-2">
-                                <div>
-                                  <span className="font-medium text-primary">{t('aiMonitor.rootCause')} </span>
-                                  <span>{incident.ai_analysis.root_cause}</span>
-                                </div>
-                                <div>
-                                  <span className="font-medium text-primary">{t('aiMonitor.actionTaken')} </span>
-                                  <span>{incident.auto_heal_action || t('aiMonitor.analysisInProgress')}</span>
-                                </div>
-                                {incident.action_result && (
-                                  <div>
-                                    <span className="font-medium text-primary">{t('aiMonitor.result')} </span>
-                                    <span className="text-success">
-                                      {typeof incident.action_result === 'object' 
-                                        ? JSON.stringify(incident.action_result) 
-                                        : incident.action_result}
-                                    </span>
-                                  </div>
-                                )}
-                                <div>
-                                  <span className="font-medium text-primary">{t('aiMonitor.recommendation')} </span>
-                                  <span>{incident.ai_analysis.recommendation}</span>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        
-                        {/* Timeline */}
-                        <div className="flex items-center gap-4 text-xs text-muted-foreground pt-2 border-t">
-                          <span>
-                            {t('aiMonitor.detected')} {new Date(incident.created_at).toLocaleString(i18n.language)}
-                          </span>
-                          {incident.resolved_at && (
-                            <span>
-                              {t('aiMonitor.resolvedAt')} {new Date(incident.resolved_at).toLocaleString(i18n.language)}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-
-                  {/* Mensagem quando não há ações */}
-                  {recentAnomalies.filter(a => a.auto_heal_applied || a.resolved).length === 0 && 
-                   filteredIncidents.filter(i => i.action_taken).length === 0 && (
-                    <div className="text-center py-12">
-                      <Bot className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
-                      <h3 className="text-lg font-semibold mb-2">Nenhuma ação detalhada ainda</h3>
-                      <p className="text-muted-foreground text-sm">
-                        Quando a IA executar ações de auto-cura, os detalhes aparecerão aqui
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
+          {/* History Tab */}
           <TabsContent value="history" className="space-y-4">
             <ScanHistoryTab scanHistory={scanHistory} loading={loading} />
           </TabsContent>
