@@ -1,6 +1,5 @@
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { NodeDetailsCard } from "@/components/NodeDetailsCard";
-import { CostChart } from "@/components/CostChart";
 import { AIInsightsWidget } from "@/components/AIInsightsWidget";
 import { PodHealthByNamespace } from "@/components/PodHealthByNamespace";
 import { ClusterEvents } from "@/components/ClusterEvents";
@@ -164,11 +163,6 @@ const Index = () => {
                 />
               </div>
             )}
-
-            {/* Cost Chart */}
-            <div className="animate-scale-in">
-              <CostChart />
-            </div>
           </div>
 
           {/* Right Column - 1 column wide */}

@@ -22,8 +22,9 @@ async function retryWithBackoff<T>(
       
       // Don't retry on authentication errors
       if (error instanceof Error && (
-        error.message.includes('Invalid OpenAI API key') ||
-        error.message.includes('Unauthorized')
+        error.message.includes('Unauthorized') ||
+        error.message.includes('402') ||
+        error.message.includes('429')
       )) {
         throw error;
       }
@@ -49,13 +50,31 @@ function findContainerName(podName: string, podDetails: any[]): string {
     const pods = metricData?.pods || [];
     for (const pod of pods) {
       if (pod.name === podName && pod.containers && pod.containers.length > 0) {
-        // Return the first container name (usually the main container)
         return pod.containers[0].name;
       }
     }
   }
-  // Fallback: extract deployment name from pod name if not found
   return podName.replace(/-[a-z0-9]{5,10}-[a-z0-9]{5}$/, '');
+}
+
+// Map anomaly type to incident type
+function mapAnomalyTypeToIncidentType(anomalyType: string): string {
+  const typeMap: Record<string, string> = {
+    'pod_restart': 'pod_restart',
+    'pod_crash': 'pod_crash',
+    'pod_pending': 'scheduling_issue',
+    'image_pull_error': 'image_pull_error',
+    'oom_killed': 'oom_killed',
+    'probe_failure': 'health_check_failure',
+    'scheduling_issue': 'scheduling_issue',
+    'mount_failure': 'storage_issue',
+    'high_cpu': 'resource_pressure',
+    'high_memory': 'resource_pressure',
+    'resource_limit_too_low': 'resource_misconfiguration',
+    'resource_limit_too_high': 'resource_misconfiguration',
+    'incomplete_data': 'monitoring_issue',
+  };
+  return typeMap[anomalyType] || 'other';
 }
 
 serve(async (req) => {
@@ -121,7 +140,7 @@ serve(async (req) => {
       .from('agent_metrics')
       .select('*')
       .eq('cluster_id', cluster_id)
-      .gte('collected_at', new Date(Date.now() - 15 * 60 * 1000).toISOString()) // Last 15 minutes
+      .gte('collected_at', new Date(Date.now() - 15 * 60 * 1000).toISOString())
       .order('collected_at', { ascending: false });
 
     if (metricsError) {
@@ -189,27 +208,15 @@ serve(async (req) => {
       );
     }
 
-    // Call OpenAI for anomaly detection with retry
-    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
-    if (!OPENAI_API_KEY) {
-      throw new Error('OPENAI_API_KEY not configured');
+    // Call Lovable AI for anomaly detection
+    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    if (!LOVABLE_API_KEY) {
+      throw new Error('LOVABLE_API_KEY not configured');
     }
 
-    console.log('🤖 Calling OpenAI for anomaly analysis with retry...');
+    console.log('🤖 Calling Lovable AI (Gemini) for anomaly analysis...');
 
-    const aiData = await retryWithBackoff(async () => {
-      const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${OPENAI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content: `You are a Kubernetes cluster monitoring AI assistant specialized in deep cluster analysis.
+    const systemPrompt = `You are a Kubernetes cluster monitoring AI assistant specialized in deep cluster analysis.
 
 **PRIMARY ANALYSIS PRIORITY: KUBERNETES EVENTS**
 Kubernetes events are the MOST CRITICAL source of truth for cluster health. Analyze events FIRST before looking at metrics:
@@ -233,47 +240,12 @@ Kubernetes events are the MOST CRITICAL source of truth for cluster health. Anal
    - Pending > 5 minutes: Scheduling issues
    - Failed / Error: Immediate attention needed
    - CrashLoopBackOff: Critical failure loop
-   - "Failed" / "FailedMount" = Volume mount issues
-   - "Failed" / "FailedAttachVolume" = Storage problems
-   - "Pulled" / "ErrImagePull" / "ImagePullBackOff" = Image not found or auth issues
-   - "Unhealthy" = Liveness/Readiness probe failures
-   - "FailedCreate" = Deployment/ReplicaSet creation issues
-   - "OOMKilled" = Out of memory
-   - Look at event.message for specific error details!
-
-2. **Pod Restarts** (cross-reference with events):
-   - 1-3 restarts = medium severity
-   - 4-10 restarts = high severity
-   - >10 restarts = critical
-   
-3. **Pod Status & States**:
-   - Phase "Pending" + events = scheduling/resource issue
-   - Phase "Failed" = deployment problem
-   - Container state "waiting" = startup issue
-   - Container ready = false = app not healthy
 
 4. **Resource Usage & Optimization**: 
    - CPU > 80% = scale up needed or increase CPU limits
    - Memory > 85% = OOM risk, increase memory limits
    - OOMKilled in events = memory limit too low, MUST increase
    - CPU throttling in events = CPU limit too low, increase
-   - Pod with very high resource limits but low usage = wasting resources, decrease
-   - Look for resource-related termination reasons in pod states
-
-**DEPLOYMENT ANALYSIS:**
-For each pod with issues:
-1. Check events for that specific pod/deployment
-2. Extract the root cause from event messages
-3. Identify if it's: image problem, resource limit, config error, probe failure, etc.
-4. Provide specific fix based on the actual error
-
-**RESOURCE OPTIMIZATION:**
-When you detect resource issues, you MUST suggest update_deployment_resources action:
-- OOMKilled: increase memory_limit and memory_request
-- High memory usage (>85%): increase memory limits
-- High CPU usage (>80%): increase cpu limits
-- Low resource usage with high limits: decrease to save costs
-- Provide specific values based on current usage
 
 Return JSON (no markdown):
 {
@@ -304,75 +276,47 @@ Return JSON (no markdown):
   "summary": "Portuguese summary with total issues found and most critical problems"
 }
 
-**EXAMPLE:**
-If you see event: "Failed to pull image 'apache:2.5': image not found"
-→ anomaly type: "image_pull_error"
-→ description: "Pod apache-deploy-7 no namespace demo não consegue iniciar porque a imagem 'apache:2.5' não foi encontrada"
-→ recommendation: "Verificar se a tag da imagem está correta no deployment"
-→ affected_pods: ["demo/apache-deploy-7abc123"]
-→ event_messages: ["Failed to pull image 'apache:2.5': image not found"]
-→ NOTE: Docker Hub verification will be done automatically after AI analysis
-
-**RESOURCE OPTIMIZATION EXAMPLES:**
-1. OOMKilled event: "Container killed due to OOM"
-   → type: "oom_killed"
-   → auto_heal: "update_deployment_resources"
-   → params: increase memory_limit by 50-100% based on current value
-   → description: "Pod X foi encerrado por falta de memória (OOMKilled)"
-   → recommendation: "Aumentar o limite de memória de 256Mi para 512Mi"
-
-2. High CPU usage: CPU > 80%
-   → type: "high_cpu"
-   → auto_heal: "update_deployment_resources"
-   → params: increase cpu_limit by 50%
-   → description: "Pod X usando 90% da CPU, risco de throttling"
-   → recommendation: "Aumentar limite de CPU de 500m para 750m"
-
-3. Over-provisioned: Pod using 10% of 2GB memory
-   → type: "resource_limit_too_high"
-   → auto_heal: "update_deployment_resources"
-   → params: decrease memory to 512Mi
-   → description: "Pod X alocado com 2Gi mas usando apenas 200Mi, desperdiçando recursos"
-   → recommendation: "Reduzir limite de memória para 512Mi para economizar custos"
-
 **MANDATORY:**
 - Use events.message field to get exact error
 - Match events to pods by involved_object.name
 - List EVERY pod with problems
 - Include event_messages in anomaly
 - For resource issues, calculate optimal values based on current usage
-- Always provide deployment_name and container_name for update_deployment_resources
-- Extract deployment_name from pod name (e.g., "apache-deploy-7abc123" → "apache-deploy")
-- Be SPECIFIC about what's wrong and how to fix`
-          },
-          {
-            role: 'user',
-            content: `Analyze these Kubernetes cluster metrics and detect anomalies:\n\n${JSON.stringify(metricsSummary, null, 2)}`
-          }
-        ],
-        temperature: 0.7,
-      }),
-    });
+- Be SPECIFIC about what's wrong and how to fix`;
 
-    if (!aiResponse.ok) {
-      const errorText = await aiResponse.text();
-      console.error('OpenAI API error:', aiResponse.status, errorText);
-      
-      if (aiResponse.status === 429) {
-        throw new Error('Rate limit exceeded. Please try again later.');
-      }
-      if (aiResponse.status === 401) {
-        throw new Error('Invalid OpenAI API key.');
-      }
-      if (aiResponse.status === 402 || aiResponse.status === 403) {
-        throw new Error('Insufficient OpenAI credits. Please add funds to your account.');
-      }
-      
-      throw new Error(`OpenAI API returned ${aiResponse.status}: ${errorText}`);
-    }
+    const aiData = await retryWithBackoff(async () => {
+      const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: `Analyze these Kubernetes cluster metrics and detect anomalies:\n\n${JSON.stringify(metricsSummary, null, 2)}` }
+          ],
+        }),
+      });
 
-    return await aiResponse.json();
-  }, 3, 2000); // 3 retries with 2 second initial delay
+      if (!aiResponse.ok) {
+        const errorText = await aiResponse.text();
+        console.error('Lovable AI error:', aiResponse.status, errorText);
+        
+        if (aiResponse.status === 429) {
+          throw new Error('Rate limit exceeded. Please try again later.');
+        }
+        if (aiResponse.status === 402) {
+          throw new Error('Payment required. Please add funds to your Lovable AI workspace.');
+        }
+        
+        throw new Error(`Lovable AI returned ${aiResponse.status}: ${errorText}`);
+      }
+
+      return await aiResponse.json();
+    }, 3, 2000);
+
     let aiContent = aiData.choices[0]?.message?.content || '{"anomalies":[]}';
     
     // Remove markdown code fences if present
@@ -393,7 +337,6 @@ If you see event: "Failed to pull image 'apache:2.5': image not found"
       const anomaly = anomalies[i];
       
       if (anomaly.type === 'image_pull_error' && anomaly.event_messages) {
-        // Extract image name from error messages
         const imageMatch = anomaly.event_messages
           .join(' ')
           .match(/image[:\s]+"?([a-zA-Z0-9\-_\.\/]+:[a-zA-Z0-9\-_\.]+)"?/i);
@@ -413,27 +356,20 @@ If you see event: "Failed to pull image 'apache:2.5': image not found"
               if (!exists && suggested_image) {
                 console.log(`Image ${failedImage} not found. Suggesting: ${suggested_image}`);
                 
-                // Update anomaly with Docker Hub verification
                 anomaly.description = `${anomaly.description}\n\n🐳 Docker Hub: ${message}`;
                 anomaly.recommendation = `Atualizar a imagem do deployment de "${failedImage}" para "${suggested_image}" (tag sugerida: ${suggested_tag})`;
-                
-                // Add auto-heal action to update image
                 anomaly.auto_heal = 'update_deployment_image';
                 
-                // Extract deployment and container info from affected pods
                 if (anomaly.affected_pods && anomaly.affected_pods.length > 0) {
                   const fullPodName = anomaly.affected_pods[0].split('/')[1] || anomaly.affected_pods[0];
-                  // Extract deployment name from pod name (e.g., "nginx-deploy-abc123" -> "nginx-deploy")
                   const deploymentName = fullPodName.replace(/-[a-z0-9]{5,10}-[a-z0-9]{5}$/, '');
                   const namespace = anomaly.affected_pods[0].split('/')[0] || 'default';
-                  
-                  // Get real container name from pod details
                   const containerName = findContainerName(fullPodName, metricsSummary.pod_details);
                   
                   anomaly.auto_heal_params = {
                     deployment_name: deploymentName,
                     namespace: namespace,
-                    container_name: containerName, // Using real container name from pod details
+                    container_name: containerName,
                     new_image: suggested_image,
                     old_image: failedImage
                   };
@@ -448,13 +384,12 @@ If you see event: "Failed to pull image 'apache:2.5': image not found"
             }
           } catch (verifyError) {
             console.error('Error verifying Docker image:', verifyError);
-            // Continue without Docker Hub verification
           }
         }
       }
     }
 
-    // Store anomalies in database
+    // Store anomalies in agent_anomalies table
     if (anomalies.length > 0) {
       const anomaliesToInsert = anomalies.map((anomaly: any) => ({
         cluster_id,
@@ -465,9 +400,13 @@ If you see event: "Failed to pull image 'apache:2.5': image not found"
         recommendation: anomaly.recommendation,
         auto_heal_applied: false,
         ai_analysis: {
-          model: 'gemini-2.5-flash',
+          model: 'google/gemini-2.5-flash',
           confidence: 0.85,
           timestamp: new Date().toISOString(),
+          affected_pods: anomaly.affected_pods || [],
+          event_messages: anomaly.event_messages || [],
+          auto_heal: anomaly.auto_heal || null,
+          auto_heal_params: anomaly.auto_heal_params || null,
         },
       }));
 
@@ -477,6 +416,41 @@ If you see event: "Failed to pull image 'apache:2.5': image not found"
 
       if (insertError) {
         console.error('Error storing anomalies:', insertError);
+      }
+
+      // Create ai_incidents for each anomaly (MVP feature)
+      console.log('📝 Creating ai_incidents for detected anomalies...');
+      
+      const incidentsToInsert = anomalies.map((anomaly: any) => ({
+        cluster_id,
+        user_id: user.id,
+        incident_type: mapAnomalyTypeToIncidentType(anomaly.type),
+        severity: anomaly.severity,
+        title: `${anomaly.type.replace(/_/g, ' ').toUpperCase()}: ${anomaly.affected_pods?.[0] || 'Cluster'}`,
+        description: anomaly.description,
+        auto_heal_action: anomaly.auto_heal || null,
+        ai_analysis: {
+          model: 'google/gemini-2.5-flash',
+          recommendation: anomaly.recommendation,
+          affected_pods: anomaly.affected_pods || [],
+          event_messages: anomaly.event_messages || [],
+          auto_heal_params: anomaly.auto_heal_params || null,
+          confidence: 0.85,
+          analyzed_at: new Date().toISOString(),
+        },
+        action_taken: false,
+        action_result: null,
+      }));
+
+      const { data: insertedIncidents, error: incidentsError } = await supabaseClient
+        .from('ai_incidents')
+        .insert(incidentsToInsert)
+        .select();
+
+      if (incidentsError) {
+        console.error('Error creating ai_incidents:', incidentsError);
+      } else {
+        console.log(`✅ Created ${insertedIncidents?.length || 0} ai_incidents`);
       }
 
       // Create notification
@@ -492,7 +466,18 @@ If you see event: "Failed to pull image 'apache:2.5': image not found"
         });
     }
 
-    console.log(`Analyzed cluster ${cluster_id} and found ${anomalies.length} anomalies`);
+    // Save scan history
+    await supabaseClient
+      .from('scan_history')
+      .insert({
+        cluster_id,
+        user_id: user.id,
+        anomalies_found: anomalies.length,
+        anomalies_data: anomalies,
+        summary: analysisResult.summary || 'Análise concluída',
+      });
+
+    console.log(`✅ Analyzed cluster ${cluster_id} and found ${anomalies.length} anomalies`);
 
     return new Response(
       JSON.stringify({
