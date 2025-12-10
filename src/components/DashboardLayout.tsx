@@ -5,12 +5,17 @@ import { Footer } from "./Footer";
 import { DocsAssistantChat } from "./DocsAssistantChat";
 import { TrialBanner } from "./TrialBanner";
 import { useState } from "react";
+import { useLocation } from "react-router-dom";
 import { Menu, PanelLeftClose, PanelLeft } from "lucide-react";
 import { Button } from "./ui/button";
 
 export const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const location = useLocation();
+  
+  // Hide cluster selector on settings and admin pages
+  const hideClusterSelector = ['/settings', '/admin'].includes(location.pathname);
 
   return (
     <div className="min-h-screen bg-background">
@@ -62,7 +67,7 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
                   <PanelLeftClose className="h-5 w-5" />
                 )}
               </Button>
-              <ClusterSelector />
+              {!hideClusterSelector && <ClusterSelector />}
             </div>
             <NotificationBell />
           </div>
