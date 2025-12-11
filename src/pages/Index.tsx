@@ -147,44 +147,38 @@ const Index = () => {
               </div>
             )}
 
-            {/* Main Content Grid - Responsive */}
-            <div className="grid gap-4 sm:gap-6 grid-cols-1 lg:grid-cols-12">
-              {/* Left Column - Node Details */}
-              <div className="lg:col-span-7 xl:col-span-8 space-y-4 sm:space-y-6">
-                {/* Node Details */}
-                {selectedClusterId && (
-                  <div className="animate-scale-in">
-                    <NodeDetailsCard
-                      nodes={nodeMetrics.nodes}
-                      totalCPU={nodeMetrics.totalCPU}
-                      totalMemory={nodeMetrics.totalMemory}
-                      cpuUsage={nodeMetrics.cpuUsage}
-                      memoryUsage={nodeMetrics.memoryUsage}
-                      loading={nodeMetrics.loading}
-                    />
-                  </div>
-                )}
+            {/* Node Infrastructure - Full Width */}
+            {selectedClusterId && (
+              <div className="animate-scale-in">
+                <NodeDetailsCard
+                  nodes={nodeMetrics.nodes}
+                  totalCPU={nodeMetrics.totalCPU}
+                  totalMemory={nodeMetrics.totalMemory}
+                  cpuUsage={nodeMetrics.cpuUsage}
+                  memoryUsage={nodeMetrics.memoryUsage}
+                  loading={nodeMetrics.loading}
+                />
+              </div>
+            )}
 
-                {/* AI Insights Widget */}
-                {incidents.length > 0 && (
-                  <div className="animate-scale-in">
-                    <AIInsightsWidget recentIncidents={incidents} />
-                  </div>
-                )}
+            {/* Secondary Content Grid */}
+            <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+              {/* Pod Health by Namespace */}
+              <div className="animate-scale-in">
+                <PodHealthByNamespace />
               </div>
 
-              {/* Right Column - Pod Health & Events */}
-              <div className="lg:col-span-5 xl:col-span-4 space-y-4 sm:space-y-6">
-                {/* Pod Health by Namespace */}
-                <div className="animate-scale-in">
-                  <PodHealthByNamespace />
-                </div>
-
-                {/* Cluster Events */}
-                <div className="animate-scale-in">
-                  <ClusterEvents />
-                </div>
+              {/* Cluster Events */}
+              <div className="animate-scale-in">
+                <ClusterEvents />
               </div>
+
+              {/* AI Insights Widget */}
+              {incidents.length > 0 && (
+                <div className="animate-scale-in md:col-span-2 lg:col-span-1">
+                  <AIInsightsWidget recentIncidents={incidents} />
+                </div>
+              )}
             </div>
           </div>
         )}
