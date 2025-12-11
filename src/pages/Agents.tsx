@@ -23,11 +23,12 @@ import { Label } from "@/components/ui/label";
 interface AgentKey {
   id: string;
   name: string;
-  api_key: string;
+  api_key_prefix: string; // Only the prefix is stored/displayed, never the full key
   cluster_id: string;
   last_seen: string | null;
   is_active: boolean;
   created_at: string;
+  updated_at: string;
   clusters: {
     name: string;
   };
@@ -69,7 +70,7 @@ const Agents = () => {
     try {
       const { data, error } = await supabase
         .from('agent_api_keys')
-        .select('*, clusters(name)')
+        .select('id, name, cluster_id, api_key_prefix, is_active, last_seen, created_at, updated_at, clusters(name)')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -419,31 +420,19 @@ spec:
                 <CardContent>
                   <div className="space-y-3">
                     <div>
-                      <Label className="text-xs text-muted-foreground">API Key</Label>
+                      <Label className="text-xs text-muted-foreground">API Key (prefix)</Label>
                       <div className="flex items-center gap-2 mt-1">
-                        <code className="flex-1 px-3 py-2 bg-muted rounded text-sm font-mono">
-                          {agent.api_key.substring(0, 20)}...
+                        <code className="flex-1 px-3 py-2 bg-muted rounded text-sm font-mono text-muted-foreground">
+                          {agent.api_key_prefix || 'kp_***...'}
                         </code>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => copyToClipboard(agent.api_key)}
-                        >
-                          <Copy className="w-4 h-4" />
-                        </Button>
+                        <span className="text-xs text-muted-foreground italic">
+                          Chave mostrada apenas na criação
+                        </span>
                       </div>
                     </div>
 
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => downloadDeploymentYaml(agent.api_key, agent.cluster_id)}
-                        className="flex-1"
-                      >
-                        <Download className="w-4 h-4 mr-2" />
-                        Baixar YAML
-                      </Button>
+                    <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded text-xs text-amber-600 dark:text-amber-400">
+                      ⚠️ Para baixar o YAML de deploy, crie uma nova API key. A chave só é exibida no momento da criação por segurança.
                     </div>
 
                     <div className="text-xs text-muted-foreground">
