@@ -15,7 +15,7 @@ metadata:
   name: kuberpulse-agent
 rules:
 - apiGroups: [""]
-  resources: ["nodes", "pods", "events", "namespaces", "persistentvolumeclaims", "persistentvolumes"]
+  resources: ["nodes", "pods", "events", "namespaces", "persistentvolumeclaims", "persistentvolumes", "secrets", "resourcequotas", "limitranges"]
   verbs: ["get", "list", "watch"]
 - apiGroups: [""]
   resources: ["pods"]
@@ -25,6 +25,12 @@ rules:
   verbs: ["get", "list", "update"]
 - apiGroups: ["metrics.k8s.io"]
   resources: ["nodes", "pods"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["roles", "rolebindings", "clusterroles", "clusterrolebindings"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["networking.k8s.io"]
+  resources: ["networkpolicies"]
   verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -79,7 +85,7 @@ spec:
       serviceAccountName: kuberpulse-agent
       containers:
       - name: agent
-        image: docker.io/denercavalcante/kuberpulse-agent:v0.0.31
+        image: docker.io/denercavalcante/kuberpulse-agent:v0.0.32
         imagePullPolicy: Always
         envFrom:
         - configMapRef:

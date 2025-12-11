@@ -458,6 +458,175 @@ func collectNodeStorageMetrics(clientset *kubernetes.Clientset) map[string]inter
 }
 
 // ---------------------------------------------
+// SECURITY DATA COLLECTION
+// ---------------------------------------------
+func collectSecurityData(clientset *kubernetes.Clientset) map[string]interface{} {
+	ctx := context.Background()
+	securityData := map[string]interface{}{
+		"rbac":             map[string]interface{}{},
+		"network_policies": map[string]interface{}{},
+		"secrets":          map[string]interface{}{},
+		"resource_quotas":  map[string]interface{}{},
+		"limit_ranges":     map[string]interface{}{},
+		"pod_security":     map[string]interface{}{},
+	}
+
+	// 1. Collect RBAC data (ClusterRoles, ClusterRoleBindings, Roles, RoleBindings)
+	clusterRoles, err := clientset.RbacV1().ClusterRoles().List(ctx, metav1.ListOptions{})
+	if err == nil {
+		var roleNames []string
+		for _, cr := range clusterRoles.Items {
+			roleNames = append(roleNames, cr.Name)
+		}
+		securityData["rbac"].(map[string]interface{})["cluster_roles_count"] = len(clusterRoles.Items)
+		securityData["rbac"].(map[string]interface{})["cluster_roles"] = roleNames
+	}
+
+	clusterRoleBindings, err := clientset.RbacV1().ClusterRoleBindings().List(ctx, metav1.ListOptions{})
+	if err == nil {
+		securityData["rbac"].(map[string]interface{})["cluster_role_bindings_count"] = len(clusterRoleBindings.Items)
+	}
+
+	// Count roles and rolebindings across namespaces
+	namespaces, _ := clientset.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
+	totalRoles := 0
+	totalRoleBindings := 0
+	for _, ns := range namespaces.Items {
+		roles, _ := clientset.RbacV1().Roles(ns.Name).List(ctx, metav1.ListOptions{})
+		totalRoles += len(roles.Items)
+		roleBindings, _ := clientset.RbacV1().RoleBindings(ns.Name).List(ctx, metav1.ListOptions{})
+		totalRoleBindings += len(roleBindings.Items)
+	}
+	securityData["rbac"].(map[string]interface{})["roles_count"] = totalRoles
+	securityData["rbac"].(map[string]interface{})["role_bindings_count"] = totalRoleBindings
+	securityData["rbac"].(map[string]interface{})["has_rbac"] = (len(clusterRoles.Items) > 0 || totalRoles > 0)
+
+	// 2. Collect NetworkPolicies
+	totalNetworkPolicies := 0
+	namespacesWithPolicies := 0
+	for _, ns := range namespaces.Items {
+		netPolicies, err := clientset.NetworkingV1().NetworkPolicies(ns.Name).List(ctx, metav1.ListOptions{})
+		if err == nil && len(netPolicies.Items) > 0 {
+			totalNetworkPolicies += len(netPolicies.Items)
+			namespacesWithPolicies++
+		}
+	}
+	securityData["network_policies"].(map[string]interface{})["total_count"] = totalNetworkPolicies
+	securityData["network_policies"].(map[string]interface{})["namespaces_with_policies"] = namespacesWithPolicies
+	securityData["network_policies"].(map[string]interface{})["has_network_policies"] = totalNetworkPolicies > 0
+
+	// 3. Collect Secrets info (count only, not content)
+	totalSecrets := 0
+	secretTypes := make(map[string]int)
+	for _, ns := range namespaces.Items {
+		secrets, err := clientset.CoreV1().Secrets(ns.Name).List(ctx, metav1.ListOptions{})
+		if err == nil {
+			totalSecrets += len(secrets.Items)
+			for _, s := range secrets.Items {
+				secretTypes[string(s.Type)]++
+			}
+		}
+	}
+	securityData["secrets"].(map[string]interface{})["total_count"] = totalSecrets
+	securityData["secrets"].(map[string]interface{})["types"] = secretTypes
+	securityData["secrets"].(map[string]interface{})["has_secrets"] = totalSecrets > 0
+
+	// 4. Collect ResourceQuotas
+	totalQuotas := 0
+	for _, ns := range namespaces.Items {
+		quotas, err := clientset.CoreV1().ResourceQuotas(ns.Name).List(ctx, metav1.ListOptions{})
+		if err == nil {
+			totalQuotas += len(quotas.Items)
+		}
+	}
+	securityData["resource_quotas"].(map[string]interface{})["total_count"] = totalQuotas
+	securityData["resource_quotas"].(map[string]interface{})["has_quotas"] = totalQuotas > 0
+
+	// 5. Collect LimitRanges
+	totalLimitRanges := 0
+	for _, ns := range namespaces.Items {
+		limitRanges, err := clientset.CoreV1().LimitRanges(ns.Name).List(ctx, metav1.ListOptions{})
+		if err == nil {
+			totalLimitRanges += len(limitRanges.Items)
+		}
+	}
+	securityData["limit_ranges"].(map[string]interface{})["total_count"] = totalLimitRanges
+	securityData["limit_ranges"].(map[string]interface{})["has_limit_ranges"] = totalLimitRanges > 0
+
+	// 6. Analyze Pod Security (containers running as root, privileged, etc.)
+	pods, _ := clientset.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
+	podsWithSecurityContext := 0
+	podsRunningAsNonRoot := 0
+	podsWithResourceLimits := 0
+	privilegedContainers := 0
+
+	for _, pod := range pods.Items {
+		hasSecurityContext := false
+		isNonRoot := false
+		hasLimits := false
+
+		// Check pod-level security context
+		if pod.Spec.SecurityContext != nil {
+			hasSecurityContext = true
+			if pod.Spec.SecurityContext.RunAsNonRoot != nil && *pod.Spec.SecurityContext.RunAsNonRoot {
+				isNonRoot = true
+			}
+		}
+
+		// Check container-level settings
+		for _, container := range pod.Spec.Containers {
+			if container.SecurityContext != nil {
+				hasSecurityContext = true
+				if container.SecurityContext.Privileged != nil && *container.SecurityContext.Privileged {
+					privilegedContainers++
+				}
+				if container.SecurityContext.RunAsNonRoot != nil && *container.SecurityContext.RunAsNonRoot {
+					isNonRoot = true
+				}
+			}
+			if container.Resources.Limits != nil && len(container.Resources.Limits) > 0 {
+				hasLimits = true
+			}
+		}
+
+		if hasSecurityContext {
+			podsWithSecurityContext++
+		}
+		if isNonRoot {
+			podsRunningAsNonRoot++
+		}
+		if hasLimits {
+			podsWithResourceLimits++
+		}
+	}
+
+	totalPods := len(pods.Items)
+	securityData["pod_security"].(map[string]interface{})["total_pods"] = totalPods
+	securityData["pod_security"].(map[string]interface{})["pods_with_security_context"] = podsWithSecurityContext
+	securityData["pod_security"].(map[string]interface{})["pods_running_as_non_root"] = podsRunningAsNonRoot
+	securityData["pod_security"].(map[string]interface{})["pods_with_resource_limits"] = podsWithResourceLimits
+	securityData["pod_security"].(map[string]interface{})["privileged_containers"] = privilegedContainers
+	securityData["pod_security"].(map[string]interface{})["has_pod_security"] = podsWithSecurityContext > 0
+
+	// Calculate percentages
+	if totalPods > 0 {
+		securityData["pod_security"].(map[string]interface{})["security_context_percentage"] = float64(podsWithSecurityContext) / float64(totalPods) * 100
+		securityData["pod_security"].(map[string]interface{})["resource_limits_percentage"] = float64(podsWithResourceLimits) / float64(totalPods) * 100
+	}
+
+	log.Printf("🔒 Security data collected: RBAC=%v, NetworkPolicies=%d, Secrets=%d, Quotas=%d, LimitRanges=%d, PodsWithLimits=%d/%d",
+		securityData["rbac"].(map[string]interface{})["has_rbac"],
+		totalNetworkPolicies,
+		totalSecrets,
+		totalQuotas,
+		totalLimitRanges,
+		podsWithResourceLimits,
+		totalPods)
+
+	return securityData
+}
+
+// ---------------------------------------------
 // HELPER: Calcula recursos dos pods em um node (fallback)
 // ---------------------------------------------
 func getPodResourcesOnNode(pods []corev1.Pod, nodeName string) (cpuMillis int64, memBytes int64) {
@@ -615,6 +784,11 @@ func sendMetrics(clientset *kubernetes.Clientset, metricsClient *metricsv.Client
 		{
 			"type":         "node_storage",
 			"data":         collectNodeStorageMetrics(clientset),
+			"collected_at": time.Now().UTC().Format(time.RFC3339),
+		},
+		{
+			"type":         "security",
+			"data":         collectSecurityData(clientset),
 			"collected_at": time.Now().UTC().Format(time.RFC3339),
 		},
 	}
