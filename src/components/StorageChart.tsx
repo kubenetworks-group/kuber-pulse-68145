@@ -32,7 +32,6 @@ export const StorageChart = ({ total, allocated, used, available, pvcs }: Storag
   const boundPVCs = pvcs.filter(p => p.status?.toLowerCase() === 'bound');
   const pendingPVCs = pvcs.filter(p => p.status?.toLowerCase() === 'pending');
   const availablePVCs = pvcs.filter(p => p.status?.toLowerCase() === 'available');
-  const releasedPVCs = pvcs.filter(p => p.status?.toLowerCase() === 'released');
 
   // Check for overprovisioning
   const hasOverprovisioning = allocated > total;
@@ -180,7 +179,7 @@ export const StorageChart = ({ total, allocated, used, available, pvcs }: Storag
           {/* PVCs Tabs */}
           <div className="pt-4 border-t border-border/50">
             <Tabs defaultValue="bound" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 bg-muted/50 backdrop-blur-sm gap-1">
+              <TabsList className="grid w-full grid-cols-3 bg-muted/50 backdrop-blur-sm gap-1">
                 <TabsTrigger value="bound" className="text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-success/20 data-[state=active]:to-success/10">
                   <span className="hidden sm:inline">Bound</span>
                   <span className="sm:hidden">B</span> ({boundPVCs.length})
@@ -192,10 +191,6 @@ export const StorageChart = ({ total, allocated, used, available, pvcs }: Storag
                 <TabsTrigger value="available" className="text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary/20 data-[state=active]:to-primary/10">
                   <span className="hidden sm:inline">Available</span>
                   <span className="sm:hidden">A</span> ({availablePVCs.length})
-                </TabsTrigger>
-                <TabsTrigger value="released" className="text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-destructive/20 data-[state=active]:to-destructive/10">
-                  <span className="hidden sm:inline">Released</span>
-                  <span className="sm:hidden">R</span> ({releasedPVCs.length})
                 </TabsTrigger>
               </TabsList>
               
@@ -280,33 +275,6 @@ export const StorageChart = ({ total, allocated, used, available, pvcs }: Storag
                           )}
                         </div>
                         <Badge variant="outline" className="border-primary/30 text-primary text-[10px] sm:text-xs flex-shrink-0">
-                          {(pvc.requested_bytes / (1024**3)).toFixed(2)} GB
-                        </Badge>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </TabsContent>
-              
-              <TabsContent value="released" className="mt-4 space-y-2 max-h-60 overflow-y-auto animate-in fade-in slide-in-from-bottom-3 duration-500">
-                {releasedPVCs.length === 0 ? (
-                  <p className="text-xs sm:text-sm text-muted-foreground text-center py-8">No released PVCs</p>
-                ) : (
-                  releasedPVCs.map((pvc, index) => (
-                    <div 
-                      key={pvc.id} 
-                      className="p-3 rounded-lg border border-destructive/20 bg-gradient-to-r from-destructive/5 to-transparent hover:from-destructive/10 hover:border-destructive/30 transition-all duration-300 hover:scale-[1.02] hover:shadow-md"
-                      style={{ animationDelay: `${index * 50}ms` }}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-xs sm:text-sm text-foreground truncate">{pvc.name}</p>
-                          <p className="text-[10px] sm:text-xs text-muted-foreground truncate">Namespace: {pvc.namespace}</p>
-                          {pvc.storage_class && (
-                            <p className="text-[10px] sm:text-xs text-muted-foreground truncate">Class: {pvc.storage_class}</p>
-                          )}
-                        </div>
-                        <Badge variant="outline" className="border-destructive/30 text-destructive text-[10px] sm:text-xs flex-shrink-0">
                           {(pvc.requested_bytes / (1024**3)).toFixed(2)} GB
                         </Badge>
                       </div>
