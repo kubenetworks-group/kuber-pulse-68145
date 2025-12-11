@@ -30,9 +30,24 @@ interface CleanupRecommendation {
 
 interface PVCleanupRecommendationsProps {
   pvs: PersistentVolume[];
+  clusterProvider?: string;
 }
 
-export const PVCleanupRecommendations = ({ pvs }: PVCleanupRecommendationsProps) => {
+// Storage pricing per GB/month by provider (USD)
+const getStoragePricePerGB = (provider: string): number => {
+  const prices: Record<string, number> = {
+    'aws': 0.08,           // AWS EBS gp3
+    'gcp': 0.04,           // GCP Standard PD
+    'azure': 0.038,        // Azure Standard SSD
+    'digitalocean': 0.10,  // DigitalOcean Block Storage
+    'magalucloud': 0.05,   // MagaluCloud (estimativa em BRL convertido)
+    'local': 0.00,         // On-premise (sem custo cloud)
+    'other': 0.08,         // Default
+  };
+  return prices[provider?.toLowerCase()] || prices['other'];
+};
+
+export const PVCleanupRecommendations = ({ pvs, clusterProvider = 'other' }: PVCleanupRecommendationsProps) => {
   const { t } = useTranslation();
   const [selectedPVs, setSelectedPVs] = useState<Set<string>>(new Set());
 
@@ -72,9 +87,9 @@ export const PVCleanupRecommendations = ({ pvs }: PVCleanupRecommendationsProps)
         reason = `Released recentemente (${ageInDays} dias). Aguardar antes de deletar`;
       }
 
-      // Calculate potential savings (storage cost estimate)
+      // Calculate potential savings based on provider
       const gbSize = pv.capacity_bytes / (1024 ** 3);
-      const monthlyCostPerGB = 0.10; // $0.10 per GB/month (example rate)
+      const monthlyCostPerGB = getStoragePricePerGB(clusterProvider);
       const potentialSavings = gbSize * monthlyCostPerGB;
 
       return {
