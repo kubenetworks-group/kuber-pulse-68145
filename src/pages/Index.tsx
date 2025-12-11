@@ -161,25 +161,22 @@ const Index = () => {
               </div>
             )}
 
-            {/* Secondary Content Grid */}
-            <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-              {/* Pod Health by Namespace */}
-              <div className="animate-scale-in">
-                <PodHealthByNamespace />
-              </div>
-
-              {/* Cluster Events */}
-              <div className="animate-scale-in">
-                <ClusterEvents />
-              </div>
-
-              {/* AI Insights Widget */}
-              {incidents.length > 0 && (
-                <div className="animate-scale-in md:col-span-2 lg:col-span-1">
-                  <AIInsightsWidget recentIncidents={incidents} />
-                </div>
-              )}
+            {/* Pod Health - Full Width */}
+            <div className="animate-scale-in">
+              <PodHealthByNamespace />
             </div>
+
+            {/* Cluster Events - Full Width */}
+            <div className="animate-scale-in">
+              <ClusterEvents />
+            </div>
+
+            {/* AI Insights Widget - Full Width */}
+            {incidents.length > 0 && (
+              <div className="animate-scale-in">
+                <AIInsightsWidget recentIncidents={incidents} />
+              </div>
+            )}
           </div>
         )}
       </div>
