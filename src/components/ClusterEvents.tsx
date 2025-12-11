@@ -8,18 +8,27 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface KubernetesEvent {
-  name: string;
-  namespace: string;
+  name?: string;
+  namespace?: string;
   type: string;
   reason: string;
   message: string;
   count: number;
-  firstTimestamp: string;
-  lastTimestamp: string;
+  first_time?: string;
+  last_time?: string;
+  firstTimestamp?: string;
+  lastTimestamp?: string;
+  involved_object?: {
+    kind: string;
+    name: string;
+    namespace?: string;
+  };
   involvedObject?: {
     kind: string;
     name: string;
+    namespace?: string;
   };
+  source?: string;
 }
 
 export const ClusterEvents = () => {
@@ -58,12 +67,22 @@ export const ClusterEvents = () => {
       const metricData = latestMetric.metric_data as any;
       const eventsData = metricData?.events || [];
       
-      // Filter only Warning and Error events, sort by last timestamp
+      // Normalize events data and filter Warning/Error events
       const importantEvents = eventsData
+        .map((e: KubernetesEvent) => ({
+          ...e,
+          // Normalize field names (agent sends snake_case)
+          lastTimestamp: e.last_time || e.lastTimestamp,
+          firstTimestamp: e.first_time || e.firstTimestamp,
+          involvedObject: e.involved_object || e.involvedObject,
+          namespace: e.involved_object?.namespace || e.involvedObject?.namespace || e.namespace || 'default',
+        }))
         .filter((e: KubernetesEvent) => e.type === 'Warning' || e.type === 'Error')
-        .sort((a: KubernetesEvent, b: KubernetesEvent) => 
-          new Date(b.lastTimestamp).getTime() - new Date(a.lastTimestamp).getTime()
-        )
+        .sort((a: KubernetesEvent, b: KubernetesEvent) => {
+          const timeA = a.lastTimestamp || a.last_time || '';
+          const timeB = b.lastTimestamp || b.last_time || '';
+          return new Date(timeB).getTime() - new Date(timeA).getTime();
+        })
         .slice(0, 20); // Show only last 20 events
 
       setEvents(importantEvents);
