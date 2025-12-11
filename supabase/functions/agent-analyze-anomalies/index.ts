@@ -161,29 +161,55 @@ serve(async (req) => {
       );
     }
 
-    // Prepare data for AI analysis
-    const metricsSummary = {
-      cpu: metrics.filter(m => m.metric_type === 'cpu').map(m => m.metric_data),
-      memory: metrics.filter(m => m.metric_type === 'memory').map(m => m.metric_data),
-      pods: metrics.filter(m => m.metric_type === 'pods').map(m => m.metric_data),
-      pod_details: metrics.filter(m => m.metric_type === 'pod_details').map(m => m.metric_data),
-      nodes: metrics.filter(m => m.metric_type === 'nodes').map(m => m.metric_data),
-      events: metrics.filter(m => m.metric_type === 'events').map(m => m.metric_data),
+    // Prepare data for AI analysis - LIMIT DATA SIZE to avoid token limits
+    // Only get the most recent metric of each type
+    const getLatestMetric = (type: string) => {
+      const filtered = metrics.filter(m => m.metric_type === type);
+      return filtered.length > 0 ? filtered[0].metric_data : null;
     };
 
-    console.log('Metrics summary prepared:', {
-      cpu_count: metricsSummary.cpu.length,
-      memory_count: metricsSummary.memory.length,
-      pods_count: metricsSummary.pods.length,
-      pod_details_count: metricsSummary.pod_details.length,
-      events_count: metricsSummary.events.length,
+    // For pod_details and events, limit to problematic pods only
+    const podDetailsRaw = getLatestMetric('pod_details') as any;
+    const eventsRaw = getLatestMetric('events') as any;
+
+    // Filter pods with issues (restarts > 0, not Running, or with warnings)
+    const problematicPods = podDetailsRaw?.pods?.filter((pod: any) => 
+      pod.restarts > 0 || 
+      pod.status !== 'Running' || 
+      pod.phase !== 'Running' ||
+      pod.ready !== pod.total_containers
+    )?.slice(0, 50) || []; // Limit to 50 pods max
+
+    // Filter events - only Warning/Error types from last 30 minutes
+    const recentEvents = eventsRaw?.events?.filter((event: any) =>
+      event.type === 'Warning' || event.reason?.includes('Error') || event.reason?.includes('Failed')
+    )?.slice(0, 100) || []; // Limit to 100 events max
+
+    const metricsSummary = {
+      cpu: getLatestMetric('cpu'),
+      memory: getLatestMetric('memory'),
+      pods_count: getLatestMetric('pods'),
+      nodes: getLatestMetric('nodes'),
+      problematic_pods: problematicPods,
+      warning_events: recentEvents,
+    };
+
+    const estimatedSize = JSON.stringify(metricsSummary).length;
+    console.log('Metrics summary prepared (optimized):', {
+      cpu: metricsSummary.cpu ? 'present' : 'missing',
+      memory: metricsSummary.memory ? 'present' : 'missing',
+      pods_count: metricsSummary.pods_count,
+      nodes: metricsSummary.nodes ? 'present' : 'missing',
+      problematic_pods_count: problematicPods.length,
+      warning_events_count: recentEvents.length,
+      estimated_size_bytes: estimatedSize,
     });
 
     // Check for missing essential metrics
-    if (metricsSummary.pod_details.length === 0 || metricsSummary.events.length === 0) {
+    if (!podDetailsRaw || !eventsRaw) {
       const missingMetrics = [];
-      if (metricsSummary.pod_details.length === 0) missingMetrics.push('pod_details');
-      if (metricsSummary.events.length === 0) missingMetrics.push('events');
+      if (!podDetailsRaw) missingMetrics.push('pod_details');
+      if (!eventsRaw) missingMetrics.push('events');
       
       console.warn('Missing essential metrics:', missingMetrics);
       
@@ -364,7 +390,7 @@ Return JSON (no markdown):
                   const fullPodName = anomaly.affected_pods[0].split('/')[1] || anomaly.affected_pods[0];
                   const deploymentName = fullPodName.replace(/-[a-z0-9]{5,10}-[a-z0-9]{5}$/, '');
                   const namespace = anomaly.affected_pods[0].split('/')[0] || 'default';
-                  const containerName = findContainerName(fullPodName, metricsSummary.pod_details);
+                  const containerName = findContainerName(fullPodName, podDetailsRaw ? [podDetailsRaw] : []);
                   
                   anomaly.auto_heal_params = {
                     deployment_name: deploymentName,
@@ -486,10 +512,10 @@ Return JSON (no markdown):
         anomalies,
         summary: analysisResult.summary || 'Análise concluída',
         metrics_analyzed: {
-          cpu_samples: metricsSummary.cpu.length,
-          memory_samples: metricsSummary.memory.length,
-          pod_samples: metricsSummary.pods.length,
-          event_samples: metricsSummary.events.length
+          cpu: metricsSummary.cpu ? 'present' : 'missing',
+          memory: metricsSummary.memory ? 'present' : 'missing',
+          problematic_pods: metricsSummary.problematic_pods?.length || 0,
+          warning_events: metricsSummary.warning_events?.length || 0
         }
       }),
       {
