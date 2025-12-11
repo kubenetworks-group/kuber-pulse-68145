@@ -94,44 +94,48 @@ serve(async (req) => {
       sample: JSON.stringify(m.metric_data).substring(0, 500)
     })) || [];
 
-    // Prepare prompt for AI security analysis
-    const prompt = `Você é um especialista em segurança Kubernetes. Analise a configuração do cluster e retorne uma avaliação de segurança detalhada.
+    // Buscar dados de segurança coletados pelo agente
+    const { data: securityMetric } = await supabaseAdmin
+      .from('agent_metrics')
+      .select('metric_data')
+      .eq('cluster_id', cluster_id)
+      .eq('metric_type', 'security')
+      .order('collected_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-Informações do Cluster:
-- Nome: ${cluster.name}
-- Provider: ${cluster.provider}
-- Tipo: ${cluster.cluster_type}
-- Ambiente: ${cluster.environment}
-- Nodes: ${cluster.nodes || 0}
-- Pods: ${cluster.pods || 0}
+    const securityData = securityMetric?.metric_data as any || null;
+    console.log('Security data from agent:', securityData ? 'Available' : 'Not available');
 
-Métricas coletadas:
+    // Prepare prompt for AI security analysis with real data
+    const prompt = `Você é um especialista em segurança Kubernetes. Analise os dados REAIS coletados do cluster.
+
+Cluster: ${cluster.name} (${cluster.provider}, ${cluster.environment})
+Nodes: ${cluster.nodes || 0} | Pods: ${cluster.pods || 0}
+
+${securityData ? `
+DADOS REAIS DO CLUSTER:
+- RBAC: ${JSON.stringify(securityData.rbac || {})}
+- NetworkPolicies: ${JSON.stringify(securityData.network_policies || {})}
+- Secrets: ${JSON.stringify(securityData.secrets || {})}
+- ResourceQuotas: ${JSON.stringify(securityData.resource_quotas || {})}
+- LimitRanges: ${JSON.stringify(securityData.limit_ranges || {})}
+- Pod Security: ${JSON.stringify(securityData.pod_security || {})}
+` : `
+ATENÇÃO: Dados de segurança não disponíveis. O agente pode não estar instalado ou atualizado.
+Métricas disponíveis:
 ${metricsContext.map(m => `- ${m.type}: ${m.sample}`).join('\n')}
+`}
 
-Analise os seguintes aspectos de segurança:
+Baseado nesses dados${securityData ? ' reais' : ''}, avalie:
+1. RBAC - está configurado adequadamente?
+2. NetworkPolicies - existem políticas de rede?
+3. Pod Security - containers têm security context e limits?
+4. Secrets - existem secrets configurados?
+5. Resource Limits - pods têm limits definidos?
 
-1. **RBAC (Role-Based Access Control)**
-   - Verifique se há roles e rolebindings configurados
-   - Analise se o princípio de menor privilégio está sendo aplicado
-   
-2. **Network Policies**
-   - Verifique se existem NetworkPolicies para isolar workloads
-   - Analise se há políticas de ingress/egress definidas
-
-3. **Pod Security**
-   - Verifique se há Pod Security Standards/Policies
-   - Analise se containers rodam como non-root
-   - Verifique security contexts
-
-4. **Secrets Management**
-   - Verifique se secrets estão encriptados em repouso
-   - Analise práticas de gerenciamento de secrets
-
-5. **Resource Limits**
-   - Verifique se há limits e requests definidos
-   - Analise LimitRanges e ResourceQuotas
-
-Retorne sua análise considerando que este é um cluster ${cluster.environment} em produção.`;
+Retorne a análise com scores baseados nos dados${securityData ? ' reais' : ''} acima.
+Considere que este é um cluster ${cluster.environment}.`;
 
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
