@@ -69,9 +69,138 @@ export default function AIMonitor() {
       fetchScanHistory();
       fetchRecentAnomalies();
       fetchAgentCommands();
-      subscribeToIncidents();
-      subscribeToAnomalies();
     }
+  }, [user, selectedClusterId]);
+
+  // Realtime subscriptions with proper cleanup
+  useEffect(() => {
+    if (!user) return;
+
+    // Subscribe to anomalies
+    const anomaliesChannel = supabase
+      .channel(`agent-anomalies-${selectedClusterId || 'all'}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'agent_anomalies',
+          ...(selectedClusterId && { filter: `cluster_id=eq.${selectedClusterId}` })
+        },
+        (payload) => {
+          const newAnomaly = payload.new as any;
+          setRecentAnomalies(prev => [newAnomaly, ...prev].slice(0, 20));
+
+          toast({
+            title: "🔍 Nova Anomalia Detectada",
+            description: newAnomaly.description?.substring(0, 100) + '...',
+            variant: newAnomaly.severity === 'critical' ? 'destructive' : 'default'
+          });
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'agent_anomalies',
+          ...(selectedClusterId && { filter: `cluster_id=eq.${selectedClusterId}` })
+        },
+        (payload) => {
+          const updatedAnomaly = payload.new as any;
+          setRecentAnomalies(prev => prev.map(a =>
+            a.id === updatedAnomaly.id ? updatedAnomaly : a
+          ));
+
+          if (updatedAnomaly.resolved) {
+            toast({
+              title: "✅ Anomalia Resolvida",
+              description: "Uma anomalia foi marcada como resolvida",
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    // Subscribe to incidents
+    const incidentsChannel = supabase
+      .channel(`ai-incidents-${selectedClusterId || 'all'}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'ai_incidents',
+          ...(selectedClusterId && { filter: `cluster_id=eq.${selectedClusterId}` })
+        },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const newIncident = payload.new as Incident;
+            setIncidents(prev => [newIncident, ...prev]);
+
+            if (newIncident.severity === 'critical') {
+              toast({
+                title: "🔥 Incidente Crítico Detectado",
+                description: newIncident.title,
+                variant: "destructive"
+              });
+            }
+          } else if (payload.eventType === 'UPDATE') {
+            setIncidents(prev => prev.map(inc =>
+              inc.id === payload.new.id ? payload.new as Incident : inc
+            ));
+          }
+        }
+      )
+      .subscribe();
+
+    // Subscribe to agent commands
+    const commandsChannel = supabase
+      .channel(`agent-commands-${selectedClusterId || 'all'}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'agent_commands',
+          ...(selectedClusterId && { filter: `cluster_id=eq.${selectedClusterId}` })
+        },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            setAgentCommands(prev => [payload.new as any, ...prev].slice(0, 20));
+            toast({
+              title: "⚡ Novo Comando Enviado",
+              description: `Comando: ${(payload.new as any).command_type}`,
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            const updated = payload.new as any;
+            setAgentCommands(prev => prev.map(cmd =>
+              cmd.id === updated.id ? updated : cmd
+            ));
+
+            if (updated.status === 'completed') {
+              toast({
+                title: "✅ Comando Executado",
+                description: `${updated.command_type} completado com sucesso`,
+              });
+            } else if (updated.status === 'failed') {
+              toast({
+                title: "❌ Comando Falhou",
+                description: `${updated.command_type} falhou`,
+                variant: "destructive"
+              });
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    // Cleanup function
+    return () => {
+      supabase.removeChannel(anomaliesChannel);
+      supabase.removeChannel(incidentsChannel);
+      supabase.removeChannel(commandsChannel);
+    };
   }, [user, selectedClusterId]);
 
   const fetchAgentCommands = async () => {
@@ -161,92 +290,6 @@ export default function AIMonitor() {
     }
   };
 
-  const subscribeToAnomalies = () => {
-    const channel = supabase
-      .channel('agent-anomalies-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'agent_anomalies',
-          filter: selectedClusterId ? `cluster_id=eq.${selectedClusterId}` : undefined
-        },
-        (payload) => {
-          const newAnomaly = payload.new;
-          setRecentAnomalies(prev => [newAnomaly, ...prev].slice(0, 20));
-          
-          toast({
-            title: "🔍 Nova Anomalia Detectada",
-            description: newAnomaly.description.substring(0, 100) + '...',
-            variant: newAnomaly.severity === 'critical' ? 'destructive' : 'default'
-          });
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'agent_anomalies',
-          filter: selectedClusterId ? `cluster_id=eq.${selectedClusterId}` : undefined
-        },
-        (payload) => {
-          const updatedAnomaly = payload.new;
-          setRecentAnomalies(prev => prev.map(a => 
-            a.id === updatedAnomaly.id ? updatedAnomaly : a
-          ));
-          
-          if (updatedAnomaly.resolved) {
-            toast({
-              title: "✅ Anomalia Resolvida",
-              description: "Uma anomalia foi marcada como resolvida",
-            });
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  };
-
-  const subscribeToIncidents = () => {
-    const channel = supabase
-      .channel('ai-incidents-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'ai_incidents'
-        },
-        (payload) => {
-          if (payload.eventType === 'INSERT') {
-            const newIncident = payload.new as Incident;
-            setIncidents(prev => [newIncident, ...prev]);
-            
-            if (newIncident.severity === 'critical') {
-              toast({
-                title: "🔥 Critical Incident Detected",
-                description: newIncident.title,
-                variant: "destructive"
-              });
-            }
-          } else if (payload.eventType === 'UPDATE') {
-            setIncidents(prev => prev.map(inc => 
-              inc.id === payload.new.id ? payload.new as Incident : inc
-            ));
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  };
 
   const handleScanCluster = async () => {
     if (!selectedClusterId) {

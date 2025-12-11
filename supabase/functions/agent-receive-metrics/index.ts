@@ -384,18 +384,22 @@ serve(async (req) => {
     const nodeStorageMetric = metrics.find(m => m.type === 'node_storage');
     if (nodeStorageMetric) {
       const nodeStorageData = nodeStorageMetric.data as any;
-      
+
       if (nodeStorageData?.total_physical_bytes !== undefined) {
         const physicalStorageGB = nodeStorageData.total_physical_bytes / (1024 ** 3);
-        
+        const usedStorageGB = (nodeStorageData.used_physical_bytes || 0) / (1024 ** 3);
+        const availableStorageGB = (nodeStorageData.available_physical_bytes || 0) / (1024 ** 3);
+
         await supabaseClient
           .from('clusters')
           .update({
             storage_total_gb: physicalStorageGB,
+            storage_used_gb: usedStorageGB,
+            storage_available_gb: availableStorageGB,
           })
           .eq('id', cluster_id);
-        
-        console.log(`✅ Updated physical storage from nodes: ${physicalStorageGB.toFixed(2)}GB`);
+
+        console.log(`✅ Updated physical storage: total=${physicalStorageGB.toFixed(2)}GB, used=${usedStorageGB.toFixed(2)}GB, available=${availableStorageGB.toFixed(2)}GB`);
       }
     }
 
