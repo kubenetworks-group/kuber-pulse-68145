@@ -403,36 +403,79 @@ func collectNodeStorageMetrics(clientset *kubernetes.Clientset) map[string]inter
 	if err != nil {
 		log.Printf("⚠️  Error collecting node storage: %v", err)
 		return map[string]interface{}{
-			"total_physical_bytes": int64(0),
-			"nodes":                []map[string]interface{}{},
+			"total_physical_bytes":     int64(0),
+			"used_physical_bytes":      int64(0),
+			"available_physical_bytes": int64(0),
+			"nodes":                    []map[string]interface{}{},
 		}
 	}
 
 	var totalPhysicalStorage int64
+	var allocatableStorage int64
 	var nodeStorageDetails []map[string]interface{}
 
 	for _, node := range nodes.Items {
 		// Get ephemeral-storage capacity (physical disk)
 		storageCapacity := int64(0)
+		storageAllocatable := int64(0)
+
 		if ephemeralStorage, ok := node.Status.Capacity[corev1.ResourceEphemeralStorage]; ok {
 			storageCapacity = ephemeralStorage.Value()
 		}
+		if ephemeralStorage, ok := node.Status.Allocatable[corev1.ResourceEphemeralStorage]; ok {
+			storageAllocatable = ephemeralStorage.Value()
+		}
 
 		totalPhysicalStorage += storageCapacity
+		allocatableStorage += storageAllocatable
+
+		// Usado = Capacity - Allocatable (sistema + reservado)
+		usedBySystem := storageCapacity - storageAllocatable
 
 		nodeStorageDetails = append(nodeStorageDetails, map[string]interface{}{
-			"node_name":      node.Name,
-			"capacity_bytes": storageCapacity,
+			"node_name":        node.Name,
+			"capacity_bytes":   storageCapacity,
+			"allocatable_bytes": storageAllocatable,
+			"used_bytes":       usedBySystem,
 		})
 	}
 
-	log.Printf("💿 Node physical storage: total=%.2fGB across %d nodes",
-		float64(totalPhysicalStorage)/(1024*1024*1024), len(nodes.Items))
+	// Storage usado pelo sistema = total - allocatable
+	usedPhysicalStorage := totalPhysicalStorage - allocatableStorage
+
+	log.Printf("💿 Node physical storage: total=%.2fGB, used=%.2fGB, available=%.2fGB across %d nodes",
+		float64(totalPhysicalStorage)/(1024*1024*1024),
+		float64(usedPhysicalStorage)/(1024*1024*1024),
+		float64(allocatableStorage)/(1024*1024*1024),
+		len(nodes.Items))
 
 	return map[string]interface{}{
-		"total_physical_bytes": totalPhysicalStorage,
-		"nodes":                nodeStorageDetails,
+		"total_physical_bytes":     totalPhysicalStorage,
+		"used_physical_bytes":      usedPhysicalStorage,
+		"available_physical_bytes": allocatableStorage,
+		"nodes":                    nodeStorageDetails,
 	}
+}
+
+// ---------------------------------------------
+// HELPER: Calcula recursos dos pods em um node (fallback)
+// ---------------------------------------------
+func getPodResourcesOnNode(pods []corev1.Pod, nodeName string) (cpuMillis int64, memBytes int64) {
+	for _, pod := range pods {
+		if pod.Spec.NodeName != nodeName || pod.Status.Phase != corev1.PodRunning {
+			continue
+		}
+		for _, container := range pod.Spec.Containers {
+			// Usar requests como aproximação do uso
+			if cpu, ok := container.Resources.Requests[corev1.ResourceCPU]; ok {
+				cpuMillis += cpu.MilliValue()
+			}
+			if mem, ok := container.Resources.Requests[corev1.ResourceMemory]; ok {
+				memBytes += mem.Value()
+			}
+		}
+	}
+	return cpuMillis, memBytes
 }
 
 // ---------------------------------------------
@@ -448,17 +491,40 @@ func sendMetrics(clientset *kubernetes.Clientset, metricsClient *metricsv.Client
 	var totalCPU, totalMemory, usedCPU, usedMemory int64
 	runningPods := 0
 
+	// Tentar obter métricas reais da Metrics API
+	var nodeMetricsMap map[string]map[string]int64
+	if metricsClient != nil {
+		nodeMetricsList, err := metricsClient.MetricsV1beta1().NodeMetricses().List(context.Background(), metav1.ListOptions{})
+		if err == nil {
+			nodeMetricsMap = make(map[string]map[string]int64)
+			for _, nm := range nodeMetricsList.Items {
+				nodeMetricsMap[nm.Name] = map[string]int64{
+					"cpu":    nm.Usage.Cpu().MilliValue(),
+					"memory": nm.Usage.Memory().Value(),
+				}
+			}
+			log.Printf("✅ Fetched real metrics for %d nodes from Metrics API", len(nodeMetricsMap))
+		} else {
+			log.Printf("⚠️  Metrics API unavailable: %v", err)
+		}
+	}
+
 	for _, node := range nodes.Items {
 		cpu := node.Status.Capacity.Cpu().MilliValue()
 		mem := node.Status.Capacity.Memory().Value()
 		totalCPU += cpu
 		totalMemory += mem
 
-		// CPU e memória alocados (simplificado)
-		allocatedCPU := node.Status.Allocatable.Cpu().MilliValue()
-		allocatedMem := node.Status.Allocatable.Memory().Value()
-		usedCPU += (cpu - allocatedCPU)
-		usedMemory += (mem - allocatedMem)
+		// Usar métricas reais da Metrics API se disponível
+		if metrics, ok := nodeMetricsMap[node.Name]; ok {
+			usedCPU += metrics["cpu"]
+			usedMemory += metrics["memory"]
+		} else {
+			// Fallback: estimar baseado em requests dos pods no node
+			nodePodsCPU, nodePodsMem := getPodResourcesOnNode(pods.Items, node.Name)
+			usedCPU += nodePodsCPU
+			usedMemory += nodePodsMem
+		}
 	}
 
 	for _, pod := range pods.Items {
