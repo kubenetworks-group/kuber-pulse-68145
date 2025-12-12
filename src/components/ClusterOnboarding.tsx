@@ -4,120 +4,83 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import {
-  Server,
-  Cloud,
-  Terminal,
-  FileCode,
-  CheckCircle2,
+  Brain,
+  Shield,
+  Activity,
+  DollarSign,
+  Zap,
   ArrowRight,
   ArrowLeft,
   Sparkles,
-  Copy,
-  ExternalLink,
+  CheckCircle2,
   Lightbulb,
-  Zap
+  BarChart3,
+  Bot,
+  Lock,
+  TrendingDown
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { toast } from "sonner";
 import { ClusterAssistantChat } from "@/components/ClusterAssistantChat";
 
 const onboardingSteps = [
   {
     id: 1,
-    icon: Server,
+    icon: Brain,
     title: "Bem-vindo ao Kodo!",
-    subtitle: "Configure seu primeiro cluster Kubernetes",
-    description: "Para começar a monitorar seus clusters, você precisa conectar pelo menos um cluster Kubernetes. Vamos te guiar nesse processo!",
-    tips: [
-      "Você pode conectar clusters de qualquer provedor (AWS, GCP, Azure, etc.)",
-      "O processo é rápido e leva menos de 5 minutos",
-      "Você terá acesso completo ao monitoramento em tempo real"
+    subtitle: "Gestão Inteligente de Kubernetes",
+    description: "O Kodo é a plataforma mais avançada para gerenciar seus clusters Kubernetes com inteligência artificial. Veja o que podemos fazer por você!",
+    features: [
+      { icon: Activity, text: "Monitoramento em tempo real 24/7" },
+      { icon: Brain, text: "Análise com IA avançada" },
+      { icon: Shield, text: "Segurança automatizada" },
+      { icon: DollarSign, text: "Otimização de custos" }
     ],
-    action: "Começar Configuração",
+    highlight: "Reduza em até 60% o tempo gasto em operações",
     color: "primary"
   },
   {
     id: 2,
-    icon: Cloud,
-    title: "Escolha seu Provedor",
-    subtitle: "Onde está seu cluster Kubernetes?",
-    description: "O Kodo suporta clusters de diversos provedores. Escolha onde seu cluster está hospedado:",
-    providers: [
-      { name: "AWS EKS", popular: true },
-      { name: "Google GKE", popular: true },
-      { name: "Azure AKS", popular: true },
-      { name: "DigitalOcean", popular: false },
-      { name: "On-Premise", popular: false },
-      { name: "Outros", popular: false }
+    icon: Bot,
+    title: "Auto-Healing Inteligente",
+    subtitle: "Resolução automática de problemas",
+    description: "Nossa IA monitora seus clusters 24/7 e resolve problemas automaticamente antes que afetem seus usuários.",
+    features: [
+      { icon: Zap, text: "Detecção de anomalias em segundos" },
+      { icon: CheckCircle2, text: "Correção automática de pods com falha" },
+      { icon: Activity, text: "Restart inteligente de serviços" },
+      { icon: Brain, text: "Aprendizado contínuo com seus padrões" }
     ],
-    tips: [
-      "Você pode adicionar clusters de múltiplos provedores",
-      "Clusters on-premise também são suportados",
-      "O processo é similar para todos os provedores"
-    ],
+    highlight: "Tempo médio de resolução: 30 segundos",
     color: "accent"
   },
   {
     id: 3,
-    icon: Terminal,
-    title: "Obter Credenciais",
-    subtitle: "Como conseguir as informações do cluster",
-    description: "Você precisará do arquivo kubeconfig do seu cluster. Veja como obtê-lo em cada provedor:",
-    commands: [
-      {
-        provider: "AWS EKS",
-        command: "aws eks update-kubeconfig --name <cluster-name> --region <region>",
-        description: "Execute no AWS CLI para configurar o kubeconfig"
-      },
-      {
-        provider: "Google GKE",
-        command: "gcloud container clusters get-credentials <cluster-name> --region <region>",
-        description: "Execute no Google Cloud SDK"
-      },
-      {
-        provider: "Azure AKS",
-        command: "az aks get-credentials --resource-group <rg-name> --name <cluster-name>",
-        description: "Execute no Azure CLI"
-      }
+    icon: TrendingDown,
+    title: "Otimização de Custos",
+    subtitle: "Economize até 40% na sua infraestrutura",
+    description: "Análise inteligente de recursos identifica desperdícios e sugere otimizações para reduzir seus custos de cloud.",
+    features: [
+      { icon: BarChart3, text: "Análise detalhada por namespace" },
+      { icon: DollarSign, text: "Identificação de recursos ociosos" },
+      { icon: Activity, text: "Recomendações de rightsizing" },
+      { icon: Zap, text: "Alertas de gastos anormais" }
     ],
-    tips: [
-      "O arquivo kubeconfig geralmente está em ~/.kube/config",
-      "Certifique-se de ter as permissões necessárias",
-      "Você pode testar a conexão com: kubectl get nodes"
-    ],
+    highlight: "Economia média de $2.500/mês por cluster",
     color: "primary"
   },
   {
     id: 4,
-    icon: FileCode,
-    title: "Instalar o Agente",
-    subtitle: "Deploy do Kodo Agent no seu cluster",
-    description: "Para monitoramento completo, você precisa instalar o Kodo Agent no seu cluster:",
-    installSteps: [
-      {
-        step: 1,
-        title: "Aplicar o manifesto Kubernetes",
-        command: "kubectl apply -f https://raw.githubusercontent.com/kodo-platform/agent/main/deploy.yaml",
-        description: "Isso criará o namespace e deployment do agente"
-      },
-      {
-        step: 2,
-        title: "Configurar a API Key",
-        command: "kubectl create secret generic kodo-secret -n kodo --from-literal=API_KEY=<sua-api-key>",
-        description: "Sua API key será gerada automaticamente ao adicionar o cluster"
-      },
-      {
-        step: 3,
-        title: "Verificar o status",
-        command: "kubectl get pods -n kodo",
-        description: "Confirme que o pod do agente está rodando"
-      }
+    icon: Lock,
+    title: "Segurança Avançada",
+    subtitle: "Proteção completa para seus workloads",
+    description: "Escaneamento contínuo de vulnerabilidades, análise de RBAC e detecção de configurações inseguras.",
+    features: [
+      { icon: Shield, text: "Scan de vulnerabilidades em imagens" },
+      { icon: Lock, text: "Análise de políticas RBAC" },
+      { icon: CheckCircle2, text: "Compliance com CIS Benchmarks" },
+      { icon: Brain, text: "Recomendações de hardening" }
     ],
-    tips: [
-      "O agente coleta métricas de CPU, memória e eventos",
-      "Ele usa menos de 100MB de RAM",
-      "Atualizações são automáticas e sem downtime"
-    ],
+    highlight: "Score de segurança em tempo real",
     color: "accent"
   }
 ];
@@ -141,11 +104,6 @@ export const ClusterOnboarding = () => {
     if (currentStep > 0) {
       setCurrentStep(currentStep - 1);
     }
-  };
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success("Comando copiado!");
   };
 
   return (
@@ -193,116 +151,33 @@ export const ClusterOnboarding = () => {
               {step.description}
             </p>
 
-            {/* Providers Grid */}
-            {step.providers && (
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                {step.providers.map((provider, index) => (
+            {/* Features Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {step.features.map((feature, index) => {
+                const FeatureIcon = feature.icon;
+                return (
                   <div
                     key={index}
-                    className="p-4 rounded-lg bg-background/50 border border-border/50 hover:border-primary/50 transition-all cursor-pointer group animate-in fade-in slide-in-from-bottom duration-500"
+                    className="flex items-center gap-4 p-4 rounded-xl bg-background/50 border border-border/50 hover:border-primary/50 hover:bg-primary/5 transition-all duration-300 animate-in fade-in slide-in-from-bottom"
                     style={{ animationDelay: `${index * 100}ms` }}
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium group-hover:text-primary transition-colors">
-                        {provider.name}
-                      </span>
-                      {provider.popular && (
-                        <Badge variant="secondary" className="text-xs">
-                          Popular
-                        </Badge>
-                      )}
+                    <div className="flex-shrink-0 p-2 rounded-lg bg-primary/10">
+                      <FeatureIcon className="w-5 h-5 text-primary" />
                     </div>
+                    <span className="text-sm font-medium text-foreground">
+                      {feature.text}
+                    </span>
                   </div>
-                ))}
-              </div>
-            )}
+                );
+              })}
+            </div>
 
-            {/* Commands */}
-            {step.commands && (
-              <div className="space-y-4">
-                {step.commands.map((cmd, index) => (
-                  <div
-                    key={index}
-                    className="space-y-2 animate-in fade-in slide-in-from-left duration-500"
-                    style={{ animationDelay: `${index * 100}ms` }}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Zap className="w-4 h-4 text-primary" />
-                      <span className="font-semibold text-sm">{cmd.provider}</span>
-                    </div>
-                    <div className="relative group">
-                      <div className="absolute inset-0 bg-gradient-primary opacity-0 group-hover:opacity-10 rounded-lg transition-opacity" />
-                      <div className="relative flex items-center gap-2 p-4 rounded-lg bg-muted/50 border border-border font-mono text-sm">
-                        <code className="flex-1 overflow-x-auto">{cmd.command}</code>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => copyToClipboard(cmd.command)}
-                          className="flex-shrink-0"
-                        >
-                          <Copy className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                    <p className="text-xs text-muted-foreground pl-6">{cmd.description}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Install Steps */}
-            {step.installSteps && (
-              <div className="space-y-6">
-                {step.installSteps.map((installStep, index) => (
-                  <div
-                    key={index}
-                    className="space-y-3 animate-in fade-in slide-in-from-left duration-500"
-                    style={{ animationDelay: `${index * 100}ms` }}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground font-bold text-sm">
-                        {installStep.step}
-                      </div>
-                      <h3 className="font-semibold">{installStep.title}</h3>
-                    </div>
-                    <div className="relative group ml-11">
-                      <div className="absolute inset-0 bg-gradient-primary opacity-0 group-hover:opacity-10 rounded-lg transition-opacity" />
-                      <div className="relative flex items-center gap-2 p-4 rounded-lg bg-muted/50 border border-border font-mono text-xs">
-                        <code className="flex-1 overflow-x-auto">{installStep.command}</code>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => copyToClipboard(installStep.command)}
-                          className="flex-shrink-0"
-                        >
-                          <Copy className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                    <p className="text-sm text-muted-foreground ml-11">{installStep.description}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Tips */}
-            <div className="space-y-3 p-4 rounded-lg bg-primary/5 border border-primary/20">
-              <div className="flex items-center gap-2 text-primary">
+            {/* Highlight Box */}
+            <div className="p-4 rounded-lg bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/30 text-center">
+              <div className="flex items-center justify-center gap-2 text-primary">
                 <Lightbulb className="w-5 h-5" />
-                <span className="font-semibold">Dicas Importantes</span>
+                <span className="font-semibold text-lg">{step.highlight}</span>
               </div>
-              <ul className="space-y-2">
-                {step.tips.map((tip, index) => (
-                  <li
-                    key={index}
-                    className="flex items-start gap-2 text-sm text-muted-foreground animate-in fade-in slide-in-from-left duration-500"
-                    style={{ animationDelay: `${index * 100}ms` }}
-                  >
-                    <CheckCircle2 className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
-                    <span>{tip}</span>
-                  </li>
-                ))}
-              </ul>
             </div>
 
             {/* Navigation */}
@@ -310,10 +185,9 @@ export const ClusterOnboarding = () => {
               <Button
                 variant="ghost"
                 onClick={() => navigate("/clusters")}
-                className="gap-2"
+                className="gap-2 text-muted-foreground hover:text-foreground"
               >
-                <ExternalLink className="w-4 h-4" />
-                Ir para Clusters
+                Pular introdução
               </Button>
 
               <div className="flex gap-2">
@@ -334,7 +208,7 @@ export const ClusterOnboarding = () => {
                 >
                   {currentStep === onboardingSteps.length - 1 ? (
                     <>
-                      Adicionar Cluster
+                      Configurar Cluster
                       <Sparkles className="w-4 h-4" />
                     </>
                   ) : (
