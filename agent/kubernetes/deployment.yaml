@@ -1,18 +1,18 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: kuberpulse
+  name: kodo
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: kuberpulse-agent
-  namespace: kuberpulse
+  name: kodo-agent
+  namespace: kodo
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: kuberpulse-agent
+  name: kodo-agent
 rules:
 - apiGroups: [""]
   resources: ["nodes", "pods", "events", "namespaces", "persistentvolumeclaims", "persistentvolumes", "secrets", "resourcequotas", "limitranges"]
@@ -36,21 +36,21 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: kuberpulse-agent
+  name: kodo-agent
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: kuberpulse-agent
+  name: kodo-agent
 subjects:
 - kind: ServiceAccount
-  name: kuberpulse-agent
-  namespace: kuberpulse
+  name: kodo-agent
+  namespace: kodo
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: kuberpulse-config
-  namespace: kuberpulse
+  name: kodo-config
+  namespace: kodo
 data:
   API_ENDPOINT: "https://dadaeduevxyvkhjmwlel.supabase.co/functions/v1"
   COLLECT_INTERVAL: "15"
@@ -58,8 +58,8 @@ data:
 apiVersion: v1
 kind: Secret
 metadata:
-  name: kuberpulse-secret
-  namespace: kuberpulse
+  name: kodo-secret
+  namespace: kodo
 type: Opaque
 stringData:
   API_KEY: "kp_8b1c4ea59f6d4e50b26ffac15d844692"
@@ -68,30 +68,30 @@ stringData:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: kuberpulse-agent
-  namespace: kuberpulse
+  name: kodo-agent
+  namespace: kodo
   labels:
-    app: kuberpulse-agent
+    app: kodo-agent
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: kuberpulse-agent
+      app: kodo-agent
   template:
     metadata:
       labels:
-        app: kuberpulse-agent
+        app: kodo-agent
     spec:
-      serviceAccountName: kuberpulse-agent
+      serviceAccountName: kodo-agent
       containers:
       - name: agent
-        image: docker.io/denercavalcante/kuberpulse-agent:v0.0.33
+        image: docker.io/denercavalcante/kodo-agent:v0.0.33
         imagePullPolicy: Always
         envFrom:
         - configMapRef:
-            name: kuberpulse-config
+            name: kodo-config
         - secretRef:
-            name: kuberpulse-secret
+            name: kodo-secret
         resources:
           requests:
             memory: "64Mi"

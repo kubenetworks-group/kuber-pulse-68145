@@ -151,18 +151,18 @@ const Agents = () => {
     const yaml = `apiVersion: v1
 kind: Namespace
 metadata:
-  name: kuberpulse
+  name: kodo
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: kuberpulse-agent
-  namespace: kuberpulse
+  name: kodo-agent
+  namespace: kodo
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: kuberpulse-agent
+  name: kodo-agent
 rules:
 - apiGroups: [""]
   resources: ["nodes", "pods", "events", "namespaces"]
@@ -180,21 +180,21 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: kuberpulse-agent
+  name: kodo-agent
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: kuberpulse-agent
+  name: kodo-agent
 subjects:
 - kind: ServiceAccount
-  name: kuberpulse-agent
-  namespace: kuberpulse
+  name: kodo-agent
+  namespace: kodo
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: kuberpulse-config
-  namespace: kuberpulse
+  name: kodo-config
+  namespace: kodo
 data:
   API_ENDPOINT: "${import.meta.env.VITE_SUPABASE_URL}/functions/v1"
   COLLECT_INTERVAL: "30"
@@ -202,8 +202,8 @@ data:
 apiVersion: v1
 kind: Secret
 metadata:
-  name: kuberpulse-secret
-  namespace: kuberpulse
+  name: kodo-secret
+  namespace: kodo
 type: Opaque
 stringData:
   API_KEY: "${apiKey}"
@@ -212,30 +212,30 @@ stringData:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: kuberpulse-agent
-  namespace: kuberpulse
+  name: kodo-agent
+  namespace: kodo
   labels:
-    app: kuberpulse-agent
+    app: kodo-agent
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: kuberpulse-agent
+      app: kodo-agent
   template:
     metadata:
       labels:
-        app: kuberpulse-agent
+        app: kodo-agent
     spec:
-      serviceAccountName: kuberpulse-agent
+      serviceAccountName: kodo-agent
       containers:
       - name: agent
-        image: kuberpulse/agent:latest
+        image: kodo/agent:latest
         imagePullPolicy: Always
         envFrom:
         - configMapRef:
-            name: kuberpulse-config
+            name: kodo-config
         - secretRef:
-            name: kuberpulse-secret
+            name: kodo-secret
         resources:
           requests:
             memory: "64Mi"
@@ -248,7 +248,7 @@ spec:
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `kuberpulse-agent-${clusterId}.yaml`;
+    a.download = `kodo-agent-${clusterId}.yaml`;
     a.click();
     URL.revokeObjectURL(url);
     toast.success('YAML baixado com sucesso');

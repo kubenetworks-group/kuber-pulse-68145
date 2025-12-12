@@ -44,7 +44,7 @@ func loadConfig() AgentConfig {
 // MAIN
 // ---------------------------------------------
 func main() {
-	log.Println("🚀 Kuberpulse Agent starting...")
+	log.Println("🚀 Kodo Agent starting...")
 
 	config := loadConfig()
 

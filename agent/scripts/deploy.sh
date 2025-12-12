@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# Script para deploy/redeploy do Kuberpulse Agent no Kubernetes
+# Script para deploy/redeploy do Kodo Agent no Kubernetes
 # Uso: ./scripts/deploy.sh
 
 set -e
 
-NAMESPACE="kuberpulse"
-DEPLOYMENT="kuberpulse-agent"
+NAMESPACE="kodo"
+DEPLOYMENT="kodo-agent"
 
 echo "🚀 Checking if namespace exists..."
 if kubectl get namespace ${NAMESPACE} &> /dev/null; then
