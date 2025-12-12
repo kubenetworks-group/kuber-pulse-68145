@@ -12,10 +12,12 @@ import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
-import { Sparkles, Shield, Zap, Mail, Lock, User } from "lucide-react";
+import { Sparkles, Shield, Zap, Mail, User } from "lucide-react";
 import { AnimatedParticles } from "@/components/AnimatedParticles";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Link } from "react-router-dom";
+import { PasswordInput } from "@/components/PasswordInput";
+import { MFAVerification } from "@/components/MFAVerification";
 
 // Password validation schema
 const passwordSchema = z.string()
@@ -32,6 +34,7 @@ const Auth = () => {
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
+  const [showMFAVerification, setShowMFAVerification] = useState(false);
 
   // Redirect if already logged in
   useEffect(() => {
@@ -58,8 +61,71 @@ const Auth = () => {
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    await signIn(signInForm.email, signInForm.password);
-    setLoading(false);
+    
+    try {
+      // First, try to sign in
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: signInForm.email,
+        password: signInForm.password,
+      });
+
+      if (error) {
+        toast({
+          title: "Erro ao entrar",
+          description: error.message,
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Check if MFA is required
+      if (data.session) {
+        const { data: factorsData } = await supabase.auth.mfa.listFactors();
+        
+        const hasVerifiedTOTP = factorsData?.totp?.some(f => f.status === 'verified');
+        
+        if (hasVerifiedTOTP) {
+          // Check AAL level - if aal1, need MFA verification
+          const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+          
+          if (aalData?.currentLevel === 'aal1' && aalData?.nextLevel === 'aal2') {
+            setShowMFAVerification(true);
+            setLoading(false);
+            return;
+          }
+        }
+      }
+
+      // No MFA required or already verified
+      toast({
+        title: "Login realizado!",
+        description: "Bem-vindo de volta!",
+      });
+      navigate("/");
+    } catch (err: any) {
+      toast({
+        title: "Erro",
+        description: err.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMFAVerified = () => {
+    setShowMFAVerification(false);
+    toast({
+      title: "Login realizado!",
+      description: "Verificação 2FA concluída com sucesso!",
+    });
+    navigate("/");
+  };
+
+  const handleMFACancel = async () => {
+    await supabase.auth.signOut();
+    setShowMFAVerification(false);
   };
 
   const handleSignUp = async (e: React.FormEvent) => {
@@ -152,6 +218,11 @@ const Auth = () => {
     }
   };
 
+  // Show MFA verification screen if needed
+  if (showMFAVerification) {
+    return <MFAVerification onVerified={handleMFAVerified} onCancel={handleMFACancel} />;
+  }
+
   return (
     <div className="min-h-screen relative bg-background flex items-center justify-center p-4 overflow-hidden">
       {/* Animated Background Grid */}
@@ -237,20 +308,12 @@ const Auth = () => {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="signin-password" className="text-foreground font-medium">Password</Label>
-                  <div className="relative group">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                    <Input
-                      id="signin-password"
-                      type="password"
-                      placeholder="••••••••"
-                      required
-                      value={signInForm.password}
-                      onChange={(e) =>
-                        setSignInForm({ ...signInForm, password: e.target.value })
-                      }
-                      className="pl-10 bg-background/50 border-border/50 focus:border-primary/50 focus:bg-background transition-all"
-                    />
-                  </div>
+                  <PasswordInput
+                    id="signin-password"
+                    value={signInForm.password}
+                    onChange={(value) => setSignInForm({ ...signInForm, password: value })}
+                    required
+                  />
                 </div>
                 <Button 
                   type="submit" 
@@ -316,39 +379,23 @@ const Auth = () => {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="signup-password" className="text-foreground font-medium">Password</Label>
-                  <div className="relative group">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                    <Input
-                      id="signup-password"
-                      type="password"
-                      placeholder="••••••••"
-                      required
-                      minLength={6}
-                      value={signUpForm.password}
-                      onChange={(e) =>
-                        setSignUpForm({ ...signUpForm, password: e.target.value })
-                      }
-                      className="pl-10 bg-background/50 border-border/50 focus:border-primary/50 focus:bg-background transition-all"
-                    />
-                  </div>
+                  <PasswordInput
+                    id="signup-password"
+                    value={signUpForm.password}
+                    onChange={(value) => setSignUpForm({ ...signUpForm, password: value })}
+                    required
+                    minLength={6}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="signup-confirm" className="text-foreground font-medium">Confirm Password</Label>
-                  <div className="relative group">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                    <Input
-                      id="signup-confirm"
-                      type="password"
-                      placeholder="••••••••"
-                      required
-                      minLength={6}
-                      value={signUpForm.confirmPassword}
-                      onChange={(e) =>
-                        setSignUpForm({ ...signUpForm, confirmPassword: e.target.value })
-                      }
-                      className="pl-10 bg-background/50 border-border/50 focus:border-primary/50 focus:bg-background transition-all"
-                    />
-                  </div>
+                  <PasswordInput
+                    id="signup-confirm"
+                    value={signUpForm.confirmPassword}
+                    onChange={(value) => setSignUpForm({ ...signUpForm, confirmPassword: value })}
+                    required
+                    minLength={6}
+                  />
                 </div>
 
                 {/* LGPD Consents */}
