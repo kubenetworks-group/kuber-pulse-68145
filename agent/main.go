@@ -464,8 +464,20 @@ func collectNodeStorageMetrics(clientset *kubernetes.Clientset) map[string]inter
 // ---------------------------------------------
 func collectSecurityData(clientset *kubernetes.Clientset) map[string]interface{} {
 	ctx := context.Background()
+	
+	// Initialize RBAC data
+	rbacData := map[string]interface{}{
+		"cluster_roles_count":          0,
+		"cluster_role_bindings_count":  0,
+		"roles_count":                  0,
+		"role_bindings_count":          0,
+		"has_rbac":                     false,
+		"cluster_roles":                []string{},
+	}
+	
+	// Initialize security data with all fields
 	securityData := map[string]interface{}{
-		"rbac":               map[string]interface{}{},
+		"rbac":               rbacData,
 		"network_policies":   map[string]interface{}{},
 		"secrets":            map[string]interface{}{},
 		"resource_quotas":    map[string]interface{}{},
@@ -484,12 +496,12 @@ func collectSecurityData(clientset *kubernetes.Clientset) map[string]interface{}
 		log.Printf("⚠️  Error listing ClusterRoles: %v", err)
 	} else {
 		clusterRolesCount = len(clusterRoles.Items)
-		var roleNames []string
+		roleNames := make([]string, 0, clusterRolesCount)
 		for _, cr := range clusterRoles.Items {
 			roleNames = append(roleNames, cr.Name)
 		}
-		securityData["rbac"].(map[string]interface{})["cluster_roles_count"] = clusterRolesCount
-		securityData["rbac"].(map[string]interface{})["cluster_roles"] = roleNames
+		rbacData["cluster_roles_count"] = clusterRolesCount
+		rbacData["cluster_roles"] = roleNames
 		log.Printf("✅ Found %d ClusterRoles", clusterRolesCount)
 	}
 
@@ -498,7 +510,7 @@ func collectSecurityData(clientset *kubernetes.Clientset) map[string]interface{}
 		log.Printf("⚠️  Error listing ClusterRoleBindings: %v", err)
 	} else {
 		clusterRoleBindingsCount = len(clusterRoleBindings.Items)
-		securityData["rbac"].(map[string]interface{})["cluster_role_bindings_count"] = clusterRoleBindingsCount
+		rbacData["cluster_role_bindings_count"] = clusterRoleBindingsCount
 		log.Printf("✅ Found %d ClusterRoleBindings", clusterRoleBindingsCount)
 	}
 
@@ -513,12 +525,18 @@ func collectSecurityData(clientset *kubernetes.Clientset) map[string]interface{}
 	
 	totalRoles := 0
 	totalRoleBindings := 0
+	rolesByNamespace := make(map[string]int)
+	
 	for _, ns := range namespaces.Items {
 		roles, err := clientset.RbacV1().Roles(ns.Name).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			log.Printf("⚠️  Error listing Roles in namespace %s: %v", ns.Name, err)
 		} else {
-			totalRoles += len(roles.Items)
+			roleCount := len(roles.Items)
+			totalRoles += roleCount
+			if roleCount > 0 {
+				rolesByNamespace[ns.Name] = roleCount
+			}
 		}
 		roleBindings, err := clientset.RbacV1().RoleBindings(ns.Name).List(ctx, metav1.ListOptions{})
 		if err != nil {
@@ -527,13 +545,26 @@ func collectSecurityData(clientset *kubernetes.Clientset) map[string]interface{}
 			totalRoleBindings += len(roleBindings.Items)
 		}
 	}
-	log.Printf("📊 RBAC scan complete: %d Roles, %d RoleBindings across all namespaces", totalRoles, totalRoleBindings)
+	log.Printf("📊 RBAC scan complete: %d ClusterRoles, %d ClusterRoleBindings, %d Roles, %d RoleBindings", 
+		clusterRolesCount, clusterRoleBindingsCount, totalRoles, totalRoleBindings)
 	
-	securityData["rbac"].(map[string]interface{})["roles_count"] = totalRoles
-	securityData["rbac"].(map[string]interface{})["role_bindings_count"] = totalRoleBindings
-	securityData["rbac"].(map[string]interface{})["has_rbac"] = (clusterRolesCount > 0 || totalRoles > 0)
+	// Update RBAC data with all counts
+	rbacData["roles_count"] = totalRoles
+	rbacData["role_bindings_count"] = totalRoleBindings
+	rbacData["roles_by_namespace"] = rolesByNamespace
+	rbacData["has_rbac"] = (clusterRolesCount > 0 || clusterRoleBindingsCount > 0 || totalRoles > 0 || totalRoleBindings > 0)
+	
+	// Update the security data with the complete RBAC data
+	securityData["rbac"] = rbacData
 
 	// 2. Collect NetworkPolicies - iterate through ALL namespaces
+	networkPoliciesData := map[string]interface{}{
+		"total_count":              0,
+		"namespaces_with_policies": 0,
+		"has_network_policies":     false,
+		"policies":                 []map[string]interface{}{},
+	}
+	
 	totalNetworkPolicies := 0
 	namespacesWithPolicies := 0
 	networkPolicyDetails := []map[string]interface{}{}
@@ -560,12 +591,19 @@ func collectSecurityData(clientset *kubernetes.Clientset) map[string]interface{}
 	}
 	log.Printf("📊 NetworkPolicies scan complete: found %d policies in %d namespaces", totalNetworkPolicies, namespacesWithPolicies)
 	
-	securityData["network_policies"].(map[string]interface{})["total_count"] = totalNetworkPolicies
-	securityData["network_policies"].(map[string]interface{})["namespaces_with_policies"] = namespacesWithPolicies
-	securityData["network_policies"].(map[string]interface{})["has_network_policies"] = totalNetworkPolicies > 0
-	securityData["network_policies"].(map[string]interface{})["policies"] = networkPolicyDetails
+	networkPoliciesData["total_count"] = totalNetworkPolicies
+	networkPoliciesData["namespaces_with_policies"] = namespacesWithPolicies
+	networkPoliciesData["has_network_policies"] = totalNetworkPolicies > 0
+	networkPoliciesData["policies"] = networkPolicyDetails
+	securityData["network_policies"] = networkPoliciesData
 
 	// 3. Collect Secrets info (count only, not content)
+	secretsData := map[string]interface{}{
+		"total_count": 0,
+		"types":       map[string]int{},
+		"has_secrets": false,
+	}
+	
 	log.Printf("🔍 Collecting Secrets data...")
 	totalSecrets := 0
 	secretTypes := make(map[string]int)
@@ -581,11 +619,18 @@ func collectSecurityData(clientset *kubernetes.Clientset) map[string]interface{}
 		}
 	}
 	log.Printf("📊 Secrets scan complete: found %d secrets", totalSecrets)
-	securityData["secrets"].(map[string]interface{})["total_count"] = totalSecrets
-	securityData["secrets"].(map[string]interface{})["types"] = secretTypes
-	securityData["secrets"].(map[string]interface{})["has_secrets"] = totalSecrets > 0
+	
+	secretsData["total_count"] = totalSecrets
+	secretsData["types"] = secretTypes
+	secretsData["has_secrets"] = totalSecrets > 0
+	securityData["secrets"] = secretsData
 
 	// 4. Collect ResourceQuotas
+	resourceQuotasData := map[string]interface{}{
+		"total_count": 0,
+		"has_quotas":  false,
+	}
+	
 	log.Printf("🔍 Collecting ResourceQuotas...")
 	totalQuotas := 0
 	for _, ns := range namespaces.Items {
@@ -597,10 +642,17 @@ func collectSecurityData(clientset *kubernetes.Clientset) map[string]interface{}
 		totalQuotas += len(quotas.Items)
 	}
 	log.Printf("📊 ResourceQuotas scan complete: found %d quotas", totalQuotas)
-	securityData["resource_quotas"].(map[string]interface{})["total_count"] = totalQuotas
-	securityData["resource_quotas"].(map[string]interface{})["has_quotas"] = totalQuotas > 0
+	
+	resourceQuotasData["total_count"] = totalQuotas
+	resourceQuotasData["has_quotas"] = totalQuotas > 0
+	securityData["resource_quotas"] = resourceQuotasData
 
 	// 5. Collect LimitRanges
+	limitRangesData := map[string]interface{}{
+		"total_count":      0,
+		"has_limit_ranges": false,
+	}
+	
 	totalLimitRanges := 0
 	for _, ns := range namespaces.Items {
 		limitRanges, err := clientset.CoreV1().LimitRanges(ns.Name).List(ctx, metav1.ListOptions{})
@@ -608,10 +660,23 @@ func collectSecurityData(clientset *kubernetes.Clientset) map[string]interface{}
 			totalLimitRanges += len(limitRanges.Items)
 		}
 	}
-	securityData["limit_ranges"].(map[string]interface{})["total_count"] = totalLimitRanges
-	securityData["limit_ranges"].(map[string]interface{})["has_limit_ranges"] = totalLimitRanges > 0
+	
+	limitRangesData["total_count"] = totalLimitRanges
+	limitRangesData["has_limit_ranges"] = totalLimitRanges > 0
+	securityData["limit_ranges"] = limitRangesData
 
 	// 6. Analyze Pod Security (containers running as root, privileged, etc.)
+	podSecurityData := map[string]interface{}{
+		"total_pods":                   0,
+		"pods_with_security_context":  0,
+		"pods_running_as_non_root":    0,
+		"pods_with_resource_limits":   0,
+		"privileged_containers":       0,
+		"has_pod_security":            false,
+		"security_context_percentage": float64(0),
+		"resource_limits_percentage":  float64(0),
+	}
+	
 	pods, _ := clientset.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
 	podsWithSecurityContext := 0
 	podsRunningAsNonRoot := 0
@@ -659,18 +724,19 @@ func collectSecurityData(clientset *kubernetes.Clientset) map[string]interface{}
 	}
 
 	totalPods := len(pods.Items)
-	securityData["pod_security"].(map[string]interface{})["total_pods"] = totalPods
-	securityData["pod_security"].(map[string]interface{})["pods_with_security_context"] = podsWithSecurityContext
-	securityData["pod_security"].(map[string]interface{})["pods_running_as_non_root"] = podsRunningAsNonRoot
-	securityData["pod_security"].(map[string]interface{})["pods_with_resource_limits"] = podsWithResourceLimits
-	securityData["pod_security"].(map[string]interface{})["privileged_containers"] = privilegedContainers
-	securityData["pod_security"].(map[string]interface{})["has_pod_security"] = podsWithSecurityContext > 0
+	podSecurityData["total_pods"] = totalPods
+	podSecurityData["pods_with_security_context"] = podsWithSecurityContext
+	podSecurityData["pods_running_as_non_root"] = podsRunningAsNonRoot
+	podSecurityData["pods_with_resource_limits"] = podsWithResourceLimits
+	podSecurityData["privileged_containers"] = privilegedContainers
+	podSecurityData["has_pod_security"] = podsWithSecurityContext > 0
 
 	// Calculate percentages
 	if totalPods > 0 {
-		securityData["pod_security"].(map[string]interface{})["security_context_percentage"] = float64(podsWithSecurityContext) / float64(totalPods) * 100
-		securityData["pod_security"].(map[string]interface{})["resource_limits_percentage"] = float64(podsWithResourceLimits) / float64(totalPods) * 100
+		podSecurityData["security_context_percentage"] = float64(podsWithSecurityContext) / float64(totalPods) * 100
+		podSecurityData["resource_limits_percentage"] = float64(podsWithResourceLimits) / float64(totalPods) * 100
 	}
+	securityData["pod_security"] = podSecurityData
 
 	// 7. Detect Ingress Controller and verify its RBAC
 	log.Printf("🔍 Detecting Ingress Controller...")
