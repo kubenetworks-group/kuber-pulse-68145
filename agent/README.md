@@ -1,12 +1,12 @@
-# Kuberpulse Agent
+# Kodo Agent
 
-CloudOps Agent leve que coleta métricas do Kubernetes e envia para o Kuberpulse.
+CloudOps Agent leve que coleta métricas do Kubernetes e envia para o Kodo.
 
 ## 🚀 Instalação Rápida
 
 ### 1. Gerar API Key
 
-Acesse o painel do Kuberpulse em `/agents` e gere uma API key para seu cluster.
+Acesse o painel do Kodo em `/agents` e gere uma API key para seu cluster.
 
 ### 2. Configurar Credenciais
 
@@ -34,13 +34,13 @@ kubectl apply -f kubernetes/deployment.yaml
 ### 4. Verificar Status
 
 ```bash
-kubectl get pods -n kuberpulse
-kubectl logs -n kuberpulse -l app=kuberpulse-agent --tail=50 -f
+kubectl get pods -n kodo
+kubectl logs -n kodo -l app=kodo-agent --tail=50 -f
 ```
 
 Você deve ver logs como:
 ```
-🚀 Kuberpulse Agent starting...
+🚀 Kodo Agent starting...
 ✅ Connected to Kubernetes cluster
 📡 Sending metrics every 15s
 📊 Collecting metrics...

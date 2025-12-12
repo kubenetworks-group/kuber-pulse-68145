@@ -13,15 +13,15 @@ fi
 
 API_KEY=$1
 CLUSTER_ID=$2
-NAMESPACE="kuberpulse"
+NAMESPACE="kodo"
 
 echo "🔐 Updating Kubernetes secret..."
 
 # Deletar o secret antigo se existir
-kubectl delete secret kuberpulse-secret -n ${NAMESPACE} --ignore-not-found
+kubectl delete secret kodo-secret -n ${NAMESPACE} --ignore-not-found
 
 # Criar novo secret
-kubectl create secret generic kuberpulse-secret \
+kubectl create secret generic kodo-secret \
   --from-literal=API_KEY=${API_KEY} \
   --from-literal=CLUSTER_ID=${CLUSTER_ID} \
   -n ${NAMESPACE}
@@ -29,7 +29,7 @@ kubectl create secret generic kuberpulse-secret \
 echo "✅ Secret updated successfully!"
 echo "♻️  Restarting deployment to use new secret..."
 
-kubectl rollout restart deployment/kuberpulse-agent -n ${NAMESPACE}
-kubectl rollout status deployment/kuberpulse-agent -n ${NAMESPACE}
+kubectl rollout restart deployment/kodo-agent -n ${NAMESPACE}
+kubectl rollout status deployment/kodo-agent -n ${NAMESPACE}
 
 echo "✅ Deployment restarted with new credentials!"

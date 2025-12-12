@@ -1,6 +1,6 @@
-# Kuberpulse Agent Deployment Guide
+# Kodo Agent Deployment Guide
 
-This guide explains how to deploy the Kuberpulse agent to your Kubernetes cluster.
+This guide explains how to deploy the Kodo agent to your Kubernetes cluster.
 
 ## Security Notice
 
@@ -12,20 +12,20 @@ The `deployment.yaml` file contains template placeholders that must be replaced 
 
 - Access to a Kubernetes cluster
 - `kubectl` configured to communicate with your cluster
-- Kuberpulse API key (generated from the Agents page in the Kuberpulse dashboard)
-- Your cluster ID (found in the Kuberpulse dashboard)
+- Kodo API key (generated from the Agents page in the Kodo dashboard)
+- Your cluster ID (found in the Kodo dashboard)
 
 ## Deployment Steps
 
 ### Option 1: Manual Deployment (Recommended for first-time setup)
 
 1. **Generate API Key**:
-   - Go to your Kuberpulse dashboard → Agents page
+   - Go to your Kodo dashboard → Agents page
    - Click "Generate New API Key"
    - Copy the generated key (starts with `kp_`)
 
 2. **Get Cluster ID**:
-   - Find your cluster in the Kuberpulse dashboard
+   - Find your cluster in the Kodo dashboard
    - Copy the cluster ID (UUID format)
 
 3. **Update the Secret**:
@@ -35,10 +35,10 @@ The `deployment.yaml` file contains template placeholders that must be replaced 
    ./scripts/update-secret.sh <YOUR_API_KEY> <YOUR_CLUSTER_ID>
    
    # Method B: Manual kubectl command
-   kubectl create secret generic kuberpulse-secret \
+   kubectl create secret generic kodo-secret \
      --from-literal=API_KEY=<YOUR_API_KEY> \
      --from-literal=CLUSTER_ID=<YOUR_CLUSTER_ID> \
-     -n kuberpulse
+     -n kodo
    ```
 
 4. **Deploy the Agent**:
@@ -55,12 +55,12 @@ The `deployment.yaml` file contains template placeholders that must be replaced 
 For CI/CD pipelines, use environment variables:
 
 ```bash
-export KUBERPULSE_API_KEY="your_api_key_here"
-export KUBERPULSE_CLUSTER_ID="your_cluster_id_here"
+export KODO_API_KEY="your_api_key_here"
+export KODO_CLUSTER_ID="your_cluster_id_here"
 
 # Replace placeholders in deployment.yaml
-sed "s/<REPLACE_WITH_YOUR_API_KEY>/$KUBERPULSE_API_KEY/g" deployment.yaml | \
-sed "s/<REPLACE_WITH_YOUR_CLUSTER_ID>/$KUBERPULSE_CLUSTER_ID/g" | \
+sed "s/<REPLACE_WITH_YOUR_API_KEY>/$KODO_API_KEY/g" deployment.yaml | \
+sed "s/<REPLACE_WITH_YOUR_CLUSTER_ID>/$KODO_CLUSTER_ID/g" | \
 kubectl apply -f -
 ```
 
@@ -70,10 +70,10 @@ Check if the agent is running:
 
 ```bash
 # Check pod status
-kubectl get pods -n kuberpulse
+kubectl get pods -n kodo
 
 # View agent logs
-kubectl logs -n kuberpulse -l app=kuberpulse-agent --tail=50 -f
+kubectl logs -n kodo -l app=kodo-agent --tail=50 -f
 ```
 
 You should see logs indicating successful connection:
@@ -125,17 +125,17 @@ The agent deployment will automatically restart with the new credentials.
 
 ```bash
 # Check if secret exists
-kubectl get secret kuberpulse-secret -n kuberpulse
+kubectl get secret kodo-secret -n kodo
 
 # Verify secret contents (keys only, not values)
-kubectl describe secret kuberpulse-secret -n kuberpulse
+kubectl describe secret kodo-secret -n kodo
 ```
 
 ### Connection issues
 
 ```bash
 # Check network policies
-kubectl get networkpolicies -n kuberpulse
+kubectl get networkpolicies -n kodo
 
 # Test connectivity
 kubectl run -it --rm debug --image=curlimages/curl --restart=Never -- \
@@ -152,6 +152,6 @@ If you see "Rate limit exceeded" errors:
 ## Support
 
 For issues or questions:
-- Check the [Kuberpulse documentation](https://docs.kuberpulse.io)
+- Check the [Kodo documentation](https://docs.kodo.io)
 - Open an issue on GitHub
-- Contact support@kuberpulse.io
+- Contact support@kodo.io

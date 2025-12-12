@@ -13,7 +13,7 @@ RUN go mod download
 COPY . .
 
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
-    go build -a -installsuffix cgo -ldflags '-w -s' -o kuberpulse-agent .
+    go build -a -installsuffix cgo -ldflags '-w -s' -o kodo-agent .
 
 # Final stage
 FROM --platform=$TARGETPLATFORM alpine:latest
@@ -23,6 +23,6 @@ RUN apk --no-cache add ca-certificates
 WORKDIR /root/
 
 # Copy the binary from builder
-COPY --from=builder /app/kuberpulse-agent .
+COPY --from=builder /app/kodo-agent .
 
-CMD ["./kuberpulse-agent"]
+CMD ["./kodo-agent"]
