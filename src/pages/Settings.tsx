@@ -11,9 +11,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Database, Loader2, Sparkles, GraduationCap, Crown, Clock, Brain, Server, User, CreditCard, Check } from "lucide-react";
+import { Database, Loader2, Sparkles, GraduationCap, Crown, Clock, Brain, Server, User, CreditCard, Check, Shield } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { AvatarUpload } from "@/components/AvatarUpload";
+import { MFASetup } from "@/components/MFASetup";
 
 const Settings = () => {
   const { user } = useAuth();
@@ -178,6 +179,10 @@ const Settings = () => {
               <User className="w-4 h-4" />
               Perfil
             </TabsTrigger>
+            <TabsTrigger value="security" className="gap-2">
+              <Shield className="w-4 h-4" />
+              Segurança
+            </TabsTrigger>
             <TabsTrigger value="upgrade" className="gap-2">
               <Crown className="w-4 h-4" />
               Planos
@@ -272,6 +277,21 @@ const Settings = () => {
                   </span>
                 </div>
               </div>
+            </Card>
+          </TabsContent>
+
+          {/* Security Tab */}
+          <TabsContent value="security" className="space-y-6">
+            <MFASetup />
+            
+            <Card className="p-6 bg-card border-border">
+              <h3 className="text-lg font-semibold text-card-foreground mb-4">Sessões Ativas</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Gerencie suas sessões ativas em diferentes dispositivos.
+              </p>
+              <Button variant="outline" className="text-destructive border-destructive/50 hover:bg-destructive/10">
+                Encerrar Todas as Outras Sessões
+              </Button>
             </Card>
           </TabsContent>
 
