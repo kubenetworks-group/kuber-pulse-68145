@@ -36,11 +36,6 @@ export default function Pricing() {
   }, [searchParams, refetch]);
 
   const handleSelectPlan = async (plan: PlanType) => {
-    if (plan === 'enterprise') {
-      window.open('mailto:contato@kuberpulse.com?subject=Interesse no plano Enterprise', '_blank');
-      return;
-    }
-
     if (plan === 'free') {
       // Direct change to free (downgrade)
       setLoadingPlan(plan);
@@ -188,8 +183,8 @@ export default function Pricing() {
         </Card>
 
         {/* Plans Grid */}
-        <div className="grid gap-6 md:grid-cols-3 max-w-5xl mx-auto items-start">
-          {(['free', 'pro', 'enterprise'] as PlanType[]).map(plan => (
+        <div className="grid gap-6 md:grid-cols-2 max-w-3xl mx-auto items-start">
+          {(['free', 'pro'] as PlanType[]).map(plan => (
             <PlanCard
               key={plan}
               plan={plan}
@@ -206,7 +201,7 @@ export default function Pricing() {
         <div className="max-w-2xl mx-auto text-center text-sm text-muted-foreground">
           <p>
             Plano Free não requer cartão de crédito. 
-            Planos Pro e Enterprise requerem cadastro de cartão para cobrança mensal.
+            O plano Pro requer cadastro de cartão para cobrança mensal.
           </p>
           <p className="mt-2">
             Precisa de ajuda? Entre em contato conosco em{' '}

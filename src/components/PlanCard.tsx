@@ -25,14 +25,8 @@ const planDetails: Record<PlanType, { name: string; price: string; priceNote?: s
     name: 'Pro',
     price: 'R$ 99',
     priceNote: '/mês',
-    description: 'Para equipes em crescimento',
+    description: 'Para equipes e profissionais',
     highlight: true,
-    requiresCard: true,
-  },
-  enterprise: {
-    name: 'Enterprise',
-    price: 'Sob consulta',
-    description: 'Para grandes organizações',
     requiresCard: true,
   },
 };
@@ -64,13 +58,8 @@ export const PlanCard = ({ plan, isCurrentPlan, isTrialActive, onSelect, isLoadi
     },
     {
       name: 'Suporte prioritário',
-      value: plan === 'enterprise' ? 'Incluído' : 'Não incluído',
-      included: plan === 'enterprise',
-    },
-    {
-      name: 'SLA dedicado',
-      value: plan === 'enterprise' ? 'Incluído' : 'Não incluído',
-      included: plan === 'enterprise',
+      value: plan === 'pro' ? 'Incluído' : 'Não incluído',
+      included: plan === 'pro',
     },
   ];
 
@@ -78,7 +67,6 @@ export const PlanCard = ({ plan, isCurrentPlan, isTrialActive, onSelect, isLoadi
     if (isLoading) return "Processando...";
     if (isCurrentPlan && !isTrialActive) return "Plano atual";
     if (isTrialActive && isCurrentPlan) return "Em teste";
-    if (plan === 'enterprise') return "Falar com vendas";
     if (plan === 'pro') return "Assinar agora";
     if (plan === 'free' && hasStripeSubscription) return "Fazer downgrade";
     return "Selecionar plano";
@@ -105,7 +93,7 @@ export const PlanCard = ({ plan, isCurrentPlan, isTrialActive, onSelect, isLoadi
 
       <CardHeader className={cn("pt-8", isCurrentPlan && !isTrialActive && "pt-12")}>
         <CardTitle className="text-2xl flex items-center gap-2">
-          {plan === 'enterprise' && <Crown className="w-5 h-5 text-primary" />}
+          {plan === 'pro' && <Crown className="w-5 h-5 text-primary" />}
           {details.name}
         </CardTitle>
         <CardDescription>{details.description}</CardDescription>

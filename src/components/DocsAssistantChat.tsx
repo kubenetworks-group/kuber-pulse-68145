@@ -38,8 +38,7 @@ export const DocsAssistantChat = () => {
     // Calculate usage based on subscription
     if (subscription) {
       let limit = 50; // free
-      if (subscription.plan === "pro") limit = 200;
-      if (subscription.plan === "enterprise") limit = 1000;
+      if (subscription.plan === "pro") limit = Infinity;
       
       setUsageInfo({
         used: subscription.ai_analyses_used || 0,
