@@ -2,10 +2,12 @@ import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { StorageChart } from "@/components/StorageChart";
 import { PVCleanupRecommendations } from "@/components/PVCleanupRecommendations";
+import { AISavingsComparison } from "@/components/AISavingsComparison";
 import { useCluster } from "@/contexts/ClusterContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useTranslation } from "react-i18next";
-import { Loader2 } from "lucide-react";
+import { Loader2, HardDrive, Sparkles } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface PVC {
   id: string;
@@ -172,21 +174,40 @@ const Storage = () => {
             <p className="text-sm text-muted-foreground animate-pulse">Loading storage data...</p>
           </div>
         ) : (
-          <div className="space-y-6">
-            <div className="animate-in fade-in slide-in-from-bottom-5 duration-700" style={{ animationDelay: '100ms' }}>
-              <StorageChart
-                total={storageMetrics.total}
-                allocated={storageMetrics.allocated}
-                used={storageMetrics.used}
-                available={storageMetrics.available}
-                pvcs={storageMetrics.pvcs}
-              />
-            </div>
-            
-            <div className="animate-in fade-in slide-in-from-bottom-5 duration-700" style={{ animationDelay: '200ms' }}>
-              <PVCleanupRecommendations pvs={standalonePVs} clusterProvider={selectedCluster?.provider} />
-            </div>
-          </div>
+          <Tabs defaultValue="storage" className="space-y-6">
+            <TabsList>
+              <TabsTrigger value="storage" className="flex items-center gap-2">
+                <HardDrive className="w-4 h-4" />
+                Storage
+              </TabsTrigger>
+              <TabsTrigger value="ai-savings" className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4" />
+                Economia com IA
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="storage" className="space-y-6">
+              <div className="animate-in fade-in slide-in-from-bottom-5 duration-700" style={{ animationDelay: '100ms' }}>
+                <StorageChart
+                  total={storageMetrics.total}
+                  allocated={storageMetrics.allocated}
+                  used={storageMetrics.used}
+                  available={storageMetrics.available}
+                  pvcs={storageMetrics.pvcs}
+                />
+              </div>
+              
+              <div className="animate-in fade-in slide-in-from-bottom-5 duration-700" style={{ animationDelay: '200ms' }}>
+                <PVCleanupRecommendations pvs={standalonePVs} clusterProvider={selectedCluster?.provider} />
+              </div>
+            </TabsContent>
+
+            <TabsContent value="ai-savings">
+              <div className="animate-in fade-in slide-in-from-bottom-5 duration-700">
+                <AISavingsComparison />
+              </div>
+            </TabsContent>
+          </Tabs>
         )}
       </div>
     </DashboardLayout>
