@@ -769,45 +769,65 @@ func detectIngressController(clientset *kubernetes.Clientset, ctx context.Contex
 		"version":          "",
 	}
 
-	// Common ingress controller identifiers
+	// Common ingress controller identifiers with more label options
 	ingressControllers := []struct {
 		name           string
 		labelSelectors []string
 		namespaces     []string
+		namePatterns   []string // Deployment/DaemonSet name patterns to search
 	}{
 		{
 			name:           "nginx",
-			labelSelectors: []string{"app.kubernetes.io/name=ingress-nginx", "app=ingress-nginx", "app.kubernetes.io/component=controller"},
-			namespaces:     []string{"ingress-nginx", "nginx-ingress", "kube-system"},
+			labelSelectors: []string{"app.kubernetes.io/name=ingress-nginx", "app=ingress-nginx", "app.kubernetes.io/component=controller", "app=nginx-ingress"},
+			namespaces:     []string{"ingress-nginx", "nginx-ingress", "kube-system", "default"},
+			namePatterns:   []string{"ingress-nginx", "nginx-ingress", "nginx-controller"},
 		},
 		{
 			name:           "traefik",
-			labelSelectors: []string{"app.kubernetes.io/name=traefik", "app=traefik"},
-			namespaces:     []string{"traefik", "traefik-system", "kube-system"},
+			labelSelectors: []string{"app.kubernetes.io/name=traefik", "app=traefik", "app.kubernetes.io/instance=traefik"},
+			namespaces:     []string{"traefik", "traefik-system", "kube-system", "default"},
+			namePatterns:   []string{"traefik"},
 		},
 		{
 			name:           "haproxy",
-			labelSelectors: []string{"app.kubernetes.io/name=haproxy-ingress", "app=haproxy-ingress"},
-			namespaces:     []string{"haproxy-controller", "kube-system"},
+			labelSelectors: []string{"app.kubernetes.io/name=haproxy-ingress", "app=haproxy-ingress", "app=haproxy"},
+			namespaces:     []string{"haproxy-controller", "haproxy-ingress", "kube-system"},
+			namePatterns:   []string{"haproxy"},
 		},
 		{
 			name:           "kong",
-			labelSelectors: []string{"app.kubernetes.io/name=kong", "app=kong"},
+			labelSelectors: []string{"app.kubernetes.io/name=kong", "app=kong", "app.kubernetes.io/instance=kong"},
 			namespaces:     []string{"kong", "kong-system", "kube-system"},
+			namePatterns:   []string{"kong"},
 		},
 		{
 			name:           "istio",
-			labelSelectors: []string{"app=istiod", "istio=ingressgateway"},
+			labelSelectors: []string{"app=istiod", "istio=ingressgateway", "app=istio-ingressgateway"},
 			namespaces:     []string{"istio-system", "istio-ingress"},
+			namePatterns:   []string{"istiod", "istio-ingressgateway"},
 		},
 		{
 			name:           "contour",
-			labelSelectors: []string{"app.kubernetes.io/name=contour", "app=contour"},
+			labelSelectors: []string{"app.kubernetes.io/name=contour", "app=contour", "app=envoy"},
 			namespaces:     []string{"projectcontour", "contour", "kube-system"},
+			namePatterns:   []string{"contour", "envoy"},
+		},
+		{
+			name:           "ambassador",
+			labelSelectors: []string{"app.kubernetes.io/name=ambassador", "app=ambassador", "product=aes"},
+			namespaces:     []string{"ambassador", "emissary", "kube-system"},
+			namePatterns:   []string{"ambassador", "emissary"},
+		},
+		{
+			name:           "aws-alb",
+			labelSelectors: []string{"app.kubernetes.io/name=aws-load-balancer-controller"},
+			namespaces:     []string{"kube-system"},
+			namePatterns:   []string{"aws-load-balancer-controller"},
 		},
 	}
 
-	// Check each ingress controller type
+	// First, check by label selectors
+	log.Printf("🔍 Checking ingress controllers by labels...")
 	for _, ic := range ingressControllers {
 		for _, ns := range ic.namespaces {
 			for _, labelSelector := range ic.labelSelectors {
@@ -822,20 +842,16 @@ func detectIngressController(clientset *kubernetes.Clientset, ctx context.Contex
 					result["namespace"] = ns
 					result["deployment_name"] = deploy.Name
 					
-					// Get service account
 					if deploy.Spec.Template.Spec.ServiceAccountName != "" {
 						result["service_account"] = deploy.Spec.Template.Spec.ServiceAccountName
 					}
 					
-					// Try to get version from container image
 					if len(deploy.Spec.Template.Spec.Containers) > 0 {
-						image := deploy.Spec.Template.Spec.Containers[0].Image
-						result["version"] = image
+						result["version"] = deploy.Spec.Template.Spec.Containers[0].Image
 					}
 					
-					log.Printf("✅ Detected %s ingress controller in namespace %s (deployment: %s)", ic.name, ns, deploy.Name)
+					log.Printf("✅ Detected %s ingress controller in namespace %s (deployment: %s, label: %s)", ic.name, ns, deploy.Name, labelSelector)
 					
-					// Check RBAC for this ingress controller
 					rbacDetails := checkIngressControllerRBAC(clientset, ctx, ns, result["service_account"].(string), ic.name)
 					result["has_rbac"] = rbacDetails["has_proper_rbac"]
 					result["rbac_details"] = rbacDetails
@@ -843,7 +859,7 @@ func detectIngressController(clientset *kubernetes.Clientset, ctx context.Contex
 					return result
 				}
 				
-				// Also check DaemonSets (some controllers use DaemonSets)
+				// Check DaemonSets
 				daemonsets, err := clientset.AppsV1().DaemonSets(ns).List(ctx, metav1.ListOptions{
 					LabelSelector: labelSelector,
 				})
@@ -859,8 +875,7 @@ func detectIngressController(clientset *kubernetes.Clientset, ctx context.Contex
 					}
 					
 					if len(ds.Spec.Template.Spec.Containers) > 0 {
-						image := ds.Spec.Template.Spec.Containers[0].Image
-						result["version"] = image
+						result["version"] = ds.Spec.Template.Spec.Containers[0].Image
 					}
 					
 					log.Printf("✅ Detected %s ingress controller (DaemonSet) in namespace %s", ic.name, ns)
@@ -875,37 +890,154 @@ func detectIngressController(clientset *kubernetes.Clientset, ctx context.Contex
 		}
 	}
 
-	// Check IngressClass resources as a fallback
+	// Second, search by deployment/daemonset name patterns across all namespaces
+	log.Printf("🔍 Checking ingress controllers by name patterns...")
+	allNamespaces, _ := clientset.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
+	for _, ic := range ingressControllers {
+		for _, ns := range allNamespaces.Items {
+			// Get all deployments in namespace
+			deployments, err := clientset.AppsV1().Deployments(ns.Name).List(ctx, metav1.ListOptions{})
+			if err == nil {
+				for _, deploy := range deployments.Items {
+					for _, pattern := range ic.namePatterns {
+						if strings.Contains(strings.ToLower(deploy.Name), pattern) {
+							result["type"] = ic.name
+							result["detected"] = true
+							result["namespace"] = ns.Name
+							result["deployment_name"] = deploy.Name
+							
+							if deploy.Spec.Template.Spec.ServiceAccountName != "" {
+								result["service_account"] = deploy.Spec.Template.Spec.ServiceAccountName
+							}
+							
+							if len(deploy.Spec.Template.Spec.Containers) > 0 {
+								result["version"] = deploy.Spec.Template.Spec.Containers[0].Image
+							}
+							
+							log.Printf("✅ Detected %s ingress controller by name pattern in namespace %s (deployment: %s)", ic.name, ns.Name, deploy.Name)
+							
+							rbacDetails := checkIngressControllerRBAC(clientset, ctx, ns.Name, result["service_account"].(string), ic.name)
+							result["has_rbac"] = rbacDetails["has_proper_rbac"]
+							result["rbac_details"] = rbacDetails
+							
+							return result
+						}
+					}
+				}
+			}
+			
+			// Get all daemonsets in namespace
+			daemonsets, err := clientset.AppsV1().DaemonSets(ns.Name).List(ctx, metav1.ListOptions{})
+			if err == nil {
+				for _, ds := range daemonsets.Items {
+					for _, pattern := range ic.namePatterns {
+						if strings.Contains(strings.ToLower(ds.Name), pattern) {
+							result["type"] = ic.name
+							result["detected"] = true
+							result["namespace"] = ns.Name
+							result["deployment_name"] = ds.Name + " (DaemonSet)"
+							
+							if ds.Spec.Template.Spec.ServiceAccountName != "" {
+								result["service_account"] = ds.Spec.Template.Spec.ServiceAccountName
+							}
+							
+							if len(ds.Spec.Template.Spec.Containers) > 0 {
+								result["version"] = ds.Spec.Template.Spec.Containers[0].Image
+							}
+							
+							log.Printf("✅ Detected %s ingress controller (DaemonSet) by name pattern in namespace %s", ic.name, ns.Name)
+							
+							rbacDetails := checkIngressControllerRBAC(clientset, ctx, ns.Name, result["service_account"].(string), ic.name)
+							result["has_rbac"] = rbacDetails["has_proper_rbac"]
+							result["rbac_details"] = rbacDetails
+							
+							return result
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Third, check IngressClass resources
+	log.Printf("🔍 Checking IngressClass resources...")
 	ingressClasses, err := clientset.NetworkingV1().IngressClasses().List(ctx, metav1.ListOptions{})
 	if err == nil && len(ingressClasses.Items) > 0 {
 		for _, ic := range ingressClasses.Items {
 			controllerName := ic.Spec.Controller
 			log.Printf("📋 Found IngressClass: %s with controller: %s", ic.Name, controllerName)
 			
-			// Detect type from controller name
-			if strings.Contains(controllerName, "nginx") {
+			controllerLower := strings.ToLower(controllerName)
+			if strings.Contains(controllerLower, "nginx") {
 				result["type"] = "nginx"
-			} else if strings.Contains(controllerName, "traefik") {
+			} else if strings.Contains(controllerLower, "traefik") {
 				result["type"] = "traefik"
-			} else if strings.Contains(controllerName, "haproxy") {
+			} else if strings.Contains(controllerLower, "haproxy") {
 				result["type"] = "haproxy"
-			} else if strings.Contains(controllerName, "kong") {
+			} else if strings.Contains(controllerLower, "kong") {
 				result["type"] = "kong"
-			} else if strings.Contains(controllerName, "istio") {
+			} else if strings.Contains(controllerLower, "istio") {
 				result["type"] = "istio"
-			} else if strings.Contains(controllerName, "contour") {
+			} else if strings.Contains(controllerLower, "contour") {
 				result["type"] = "contour"
+			} else if strings.Contains(controllerLower, "ambassador") || strings.Contains(controllerLower, "emissary") {
+				result["type"] = "ambassador"
+			} else if strings.Contains(controllerLower, "alb") || strings.Contains(controllerLower, "aws") {
+				result["type"] = "aws-alb"
 			} else {
 				result["type"] = controllerName
 			}
 			result["detected"] = true
 			result["deployment_name"] = ic.Name + " (IngressClass)"
+			
+			log.Printf("✅ Detected ingress controller from IngressClass: %s -> %s", ic.Name, result["type"])
 			break
 		}
 	}
 
+	// Fourth, check Ingress resources to infer controller
 	if !result["detected"].(bool) {
-		log.Printf("⚠️ No ingress controller detected")
+		log.Printf("🔍 Checking existing Ingress resources...")
+		ingresses, err := clientset.NetworkingV1().Ingresses("").List(ctx, metav1.ListOptions{})
+		if err == nil && len(ingresses.Items) > 0 {
+			for _, ing := range ingresses.Items {
+				// Check annotations for controller hints
+				if className, ok := ing.Annotations["kubernetes.io/ingress.class"]; ok {
+					log.Printf("📋 Found Ingress %s/%s with class annotation: %s", ing.Namespace, ing.Name, className)
+					classLower := strings.ToLower(className)
+					if strings.Contains(classLower, "nginx") {
+						result["type"] = "nginx"
+					} else if strings.Contains(classLower, "traefik") {
+						result["type"] = "traefik"
+					} else {
+						result["type"] = className
+					}
+					result["detected"] = true
+					result["deployment_name"] = className + " (from annotation)"
+					break
+				}
+				
+				// Check spec.ingressClassName
+				if ing.Spec.IngressClassName != nil {
+					log.Printf("📋 Found Ingress %s/%s with ingressClassName: %s", ing.Namespace, ing.Name, *ing.Spec.IngressClassName)
+					classLower := strings.ToLower(*ing.Spec.IngressClassName)
+					if strings.Contains(classLower, "nginx") {
+						result["type"] = "nginx"
+					} else if strings.Contains(classLower, "traefik") {
+						result["type"] = "traefik"
+					} else {
+						result["type"] = *ing.Spec.IngressClassName
+					}
+					result["detected"] = true
+					result["deployment_name"] = *ing.Spec.IngressClassName + " (from spec)"
+					break
+				}
+			}
+		}
+	}
+
+	if !result["detected"].(bool) {
+		log.Printf("⚠️ No ingress controller detected after all checks")
 	}
 
 	return result
