@@ -915,6 +915,7 @@ export type Database = {
           ai_analyses_used: number
           created_at: string
           current_period_end: string | null
+          custom_cluster_limit: number | null
           id: string
           plan: string
           status: string
@@ -931,6 +932,7 @@ export type Database = {
           ai_analyses_used?: number
           created_at?: string
           current_period_end?: string | null
+          custom_cluster_limit?: number | null
           id?: string
           plan?: string
           status?: string
@@ -947,6 +949,7 @@ export type Database = {
           ai_analyses_used?: number
           created_at?: string
           current_period_end?: string | null
+          custom_cluster_limit?: number | null
           id?: string
           plan?: string
           status?: string
