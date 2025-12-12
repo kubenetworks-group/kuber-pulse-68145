@@ -15,10 +15,12 @@ import { Database, Loader2, Sparkles, GraduationCap, Crown, Clock, Brain, Server
 import { useNavigate } from "react-router-dom";
 import { AvatarUpload } from "@/components/AvatarUpload";
 import { MFASetup } from "@/components/MFASetup";
+import { useAdminCheck } from "@/hooks/useAdminCheck";
 
 const Settings = () => {
   const { user } = useAuth();
   const { subscription, currentPlan, isTrialActive, daysLeftInTrial, planLimits, isReadOnly, changePlan } = useSubscription();
+  const { isAdmin } = useAdminCheck();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [demoLoading, setDemoLoading] = useState(false);
@@ -187,10 +189,12 @@ const Settings = () => {
               <Crown className="w-4 h-4" />
               Planos
             </TabsTrigger>
-            <TabsTrigger value="data" className="gap-2">
-              <Database className="w-4 h-4" />
-              Dados
-            </TabsTrigger>
+            {isAdmin && (
+              <TabsTrigger value="data" className="gap-2">
+                <Database className="w-4 h-4" />
+                Dados
+              </TabsTrigger>
+            )}
           </TabsList>
 
           {/* Profile Tab */}

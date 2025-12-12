@@ -10,6 +10,7 @@ export const WelcomeHeader = () => {
     full_name: string | null;
     company: string | null;
     created_at: string | null;
+    username: string | null;
   } | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -42,7 +43,7 @@ export const WelcomeHeader = () => {
     try {
       const { data, error } = await supabase
         .from("profiles")
-        .select("full_name, company, created_at")
+        .select("full_name, company, created_at, username")
         .eq("id", user?.id)
         .single();
 
@@ -98,6 +99,10 @@ export const WelcomeHeader = () => {
   };
 
   const getFirstName = () => {
+    // Prioridade: username > primeiro nome > parte do email
+    if (profile?.username) {
+      return profile.username;
+    }
     if (profile?.full_name) {
       return profile.full_name.split(" ")[0];
     }
