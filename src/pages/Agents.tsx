@@ -45,6 +45,7 @@ const Agents = () => {
   const [selectedClusterId, setSelectedClusterId] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [showApiKey, setShowApiKey] = useState<string | null>(null);
+  const [lastCreatedClusterId, setLastCreatedClusterId] = useState<string | null>(null);
 
   // Handle cluster_id from URL (coming from Clusters page after creating a cluster)
   useEffect(() => {
@@ -107,6 +108,7 @@ const Agents = () => {
 
       toast.success('API key criada com sucesso!');
       setShowApiKey(data.api_key.api_key);
+      setLastCreatedClusterId(selectedClusterId);
       setDialogOpen(false);
       setNewAgentName("");
       setSelectedClusterId("");
@@ -351,10 +353,10 @@ spec:
             <CardHeader>
               <CardTitle className="text-success">✅ API Key Criada!</CardTitle>
               <CardDescription>
-                Copie esta chave agora. Ela não será mostrada novamente.
+                Copie esta chave e baixe o YAML agora. A chave não será mostrada novamente.
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
               <div className="flex items-center gap-2 p-3 bg-background rounded-lg font-mono text-sm break-all">
                 <code className="flex-1">{showApiKey}</code>
                 <Button
@@ -365,13 +367,36 @@ spec:
                   <Copy className="w-4 h-4" />
                 </Button>
               </div>
-              <Button
-                variant="outline"
-                className="mt-4"
-                onClick={() => setShowApiKey(null)}
-              >
-                Entendi, fechar
-              </Button>
+              
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Button
+                  variant="default"
+                  className="flex-1 gap-2"
+                  onClick={() => {
+                    if (lastCreatedClusterId) {
+                      downloadDeploymentYaml(showApiKey, lastCreatedClusterId);
+                    } else {
+                      toast.error('Cluster não encontrado');
+                    }
+                  }}
+                >
+                  <Download className="w-4 h-4" />
+                  Baixar YAML de Deploy
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowApiKey(null);
+                    setLastCreatedClusterId(null);
+                  }}
+                >
+                  Entendi, fechar
+                </Button>
+              </div>
+              
+              <p className="text-xs text-muted-foreground">
+                ⚠️ Salve a API key em um local seguro. Por segurança, ela não será exibida novamente.
+              </p>
             </CardContent>
           </Card>
         )}
