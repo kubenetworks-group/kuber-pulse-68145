@@ -5,6 +5,7 @@ type AuditAction =
   | 'login'
   | 'logout'
   | 'signup'
+  | 'oauth_login'
   | 'password_reset'
   | 'api_key_created'
   | 'api_key_revoked'
