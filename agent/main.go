@@ -9,9 +9,11 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/client-go/kubernetes"
@@ -463,12 +465,13 @@ func collectNodeStorageMetrics(clientset *kubernetes.Clientset) map[string]inter
 func collectSecurityData(clientset *kubernetes.Clientset) map[string]interface{} {
 	ctx := context.Background()
 	securityData := map[string]interface{}{
-		"rbac":             map[string]interface{}{},
-		"network_policies": map[string]interface{}{},
-		"secrets":          map[string]interface{}{},
-		"resource_quotas":  map[string]interface{}{},
-		"limit_ranges":     map[string]interface{}{},
-		"pod_security":     map[string]interface{}{},
+		"rbac":               map[string]interface{}{},
+		"network_policies":   map[string]interface{}{},
+		"secrets":            map[string]interface{}{},
+		"resource_quotas":    map[string]interface{}{},
+		"limit_ranges":       map[string]interface{}{},
+		"pod_security":       map[string]interface{}{},
+		"ingress_controller": map[string]interface{}{},
 	}
 
 	// 1. Collect RBAC data (ClusterRoles, ClusterRoleBindings, Roles, RoleBindings)
@@ -669,16 +672,305 @@ func collectSecurityData(clientset *kubernetes.Clientset) map[string]interface{}
 		securityData["pod_security"].(map[string]interface{})["resource_limits_percentage"] = float64(podsWithResourceLimits) / float64(totalPods) * 100
 	}
 
-	log.Printf("🔒 Security data collected: RBAC=%v, NetworkPolicies=%d, Secrets=%d, Quotas=%d, LimitRanges=%d, PodsWithLimits=%d/%d",
+	// 7. Detect Ingress Controller and verify its RBAC
+	log.Printf("🔍 Detecting Ingress Controller...")
+	ingressControllerInfo := detectIngressController(clientset, ctx)
+	securityData["ingress_controller"] = ingressControllerInfo
+
+	log.Printf("🔒 Security data collected: RBAC=%v, NetworkPolicies=%d, Secrets=%d, Quotas=%d, LimitRanges=%d, PodsWithLimits=%d/%d, IngressController=%s",
 		securityData["rbac"].(map[string]interface{})["has_rbac"],
 		totalNetworkPolicies,
 		totalSecrets,
 		totalQuotas,
 		totalLimitRanges,
 		podsWithResourceLimits,
-		totalPods)
+		totalPods,
+		ingressControllerInfo["type"])
 
 	return securityData
+}
+
+// detectIngressController identifies the ingress controller type and checks its RBAC configuration
+func detectIngressController(clientset *kubernetes.Clientset, ctx context.Context) map[string]interface{} {
+	result := map[string]interface{}{
+		"type":             "unknown",
+		"detected":         false,
+		"namespace":        "",
+		"has_rbac":         false,
+		"rbac_details":     map[string]interface{}{},
+		"deployment_name":  "",
+		"service_account":  "",
+		"version":          "",
+	}
+
+	// Common ingress controller identifiers
+	ingressControllers := []struct {
+		name           string
+		labelSelectors []string
+		namespaces     []string
+	}{
+		{
+			name:           "nginx",
+			labelSelectors: []string{"app.kubernetes.io/name=ingress-nginx", "app=ingress-nginx", "app.kubernetes.io/component=controller"},
+			namespaces:     []string{"ingress-nginx", "nginx-ingress", "kube-system"},
+		},
+		{
+			name:           "traefik",
+			labelSelectors: []string{"app.kubernetes.io/name=traefik", "app=traefik"},
+			namespaces:     []string{"traefik", "traefik-system", "kube-system"},
+		},
+		{
+			name:           "haproxy",
+			labelSelectors: []string{"app.kubernetes.io/name=haproxy-ingress", "app=haproxy-ingress"},
+			namespaces:     []string{"haproxy-controller", "kube-system"},
+		},
+		{
+			name:           "kong",
+			labelSelectors: []string{"app.kubernetes.io/name=kong", "app=kong"},
+			namespaces:     []string{"kong", "kong-system", "kube-system"},
+		},
+		{
+			name:           "istio",
+			labelSelectors: []string{"app=istiod", "istio=ingressgateway"},
+			namespaces:     []string{"istio-system", "istio-ingress"},
+		},
+		{
+			name:           "contour",
+			labelSelectors: []string{"app.kubernetes.io/name=contour", "app=contour"},
+			namespaces:     []string{"projectcontour", "contour", "kube-system"},
+		},
+	}
+
+	// Check each ingress controller type
+	for _, ic := range ingressControllers {
+		for _, ns := range ic.namespaces {
+			for _, labelSelector := range ic.labelSelectors {
+				// Check for Deployments
+				deployments, err := clientset.AppsV1().Deployments(ns).List(ctx, metav1.ListOptions{
+					LabelSelector: labelSelector,
+				})
+				if err == nil && len(deployments.Items) > 0 {
+					deploy := deployments.Items[0]
+					result["type"] = ic.name
+					result["detected"] = true
+					result["namespace"] = ns
+					result["deployment_name"] = deploy.Name
+					
+					// Get service account
+					if deploy.Spec.Template.Spec.ServiceAccountName != "" {
+						result["service_account"] = deploy.Spec.Template.Spec.ServiceAccountName
+					}
+					
+					// Try to get version from container image
+					if len(deploy.Spec.Template.Spec.Containers) > 0 {
+						image := deploy.Spec.Template.Spec.Containers[0].Image
+						result["version"] = image
+					}
+					
+					log.Printf("✅ Detected %s ingress controller in namespace %s (deployment: %s)", ic.name, ns, deploy.Name)
+					
+					// Check RBAC for this ingress controller
+					rbacDetails := checkIngressControllerRBAC(clientset, ctx, ns, result["service_account"].(string), ic.name)
+					result["has_rbac"] = rbacDetails["has_proper_rbac"]
+					result["rbac_details"] = rbacDetails
+					
+					return result
+				}
+				
+				// Also check DaemonSets (some controllers use DaemonSets)
+				daemonsets, err := clientset.AppsV1().DaemonSets(ns).List(ctx, metav1.ListOptions{
+					LabelSelector: labelSelector,
+				})
+				if err == nil && len(daemonsets.Items) > 0 {
+					ds := daemonsets.Items[0]
+					result["type"] = ic.name
+					result["detected"] = true
+					result["namespace"] = ns
+					result["deployment_name"] = ds.Name + " (DaemonSet)"
+					
+					if ds.Spec.Template.Spec.ServiceAccountName != "" {
+						result["service_account"] = ds.Spec.Template.Spec.ServiceAccountName
+					}
+					
+					if len(ds.Spec.Template.Spec.Containers) > 0 {
+						image := ds.Spec.Template.Spec.Containers[0].Image
+						result["version"] = image
+					}
+					
+					log.Printf("✅ Detected %s ingress controller (DaemonSet) in namespace %s", ic.name, ns)
+					
+					rbacDetails := checkIngressControllerRBAC(clientset, ctx, ns, result["service_account"].(string), ic.name)
+					result["has_rbac"] = rbacDetails["has_proper_rbac"]
+					result["rbac_details"] = rbacDetails
+					
+					return result
+				}
+			}
+		}
+	}
+
+	// Check IngressClass resources as a fallback
+	ingressClasses, err := clientset.NetworkingV1().IngressClasses().List(ctx, metav1.ListOptions{})
+	if err == nil && len(ingressClasses.Items) > 0 {
+		for _, ic := range ingressClasses.Items {
+			controllerName := ic.Spec.Controller
+			log.Printf("📋 Found IngressClass: %s with controller: %s", ic.Name, controllerName)
+			
+			// Detect type from controller name
+			if strings.Contains(controllerName, "nginx") {
+				result["type"] = "nginx"
+			} else if strings.Contains(controllerName, "traefik") {
+				result["type"] = "traefik"
+			} else if strings.Contains(controllerName, "haproxy") {
+				result["type"] = "haproxy"
+			} else if strings.Contains(controllerName, "kong") {
+				result["type"] = "kong"
+			} else if strings.Contains(controllerName, "istio") {
+				result["type"] = "istio"
+			} else if strings.Contains(controllerName, "contour") {
+				result["type"] = "contour"
+			} else {
+				result["type"] = controllerName
+			}
+			result["detected"] = true
+			result["deployment_name"] = ic.Name + " (IngressClass)"
+			break
+		}
+	}
+
+	if !result["detected"].(bool) {
+		log.Printf("⚠️ No ingress controller detected")
+	}
+
+	return result
+}
+
+// checkIngressControllerRBAC verifies RBAC configuration for the ingress controller
+func checkIngressControllerRBAC(clientset *kubernetes.Clientset, ctx context.Context, namespace, serviceAccount, controllerType string) map[string]interface{} {
+	rbacDetails := map[string]interface{}{
+		"has_proper_rbac":         false,
+		"cluster_role":            "",
+		"cluster_role_binding":    "",
+		"role":                    "",
+		"role_binding":            "",
+		"missing_permissions":     []string{},
+		"warnings":                []string{},
+	}
+
+	if serviceAccount == "" {
+		rbacDetails["warnings"] = append(rbacDetails["warnings"].([]string), "No service account specified")
+		return rbacDetails
+	}
+
+	// Check ClusterRoleBindings for this service account
+	clusterRoleBindings, err := clientset.RbacV1().ClusterRoleBindings().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		log.Printf("⚠️ Error listing ClusterRoleBindings: %v", err)
+		return rbacDetails
+	}
+
+	foundClusterRoleBinding := false
+	for _, crb := range clusterRoleBindings.Items {
+		for _, subject := range crb.Subjects {
+			if subject.Kind == "ServiceAccount" && subject.Name == serviceAccount && subject.Namespace == namespace {
+				foundClusterRoleBinding = true
+				rbacDetails["cluster_role_binding"] = crb.Name
+				rbacDetails["cluster_role"] = crb.RoleRef.Name
+				
+				// Verify the ClusterRole has required permissions
+				clusterRole, err := clientset.RbacV1().ClusterRoles().Get(ctx, crb.RoleRef.Name, metav1.GetOptions{})
+				if err == nil {
+					missingPerms := checkRequiredPermissions(clusterRole.Rules, controllerType)
+					rbacDetails["missing_permissions"] = missingPerms
+					if len(missingPerms) == 0 {
+						rbacDetails["has_proper_rbac"] = true
+					}
+				}
+				break
+			}
+		}
+		if foundClusterRoleBinding {
+			break
+		}
+	}
+
+	// Check namespace-scoped RoleBindings as well
+	roleBindings, err := clientset.RbacV1().RoleBindings(namespace).List(ctx, metav1.ListOptions{})
+	if err == nil {
+		for _, rb := range roleBindings.Items {
+			for _, subject := range rb.Subjects {
+				if subject.Kind == "ServiceAccount" && subject.Name == serviceAccount {
+					rbacDetails["role_binding"] = rb.Name
+					rbacDetails["role"] = rb.RoleRef.Name
+					break
+				}
+			}
+		}
+	}
+
+	if !foundClusterRoleBinding {
+		rbacDetails["warnings"] = append(rbacDetails["warnings"].([]string), "No ClusterRoleBinding found for ingress controller service account")
+	}
+
+	log.Printf("📋 RBAC check for %s controller (SA: %s): has_proper_rbac=%v", controllerType, serviceAccount, rbacDetails["has_proper_rbac"])
+
+	return rbacDetails
+}
+
+// checkRequiredPermissions verifies that the RBAC rules contain required permissions for the ingress controller
+func checkRequiredPermissions(rules []rbacv1.PolicyRule, controllerType string) []string {
+	missing := []string{}
+	
+	// Common required permissions for ingress controllers
+	requiredResources := map[string][]string{
+		"": {"services", "endpoints", "secrets", "configmaps", "pods"},
+		"networking.k8s.io": {"ingresses", "ingressclasses"},
+		"coordination.k8s.io": {"leases"},
+	}
+	
+	// Check each required resource
+	for apiGroup, resources := range requiredResources {
+		for _, resource := range resources {
+			found := false
+			for _, rule := range rules {
+				for _, rg := range rule.APIGroups {
+					if rg == apiGroup || rg == "*" {
+						for _, r := range rule.Resources {
+							if r == resource || r == "*" {
+								// Check if has at least get/list/watch
+								hasRead := false
+								for _, verb := range rule.Verbs {
+									if verb == "get" || verb == "list" || verb == "watch" || verb == "*" {
+										hasRead = true
+										break
+									}
+								}
+								if hasRead {
+									found = true
+								}
+								break
+							}
+						}
+					}
+					if found {
+						break
+					}
+				}
+				if found {
+					break
+				}
+			}
+			if !found {
+				if apiGroup == "" {
+					missing = append(missing, resource)
+				} else {
+					missing = append(missing, apiGroup+"/"+resource)
+				}
+			}
+		}
+	}
+	
+	return missing
 }
 
 // ---------------------------------------------

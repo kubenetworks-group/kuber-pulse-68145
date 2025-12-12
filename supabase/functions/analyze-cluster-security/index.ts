@@ -122,6 +122,23 @@ IMPORTANTE: ${totalCount > 0
   : 'Nenhuma NetworkPolicy encontrada em nenhum namespace.'}`;
     };
 
+    // Format ingress controller info
+    const formatIngressController = (icData: any) => {
+      if (!icData || !icData.detected) return 'Nenhum Ingress Controller detectado';
+      
+      return `Tipo: ${icData.type || 'desconhecido'}
+Detectado: ${icData.detected ? 'SIM' : 'NÃO'}
+Namespace: ${icData.namespace || 'N/A'}
+Deployment: ${icData.deployment_name || 'N/A'}
+Service Account: ${icData.service_account || 'N/A'}
+Versão/Imagem: ${icData.version || 'N/A'}
+RBAC configurado: ${icData.has_rbac ? 'SIM' : 'NÃO'}
+${icData.rbac_details?.cluster_role ? `ClusterRole: ${icData.rbac_details.cluster_role}` : ''}
+${icData.rbac_details?.cluster_role_binding ? `ClusterRoleBinding: ${icData.rbac_details.cluster_role_binding}` : ''}
+${icData.rbac_details?.missing_permissions?.length > 0 ? `⚠️ Permissões faltando: ${icData.rbac_details.missing_permissions.join(', ')}` : '✅ Todas as permissões necessárias estão configuradas'}
+${icData.rbac_details?.warnings?.length > 0 ? `⚠️ Avisos: ${icData.rbac_details.warnings.join(', ')}` : ''}`;
+    };
+
     // Prepare prompt for AI security analysis with real data
     const prompt = `Você é um especialista em segurança Kubernetes. Analise os dados REAIS coletados do cluster.
 
@@ -139,6 +156,9 @@ ${securityData ? `
 - Roles (todos namespaces): ${securityData.rbac?.roles_count || 0}
 - Role Bindings (todos namespaces): ${securityData.rbac?.role_bindings_count || 0}
 - RBAC configurado: ${securityData.rbac?.has_rbac ? 'SIM' : 'NÃO'}
+
+🌐 INGRESS CONTROLLER:
+${formatIngressController(securityData.ingress_controller)}
 
 🔒 NETWORK POLICIES (Coletadas de TODOS os namespaces):
 ${formatNetworkPolicies(securityData.network_policies)}
@@ -170,10 +190,16 @@ ${metricsContext.map(m => `- ${m.type}: ${m.sample}`).join('\n')}
 
 Baseado nesses dados${securityData ? ' REAIS' : ''}, avalie:
 1. RBAC - está configurado adequadamente? (verifique cluster roles e bindings)
-2. NetworkPolicies - SE total_count > 0, EXISTEM políticas de rede! Avalie se a cobertura é adequada.
-3. Pod Security - containers têm security context e limits?
-4. Secrets - existem secrets configurados? (verifique tipos)
-5. Resource Limits - pods têm limits definidos?
+2. Ingress Controller - foi detectado? Qual tipo (nginx, traefik, etc)? O RBAC está configurado corretamente para ele?
+3. NetworkPolicies - SE total_count > 0, EXISTEM políticas de rede! Avalie se a cobertura é adequada.
+4. Pod Security - containers têm security context e limits?
+5. Secrets - existem secrets configurados? (verifique tipos)
+6. Resource Limits - pods têm limits definidos?
+
+CRITÉRIO IMPORTANTE PARA INGRESS CONTROLLER:
+- Se detectado, verifique se o RBAC está configurado corretamente
+- Se há permissões faltando, reporte como um problema de segurança
+- Considere que ingress controllers precisam de acesso a services, endpoints, secrets, configmaps e ingresses
 
 CRITÉRIO IMPORTANTE PARA NETWORK POLICIES:
 - Se total_count > 0, marque has_network_policies como TRUE
