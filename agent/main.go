@@ -491,23 +491,32 @@ func collectSecurityData(clientset *kubernetes.Clientset) map[string]interface{}
 	clusterRolesCount := 0
 	clusterRoleBindingsCount := 0
 	
+	log.Printf("🔍 Attempting to list ClusterRoles...")
 	clusterRoles, err := clientset.RbacV1().ClusterRoles().List(ctx, metav1.ListOptions{})
 	if err != nil {
-		log.Printf("⚠️  Error listing ClusterRoles: %v", err)
+		log.Printf("❌ ERROR listing ClusterRoles: %v", err)
 	} else {
 		clusterRolesCount = len(clusterRoles.Items)
-		roleNames := make([]string, 0, clusterRolesCount)
-		for _, cr := range clusterRoles.Items {
-			roleNames = append(roleNames, cr.Name)
+		// Only store first 50 names to avoid huge payloads
+		maxRolesToStore := 50
+		if clusterRolesCount < maxRolesToStore {
+			maxRolesToStore = clusterRolesCount
+		}
+		roleNames := make([]string, 0, maxRolesToStore)
+		for i, cr := range clusterRoles.Items {
+			if i < maxRolesToStore {
+				roleNames = append(roleNames, cr.Name)
+			}
 		}
 		rbacData["cluster_roles_count"] = clusterRolesCount
 		rbacData["cluster_roles"] = roleNames
-		log.Printf("✅ Found %d ClusterRoles", clusterRolesCount)
+		log.Printf("✅ Found %d ClusterRoles (storing %d names)", clusterRolesCount, len(roleNames))
 	}
 
+	log.Printf("🔍 Attempting to list ClusterRoleBindings...")
 	clusterRoleBindings, err := clientset.RbacV1().ClusterRoleBindings().List(ctx, metav1.ListOptions{})
 	if err != nil {
-		log.Printf("⚠️  Error listing ClusterRoleBindings: %v", err)
+		log.Printf("❌ ERROR listing ClusterRoleBindings: %v", err)
 	} else {
 		clusterRoleBindingsCount = len(clusterRoleBindings.Items)
 		rbacData["cluster_role_bindings_count"] = clusterRoleBindingsCount
@@ -545,17 +554,28 @@ func collectSecurityData(clientset *kubernetes.Clientset) map[string]interface{}
 			totalRoleBindings += len(roleBindings.Items)
 		}
 	}
-	log.Printf("📊 RBAC scan complete: %d ClusterRoles, %d ClusterRoleBindings, %d Roles, %d RoleBindings", 
-		clusterRolesCount, clusterRoleBindingsCount, totalRoles, totalRoleBindings)
+	
+	hasRbac := (clusterRolesCount > 0 || clusterRoleBindingsCount > 0 || totalRoles > 0 || totalRoleBindings > 0)
+	log.Printf("📊 RBAC scan complete: %d ClusterRoles, %d ClusterRoleBindings, %d Roles, %d RoleBindings, has_rbac=%v", 
+		clusterRolesCount, clusterRoleBindingsCount, totalRoles, totalRoleBindings, hasRbac)
+	
+	if len(rolesByNamespace) > 0 {
+		log.Printf("📋 Roles by namespace: %v", rolesByNamespace)
+	}
 	
 	// Update RBAC data with all counts
 	rbacData["roles_count"] = totalRoles
 	rbacData["role_bindings_count"] = totalRoleBindings
 	rbacData["roles_by_namespace"] = rolesByNamespace
-	rbacData["has_rbac"] = (clusterRolesCount > 0 || clusterRoleBindingsCount > 0 || totalRoles > 0 || totalRoleBindings > 0)
+	rbacData["has_rbac"] = hasRbac
 	
 	// Update the security data with the complete RBAC data
 	securityData["rbac"] = rbacData
+	
+	// Debug: Print final RBAC data
+	log.Printf("🔒 Final RBAC data: cluster_roles=%d, cluster_role_bindings=%d, roles=%d, role_bindings=%d, has_rbac=%v",
+		rbacData["cluster_roles_count"], rbacData["cluster_role_bindings_count"], 
+		rbacData["roles_count"], rbacData["role_bindings_count"], rbacData["has_rbac"])
 
 	// 2. Collect NetworkPolicies - iterate through ALL namespaces
 	networkPoliciesData := map[string]interface{}{
@@ -604,25 +624,34 @@ func collectSecurityData(clientset *kubernetes.Clientset) map[string]interface{}
 		"has_secrets": false,
 	}
 	
-	log.Printf("🔍 Collecting Secrets data...")
+	log.Printf("🔍 Collecting Secrets data from %d namespaces...", len(namespaces.Items))
 	totalSecrets := 0
 	secretTypes := make(map[string]int)
+	secretsByNamespace := make(map[string]int)
 	for _, ns := range namespaces.Items {
 		secrets, err := clientset.CoreV1().Secrets(ns.Name).List(ctx, metav1.ListOptions{})
 		if err != nil {
-			log.Printf("⚠️  Error listing Secrets in namespace %s: %v", ns.Name, err)
+			log.Printf("❌ ERROR listing Secrets in namespace %s: %v", ns.Name, err)
 			continue
 		}
-		totalSecrets += len(secrets.Items)
+		secretCount := len(secrets.Items)
+		totalSecrets += secretCount
+		if secretCount > 0 {
+			secretsByNamespace[ns.Name] = secretCount
+		}
 		for _, s := range secrets.Items {
 			secretTypes[string(s.Type)]++
 		}
 	}
-	log.Printf("📊 Secrets scan complete: found %d secrets", totalSecrets)
+	log.Printf("✅ Secrets scan complete: found %d secrets across namespaces", totalSecrets)
+	if len(secretsByNamespace) > 0 {
+		log.Printf("📋 Secrets by namespace: %v", secretsByNamespace)
+	}
 	
 	secretsData["total_count"] = totalSecrets
 	secretsData["types"] = secretTypes
 	secretsData["has_secrets"] = totalSecrets > 0
+	secretsData["by_namespace"] = secretsByNamespace
 	securityData["secrets"] = secretsData
 
 	// 4. Collect ResourceQuotas
