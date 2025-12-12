@@ -1,5 +1,5 @@
 import { Card } from "@/components/ui/card";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCluster } from "@/contexts/ClusterContext";
 import { PieChart, Pie, Cell, ResponsiveContainer, Sector } from "recharts";
@@ -14,11 +14,19 @@ interface NamespaceHealth {
   total: number;
 }
 
-const STATUS_COLORS = {
-  healthy: "hsl(var(--success))",
-  warning: "hsl(var(--warning))",
-  critical: "hsl(var(--destructive))",
-};
+// Modern color palette for namespaces
+const NAMESPACE_COLORS = [
+  "#1e40af", // blue-800
+  "#0891b2", // cyan-600
+  "#059669", // emerald-600
+  "#d97706", // amber-600
+  "#dc2626", // red-600
+  "#7c3aed", // violet-600
+  "#db2777", // pink-600
+  "#0d9488", // teal-600
+  "#65a30d", // lime-600
+  "#ea580c", // orange-600
+];
 
 // Pod status mapping
 const POD_STATUS_MAP: Record<string, string> = {
@@ -32,6 +40,8 @@ const POD_STATUS_MAP: Record<string, string> = {
   ImagePullBackOff: 'critical',
   ErrImagePull: 'critical',
 };
+
+const RADIAN = Math.PI / 180;
 
 export const PodHealthByNamespace = () => {
   const { t } = useTranslation();
@@ -49,7 +59,6 @@ export const PodHealthByNamespace = () => {
   const fetchPodData = async () => {
     setLoading(true);
     try {
-      // Fetch pod_details metrics from agent_metrics
       const { data: metrics, error } = await supabase
         .from('agent_metrics')
         .select('*')
@@ -67,14 +76,12 @@ export const PodHealthByNamespace = () => {
         return;
       }
 
-      // Process the most recent pod_details metric
       const latestMetric = metrics[0];
       const metricData = latestMetric.metric_data as any;
       const pods = metricData?.pods || [];
 
       console.log(`Processing ${pods.length} pods from metric_data`);
 
-      // Group by namespace and calculate health
       const namespaceMap = new Map<string, NamespaceHealth>();
       
       pods.forEach((pod: any) => {
@@ -86,7 +93,6 @@ export const PodHealthByNamespace = () => {
         const data = namespaceMap.get(ns)!;
         data.total++;
         
-        // Determine pod health based on status and phase
         const status = pod.status || pod.phase || 'Unknown';
         const healthStatus = POD_STATUS_MAP[status] || 'warning';
         
@@ -108,67 +114,135 @@ export const PodHealthByNamespace = () => {
     }
   };
 
-  const pieData = namespaceData.flatMap(ns => [
-    { 
-      name: `${ns.namespace}`,
-      fullName: `${ns.namespace} (${t('common.healthy')})`,
-      value: ns.healthy, 
-      status: 'healthy',
-      namespace: ns.namespace,
-      total: ns.total
-    },
-    { 
-      name: `${ns.namespace}`,
-      fullName: `${ns.namespace} (${t('common.warning')})`,
-      value: ns.warning, 
-      status: 'warning',
-      namespace: ns.namespace,
-      total: ns.total
-    },
-    { 
-      name: `${ns.namespace}`,
-      fullName: `${ns.namespace} (${t('common.critical')})`,
-      value: ns.critical, 
-      status: 'critical',
-      namespace: ns.namespace,
-      total: ns.total
-    },
-  ]).filter(item => item.value > 0);
+  // Create pie data grouped by namespace (total pods per namespace)
+  const pieData = namespaceData.map((ns, index) => ({
+    name: ns.namespace,
+    value: ns.total,
+    healthy: ns.healthy,
+    warning: ns.warning,
+    critical: ns.critical,
+    color: NAMESPACE_COLORS[index % NAMESPACE_COLORS.length],
+  }));
+
+  const totalPods = namespaceData.reduce((sum, ns) => sum + ns.total, 0);
+
+  // Custom label renderer for outside labels with lines
+  const renderCustomizedLabel = useCallback(({
+    cx,
+    cy,
+    midAngle,
+    innerRadius,
+    outerRadius,
+    percent,
+    index,
+    name,
+    value,
+  }: any) => {
+    const radius = outerRadius * 1.35;
+    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+    const textAnchor = x > cx ? 'start' : 'end';
+    const percentValue = (percent * 100).toFixed(0);
+    const color = pieData[index]?.color || NAMESPACE_COLORS[0];
+
+    // Line from pie to label
+    const lineOuterRadius = outerRadius * 1.1;
+    const lineX = cx + lineOuterRadius * Math.cos(-midAngle * RADIAN);
+    const lineY = cy + lineOuterRadius * Math.sin(-midAngle * RADIAN);
+
+    return (
+      <g>
+        {/* Connection line */}
+        <path
+          d={`M${lineX},${lineY}L${x > cx ? x - 10 : x + 10},${y}`}
+          stroke={color}
+          strokeWidth={1.5}
+          fill="none"
+          opacity={0.6}
+        />
+        {/* Namespace name */}
+        <text
+          x={x}
+          y={y - 12}
+          textAnchor={textAnchor}
+          className="fill-foreground text-xs font-semibold"
+        >
+          {name}
+        </text>
+        {/* Percentage */}
+        <text
+          x={x}
+          y={y + 4}
+          textAnchor={textAnchor}
+          style={{ fill: color }}
+          className="text-lg font-bold"
+        >
+          {percentValue}%
+        </text>
+        {/* Pod count */}
+        <text
+          x={x}
+          y={y + 20}
+          textAnchor={textAnchor}
+          className="fill-muted-foreground text-[10px]"
+        >
+          {value} pods
+        </text>
+      </g>
+    );
+  }, [pieData]);
+
+  // Label inside the slice
+  const renderInnerLabel = useCallback(({
+    cx,
+    cy,
+    midAngle,
+    innerRadius,
+    outerRadius,
+    percent,
+  }: any) => {
+    if (percent < 0.05) return null; // Don't show for very small slices
+    
+    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+    const percentValue = (percent * 100).toFixed(0);
+
+    return (
+      <text
+        x={x}
+        y={y}
+        textAnchor="middle"
+        dominantBaseline="central"
+        className="fill-white text-sm font-bold drop-shadow-md"
+      >
+        {percentValue}%
+      </text>
+    );
+  }, []);
 
   const renderActiveShape = (props: any) => {
-    const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill, payload, value } = props;
+    const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill, payload } = props;
     
     return (
       <g>
-        <text x={cx} y={cy - 20} textAnchor="middle" className="fill-foreground font-bold text-xl">
-          {payload.namespace}
-        </text>
-        <text x={cx} y={cy} textAnchor="middle" className="fill-foreground text-3xl font-bold">
-          {value}
-        </text>
-        <text x={cx} y={cy + 20} textAnchor="middle" className="fill-muted-foreground text-sm">
-          {t(`common.${payload.status}`)} pods
-        </text>
-        <text x={cx} y={cy + 38} textAnchor="middle" className="fill-muted-foreground text-xs">
-          {((value / payload.total) * 100).toFixed(1)}% do total
-        </text>
         <Sector
           cx={cx}
           cy={cy}
-          innerRadius={innerRadius}
-          outerRadius={outerRadius + 8}
+          innerRadius={innerRadius - 4}
+          outerRadius={outerRadius + 10}
           startAngle={startAngle}
           endAngle={endAngle}
           fill={fill}
-          className="drop-shadow-lg"
+          className="drop-shadow-xl"
         />
         <Sector
           cx={cx}
           cy={cy}
           startAngle={startAngle}
           endAngle={endAngle}
-          innerRadius={outerRadius + 10}
-          outerRadius={outerRadius + 14}
+          innerRadius={outerRadius + 14}
+          outerRadius={outerRadius + 18}
           fill={fill}
           opacity={0.3}
         />
@@ -188,7 +262,7 @@ export const PodHealthByNamespace = () => {
     return (
       <Card className="p-6 bg-gradient-to-br from-card to-card/50 border-border/50">
         <h3 className="text-lg font-semibold mb-4">{t('dashboard.podHealthByNamespace')}</h3>
-        <div className="h-[400px] flex items-center justify-center text-muted-foreground">
+        <div className="h-[450px] flex items-center justify-center text-muted-foreground">
           <div className="flex flex-col items-center gap-2">
             <Activity className="w-8 h-8 animate-pulse text-primary" />
             {t('common.loading')}
@@ -202,7 +276,7 @@ export const PodHealthByNamespace = () => {
     return (
       <Card className="p-6 bg-gradient-to-br from-card to-card/50 border-border/50">
         <h3 className="text-lg font-semibold mb-4">{t('dashboard.podHealthByNamespace')}</h3>
-        <div className="h-[400px] flex items-center justify-center">
+        <div className="h-[450px] flex items-center justify-center">
           <div className="text-center">
             <div className="w-16 h-16 rounded-full bg-muted/20 mx-auto mb-3 flex items-center justify-center">
               <Activity className="w-8 h-8 text-muted-foreground" />
@@ -214,7 +288,6 @@ export const PodHealthByNamespace = () => {
     );
   }
 
-  const totalPods = namespaceData.reduce((sum, ns) => sum + ns.total, 0);
   const healthyPods = namespaceData.reduce((sum, ns) => sum + ns.healthy, 0);
   const warningPods = namespaceData.reduce((sum, ns) => sum + ns.warning, 0);
   const criticalPods = namespaceData.reduce((sum, ns) => sum + ns.critical, 0);
@@ -240,8 +313,9 @@ export const PodHealthByNamespace = () => {
           </div>
         </div>
         
+        {/* Pie Chart with external labels */}
         <div className="relative">
-          <ResponsiveContainer width="100%" height={340}>
+          <ResponsiveContainer width="100%" height={380}>
             <PieChart>
               <Pie
                 activeIndex={activeIndex}
@@ -249,41 +323,47 @@ export const PodHealthByNamespace = () => {
                 data={pieData}
                 cx="50%"
                 cy="50%"
-                innerRadius={75}
-                outerRadius={105}
+                innerRadius={0}
+                outerRadius={100}
                 fill="#8884d8"
                 dataKey="value"
                 animationBegin={0}
                 animationDuration={800}
                 onMouseEnter={onPieEnter}
                 onMouseLeave={onPieLeave}
-                paddingAngle={2}
+                paddingAngle={1}
+                label={renderCustomizedLabel}
+                labelLine={false}
               >
                 {pieData.map((entry, index) => (
                   <Cell 
                     key={`cell-${index}`} 
-                    fill={STATUS_COLORS[entry.status as keyof typeof STATUS_COLORS]}
+                    fill={entry.color}
                     className="cursor-pointer transition-all duration-300"
-                    style={{
-                      filter: activeIndex === index ? 'brightness(1.2)' : 'brightness(1)',
-                    }}
+                    stroke="hsl(var(--background))"
+                    strokeWidth={2}
                   />
                 ))}
               </Pie>
+              {/* Inner percentage labels */}
+              <Pie
+                data={pieData}
+                cx="50%"
+                cy="50%"
+                innerRadius={0}
+                outerRadius={100}
+                fill="transparent"
+                dataKey="value"
+                label={renderInnerLabel}
+                labelLine={false}
+                isAnimationActive={false}
+              />
             </PieChart>
           </ResponsiveContainer>
-          
-          {/* Center info when not hovering */}
-          {activeIndex === undefined && (
-            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
-              <div className="text-4xl font-bold text-foreground">{totalPods}</div>
-              <div className="text-sm text-muted-foreground mt-1">Total Pods</div>
-            </div>
-          )}
         </div>
         
         {/* Stats Summary */}
-        <div className="grid grid-cols-3 gap-3 mt-6">
+        <div className="grid grid-cols-3 gap-3 mt-4">
           <div className="p-3 rounded-lg bg-gradient-to-br from-success/10 to-success/5 border border-success/20 hover:border-success/40 transition-all cursor-pointer group/stat">
             <div className="flex items-center gap-2 mb-2">
               <div className="w-3 h-3 rounded-full bg-success group-hover/stat:scale-110 transition-transform" />
@@ -291,7 +371,7 @@ export const PodHealthByNamespace = () => {
             </div>
             <p className="text-2xl font-bold text-foreground">{healthyPods}</p>
             <p className="text-xs text-muted-foreground mt-1">
-              {((healthyPods / totalPods) * 100).toFixed(1)}%
+              {totalPods > 0 ? ((healthyPods / totalPods) * 100).toFixed(1) : 0}%
             </p>
           </div>
           
@@ -302,7 +382,7 @@ export const PodHealthByNamespace = () => {
             </div>
             <p className="text-2xl font-bold text-foreground">{warningPods}</p>
             <p className="text-xs text-muted-foreground mt-1">
-              {((warningPods / totalPods) * 100).toFixed(1)}%
+              {totalPods > 0 ? ((warningPods / totalPods) * 100).toFixed(1) : 0}%
             </p>
           </div>
           
@@ -313,26 +393,28 @@ export const PodHealthByNamespace = () => {
             </div>
             <p className="text-2xl font-bold text-foreground">{criticalPods}</p>
             <p className="text-xs text-muted-foreground mt-1">
-              {((criticalPods / totalPods) * 100).toFixed(1)}%
+              {totalPods > 0 ? ((criticalPods / totalPods) * 100).toFixed(1) : 0}%
             </p>
           </div>
         </div>
 
-        {/* Namespace List */}
+        {/* Namespace Legend */}
         <div className="mt-4 pt-4 border-t border-border/50">
           <div className="text-xs font-medium text-muted-foreground mb-3">Namespaces</div>
-          <div className="space-y-2 max-h-32 overflow-y-auto">
-            {namespaceData.map((ns) => (
-              <div key={ns.namespace} className="flex items-center justify-between p-2 rounded-md hover:bg-accent/50 transition-colors">
-                <span className="text-sm font-medium text-foreground">{ns.namespace}</span>
-                <div className="flex items-center gap-2">
-                  <div className="flex gap-1">
-                    {ns.healthy > 0 && <div className="w-2 h-2 rounded-full bg-success" title={`${ns.healthy} healthy`} />}
-                    {ns.warning > 0 && <div className="w-2 h-2 rounded-full bg-warning" title={`${ns.warning} warning`} />}
-                    {ns.critical > 0 && <div className="w-2 h-2 rounded-full bg-destructive" title={`${ns.critical} critical`} />}
-                  </div>
-                  <span className="text-xs text-muted-foreground">{ns.total}</span>
-                </div>
+          <div className="flex flex-wrap gap-2">
+            {pieData.map((item, index) => (
+              <div 
+                key={item.name} 
+                className="flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-accent/50 transition-colors cursor-pointer"
+                onMouseEnter={() => setActiveIndex(index)}
+                onMouseLeave={() => setActiveIndex(undefined)}
+              >
+                <div 
+                  className="w-3 h-3 rounded-sm" 
+                  style={{ backgroundColor: item.color }}
+                />
+                <span className="text-xs font-medium text-foreground">{item.name}</span>
+                <span className="text-xs text-muted-foreground">({item.value})</span>
               </div>
             ))}
           </div>
