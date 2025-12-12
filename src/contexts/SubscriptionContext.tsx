@@ -18,6 +18,7 @@ interface Subscription {
   stripe_subscription_id?: string;
   stripe_price_id?: string;
   current_period_end?: string;
+  custom_cluster_limit?: number | null;
 }
 
 interface PlanLimits {
@@ -137,7 +138,10 @@ export const SubscriptionProvider = ({ children }: { children: React.ReactNode }
   const canCreateCluster = (currentCount: number): boolean => {
     if (isReadOnly) return false;
     if (isTrialActive) return true;
-    return currentCount < effectiveLimits.clusters;
+    
+    // Use custom limit if set, otherwise use plan default
+    const clusterLimit = subscription?.custom_cluster_limit ?? effectiveLimits.clusters;
+    return currentCount < clusterLimit;
   };
 
   const canUseAI = (): boolean => {

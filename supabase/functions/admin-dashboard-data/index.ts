@@ -136,6 +136,7 @@ Deno.serve(async (req) => {
           status: subscription.status,
           trial_ends_at: subscription.trial_ends_at,
           ai_analyses_used: subscription.ai_analyses_used,
+          custom_cluster_limit: subscription.custom_cluster_limit,
         } : null,
         clusters_count: userClusters.length,
         clusters: userClusters.map((c) => ({

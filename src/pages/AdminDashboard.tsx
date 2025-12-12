@@ -6,10 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Users, Server, Bot, AlertTriangle, Search, RefreshCw, Shield } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Users, Server, Bot, AlertTriangle, Search, RefreshCw, Shield, Settings2, Clock, Database } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, format, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 interface UserData {
@@ -23,6 +25,7 @@ interface UserData {
     status: string;
     trial_ends_at: string;
     ai_analyses_used: number;
+    custom_cluster_limit: number | null;
   } | null;
   clusters_count: number;
   clusters: Array<{ id: string; name: string; status: string; provider: string }>;
@@ -49,6 +52,17 @@ const AdminDashboard = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [planFilter, setPlanFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  
+  // Modal states
+  const [selectedUser, setSelectedUser] = useState<UserData | null>(null);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
+  
+  // Form states
+  const [trialDays, setTrialDays] = useState<string>("30");
+  const [customClusterLimit, setCustomClusterLimit] = useState<string>("");
+  const [selectedPlan, setSelectedPlan] = useState<string>("");
+  const [selectedStatus, setSelectedStatus] = useState<string>("");
 
   const fetchData = async () => {
     setLoading(true);
@@ -82,6 +96,52 @@ const AdminDashboard = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  const executeAdminAction = async (action: string, value: string | number | null) => {
+    if (!selectedUser) return;
+    
+    setActionLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error("Sessão expirada");
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke('admin-update-subscription', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        body: {
+          user_id: selectedUser.id,
+          action,
+          value,
+        },
+      });
+
+      if (error) {
+        console.error('Admin action error:', error);
+        toast.error("Erro ao executar ação");
+        return;
+      }
+
+      toast.success("Alteração realizada com sucesso!");
+      await fetchData();
+      setEditModalOpen(false);
+    } catch (error) {
+      console.error('Unexpected error:', error);
+      toast.error("Erro inesperado");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const openEditModal = (user: UserData) => {
+    setSelectedUser(user);
+    setTrialDays("30");
+    setCustomClusterLimit(user.subscription?.custom_cluster_limit?.toString() || "");
+    setSelectedPlan(user.subscription?.plan || "free");
+    setSelectedStatus(user.subscription?.status || "trialing");
+    setEditModalOpen(true);
+  };
 
   const filteredUsers = users.filter((user) => {
     const matchesSearch = 
@@ -117,6 +177,17 @@ const AdminDashboard = () => {
       return formatDistanceToNow(new Date(dateString), { addSuffix: true, locale: ptBR });
     } catch {
       return "Data inválida";
+    }
+  };
+
+  const getClusterLimitDisplay = (user: UserData) => {
+    if (user.subscription?.custom_cluster_limit !== null && user.subscription?.custom_cluster_limit !== undefined) {
+      return <span className="text-primary font-medium">{user.subscription.custom_cluster_limit}</span>;
+    }
+    switch (user.subscription?.plan) {
+      case "pro": return "5";
+      case "enterprise": return "∞";
+      default: return "1";
     }
   };
 
@@ -278,15 +349,16 @@ const AdminDashboard = () => {
                       <TableHead>Plano</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="text-center">Clusters</TableHead>
+                      <TableHead className="text-center">Limite</TableHead>
                       <TableHead className="text-center">IA Uso</TableHead>
-                      <TableHead>Último Acesso</TableHead>
-                      <TableHead>Cadastro</TableHead>
+                      <TableHead>Trial Expira</TableHead>
+                      <TableHead>Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredUsers.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                           Nenhum usuário encontrado
                         </TableCell>
                       </TableRow>
@@ -306,9 +378,24 @@ const AdminDashboard = () => {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-center">{user.clusters_count}</TableCell>
+                          <TableCell className="text-center">{getClusterLimitDisplay(user)}</TableCell>
                           <TableCell className="text-center">{user.subscription?.ai_analyses_used || 0}</TableCell>
-                          <TableCell>{formatDate(user.last_sign_in_at)}</TableCell>
-                          <TableCell>{formatDate(user.created_at)}</TableCell>
+                          <TableCell>
+                            {user.subscription?.trial_ends_at ? (
+                              <span className={new Date(user.subscription.trial_ends_at) < new Date() ? "text-destructive" : ""}>
+                                {format(new Date(user.subscription.trial_ends_at), "dd/MM/yyyy", { locale: ptBR })}
+                              </span>
+                            ) : "-"}
+                          </TableCell>
+                          <TableCell>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => openEditModal(user)}
+                            >
+                              <Settings2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
                         </TableRow>
                       ))
                     )}
@@ -319,6 +406,132 @@ const AdminDashboard = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Edit User Modal */}
+      <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Gerenciar Usuário</DialogTitle>
+            <DialogDescription>
+              {selectedUser?.email}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-6 py-4">
+            {/* Extend Trial */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-muted-foreground" />
+                <Label className="font-medium">Extender Trial</Label>
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  placeholder="Dias"
+                  value={trialDays}
+                  onChange={(e) => setTrialDays(e.target.value)}
+                  className="w-24"
+                />
+                <Button 
+                  variant="outline" 
+                  onClick={() => executeAdminAction("extend_trial", trialDays)}
+                  disabled={actionLoading}
+                >
+                  Extender {trialDays} dias
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Trial atual expira em: {selectedUser?.subscription?.trial_ends_at 
+                  ? format(new Date(selectedUser.subscription.trial_ends_at), "dd/MM/yyyy HH:mm", { locale: ptBR })
+                  : "N/A"
+                }
+              </p>
+            </div>
+
+            {/* Custom Cluster Limit */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Database className="h-4 w-4 text-muted-foreground" />
+                <Label className="font-medium">Limite de Clusters</Label>
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  placeholder="Limite (vazio = padrão do plano)"
+                  value={customClusterLimit}
+                  onChange={(e) => setCustomClusterLimit(e.target.value)}
+                  className="flex-1"
+                />
+                <Button 
+                  variant="outline" 
+                  onClick={() => executeAdminAction("set_cluster_limit", customClusterLimit || null)}
+                  disabled={actionLoading}
+                >
+                  Salvar
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Deixe vazio para usar o limite padrão do plano. Atual: {selectedUser?.subscription?.custom_cluster_limit ?? "padrão"}
+              </p>
+            </div>
+
+            {/* Change Plan */}
+            <div className="space-y-3">
+              <Label className="font-medium">Alterar Plano</Label>
+              <div className="flex gap-2">
+                <Select value={selectedPlan} onValueChange={setSelectedPlan}>
+                  <SelectTrigger className="flex-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="free">Free</SelectItem>
+                    <SelectItem value="pro">Pro</SelectItem>
+                    <SelectItem value="enterprise">Enterprise</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button 
+                  variant="outline" 
+                  onClick={() => executeAdminAction("change_plan", selectedPlan)}
+                  disabled={actionLoading || selectedPlan === selectedUser?.subscription?.plan}
+                >
+                  Alterar
+                </Button>
+              </div>
+            </div>
+
+            {/* Change Status */}
+            <div className="space-y-3">
+              <Label className="font-medium">Alterar Status</Label>
+              <div className="flex gap-2">
+                <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+                  <SelectTrigger className="flex-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="trialing">Trial</SelectItem>
+                    <SelectItem value="active">Ativo</SelectItem>
+                    <SelectItem value="readonly">Somente Leitura</SelectItem>
+                    <SelectItem value="expired">Expirado</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button 
+                  variant="outline" 
+                  onClick={() => executeAdminAction("change_status", selectedStatus)}
+                  disabled={actionLoading || selectedStatus === selectedUser?.subscription?.status}
+                >
+                  Alterar
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setEditModalOpen(false)}>
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 };
