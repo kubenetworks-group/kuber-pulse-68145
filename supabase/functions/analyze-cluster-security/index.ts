@@ -105,34 +105,80 @@ serve(async (req) => {
       .maybeSingle();
 
     const securityData = securityMetric?.metric_data as any || null;
-    console.log('Security data from agent:', securityData ? 'Available' : 'Not available');
+    console.log('Security data from agent:', securityData ? JSON.stringify(securityData) : 'Not available');
+
+    // Format network policies info with namespace details
+    const formatNetworkPolicies = (npData: any) => {
+      if (!npData) return 'Dados não disponíveis';
+      const totalCount = npData.total_count || 0;
+      const namespacesWithPolicies = npData.namespaces_with_policies || 0;
+      const hasNetPolicies = npData.has_network_policies || false;
+      
+      return `Total de NetworkPolicies: ${totalCount}
+Namespaces com políticas: ${namespacesWithPolicies}
+NetworkPolicies configuradas: ${hasNetPolicies ? 'SIM' : 'NÃO'}
+IMPORTANTE: ${totalCount > 0 
+  ? `Existem ${totalCount} NetworkPolicies distribuídas em ${namespacesWithPolicies} namespace(s). Isso significa que o cluster TEM políticas de rede configuradas.`
+  : 'Nenhuma NetworkPolicy encontrada em nenhum namespace.'}`;
+    };
 
     // Prepare prompt for AI security analysis with real data
     const prompt = `Você é um especialista em segurança Kubernetes. Analise os dados REAIS coletados do cluster.
+
+IMPORTANTE: Os dados foram coletados de TODOS os namespaces do cluster. Analise considerando o cluster inteiro.
 
 Cluster: ${cluster.name} (${cluster.provider}, ${cluster.environment})
 Nodes: ${cluster.nodes || 0} | Pods: ${cluster.pods || 0}
 
 ${securityData ? `
-DADOS REAIS DO CLUSTER:
-- RBAC: ${JSON.stringify(securityData.rbac || {})}
-- NetworkPolicies: ${JSON.stringify(securityData.network_policies || {})}
-- Secrets: ${JSON.stringify(securityData.secrets || {})}
-- ResourceQuotas: ${JSON.stringify(securityData.resource_quotas || {})}
-- LimitRanges: ${JSON.stringify(securityData.limit_ranges || {})}
-- Pod Security: ${JSON.stringify(securityData.pod_security || {})}
+=== DADOS REAIS DO CLUSTER (COLETADOS DE TODOS OS NAMESPACES) ===
+
+📋 RBAC (Role-Based Access Control):
+- Cluster Roles: ${securityData.rbac?.cluster_roles_count || 0}
+- Cluster Role Bindings: ${securityData.rbac?.cluster_role_bindings_count || 0}
+- Roles (todos namespaces): ${securityData.rbac?.roles_count || 0}
+- Role Bindings (todos namespaces): ${securityData.rbac?.role_bindings_count || 0}
+- RBAC configurado: ${securityData.rbac?.has_rbac ? 'SIM' : 'NÃO'}
+
+🔒 NETWORK POLICIES (Coletadas de TODOS os namespaces):
+${formatNetworkPolicies(securityData.network_policies)}
+
+🔐 SECRETS (Coletados de TODOS os namespaces):
+- Total de Secrets: ${securityData.secrets?.total_count || 0}
+- Tipos de Secrets: ${JSON.stringify(securityData.secrets?.types || {})}
+- Secrets existem: ${securityData.secrets?.has_secrets ? 'SIM' : 'NÃO'}
+
+📊 RESOURCE QUOTAS (Todos namespaces):
+- Total: ${securityData.resource_quotas?.total_count || 0}
+- Configurados: ${securityData.resource_quotas?.has_quotas ? 'SIM' : 'NÃO'}
+
+📏 LIMIT RANGES (Todos namespaces):
+- Total: ${securityData.limit_ranges?.total_count || 0}
+- Configurados: ${securityData.limit_ranges?.has_limit_ranges ? 'SIM' : 'NÃO'}
+
+🛡️ POD SECURITY (Análise de todos os pods):
+- Pods com Security Context: ${securityData.pod_security?.pods_with_security_context || 0}
+- Pods rodando como non-root: ${securityData.pod_security?.pods_running_as_non_root || 0}
+- Pods com Resource Limits: ${securityData.pod_security?.pods_with_resource_limits || 0}
+- Containers privilegiados: ${securityData.pod_security?.privileged_containers || 0}
+- Total de Pods analisados: ${securityData.pod_security?.total_pods || 0}
 ` : `
 ATENÇÃO: Dados de segurança não disponíveis. O agente pode não estar instalado ou atualizado.
 Métricas disponíveis:
 ${metricsContext.map(m => `- ${m.type}: ${m.sample}`).join('\n')}
 `}
 
-Baseado nesses dados${securityData ? ' reais' : ''}, avalie:
-1. RBAC - está configurado adequadamente?
-2. NetworkPolicies - existem políticas de rede?
+Baseado nesses dados${securityData ? ' REAIS' : ''}, avalie:
+1. RBAC - está configurado adequadamente? (verifique cluster roles e bindings)
+2. NetworkPolicies - SE total_count > 0, EXISTEM políticas de rede! Avalie se a cobertura é adequada.
 3. Pod Security - containers têm security context e limits?
-4. Secrets - existem secrets configurados?
+4. Secrets - existem secrets configurados? (verifique tipos)
 5. Resource Limits - pods têm limits definidos?
+
+CRITÉRIO IMPORTANTE PARA NETWORK POLICIES:
+- Se total_count > 0, marque has_network_policies como TRUE
+- Se namespaces_with_policies > 0, as políticas existem e estão sendo usadas
+- Avalie se a cobertura é parcial (poucos namespaces) ou completa
 
 Retorne a análise com scores baseados nos dados${securityData ? ' reais' : ''} acima.
 Considere que este é um cluster ${cluster.environment}.`;

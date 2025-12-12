@@ -472,73 +472,128 @@ func collectSecurityData(clientset *kubernetes.Clientset) map[string]interface{}
 	}
 
 	// 1. Collect RBAC data (ClusterRoles, ClusterRoleBindings, Roles, RoleBindings)
+	log.Printf("🔍 Collecting RBAC data...")
+	clusterRolesCount := 0
+	clusterRoleBindingsCount := 0
+	
 	clusterRoles, err := clientset.RbacV1().ClusterRoles().List(ctx, metav1.ListOptions{})
-	if err == nil {
+	if err != nil {
+		log.Printf("⚠️  Error listing ClusterRoles: %v", err)
+	} else {
+		clusterRolesCount = len(clusterRoles.Items)
 		var roleNames []string
 		for _, cr := range clusterRoles.Items {
 			roleNames = append(roleNames, cr.Name)
 		}
-		securityData["rbac"].(map[string]interface{})["cluster_roles_count"] = len(clusterRoles.Items)
+		securityData["rbac"].(map[string]interface{})["cluster_roles_count"] = clusterRolesCount
 		securityData["rbac"].(map[string]interface{})["cluster_roles"] = roleNames
+		log.Printf("✅ Found %d ClusterRoles", clusterRolesCount)
 	}
 
 	clusterRoleBindings, err := clientset.RbacV1().ClusterRoleBindings().List(ctx, metav1.ListOptions{})
-	if err == nil {
-		securityData["rbac"].(map[string]interface{})["cluster_role_bindings_count"] = len(clusterRoleBindings.Items)
+	if err != nil {
+		log.Printf("⚠️  Error listing ClusterRoleBindings: %v", err)
+	} else {
+		clusterRoleBindingsCount = len(clusterRoleBindings.Items)
+		securityData["rbac"].(map[string]interface{})["cluster_role_bindings_count"] = clusterRoleBindingsCount
+		log.Printf("✅ Found %d ClusterRoleBindings", clusterRoleBindingsCount)
 	}
 
 	// Count roles and rolebindings across namespaces
-	namespaces, _ := clientset.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
+	namespaces, err := clientset.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		log.Printf("⚠️  Error listing Namespaces: %v", err)
+		namespaces = &corev1.NamespaceList{}
+	} else {
+		log.Printf("✅ Found %d namespaces to scan", len(namespaces.Items))
+	}
+	
 	totalRoles := 0
 	totalRoleBindings := 0
 	for _, ns := range namespaces.Items {
-		roles, _ := clientset.RbacV1().Roles(ns.Name).List(ctx, metav1.ListOptions{})
-		totalRoles += len(roles.Items)
-		roleBindings, _ := clientset.RbacV1().RoleBindings(ns.Name).List(ctx, metav1.ListOptions{})
-		totalRoleBindings += len(roleBindings.Items)
-	}
-	securityData["rbac"].(map[string]interface{})["roles_count"] = totalRoles
-	securityData["rbac"].(map[string]interface{})["role_bindings_count"] = totalRoleBindings
-	securityData["rbac"].(map[string]interface{})["has_rbac"] = (len(clusterRoles.Items) > 0 || totalRoles > 0)
-
-	// 2. Collect NetworkPolicies
-	totalNetworkPolicies := 0
-	namespacesWithPolicies := 0
-	for _, ns := range namespaces.Items {
-		netPolicies, err := clientset.NetworkingV1().NetworkPolicies(ns.Name).List(ctx, metav1.ListOptions{})
-		if err == nil && len(netPolicies.Items) > 0 {
-			totalNetworkPolicies += len(netPolicies.Items)
-			namespacesWithPolicies++
+		roles, err := clientset.RbacV1().Roles(ns.Name).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			log.Printf("⚠️  Error listing Roles in namespace %s: %v", ns.Name, err)
+		} else {
+			totalRoles += len(roles.Items)
+		}
+		roleBindings, err := clientset.RbacV1().RoleBindings(ns.Name).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			log.Printf("⚠️  Error listing RoleBindings in namespace %s: %v", ns.Name, err)
+		} else {
+			totalRoleBindings += len(roleBindings.Items)
 		}
 	}
+	log.Printf("📊 RBAC scan complete: %d Roles, %d RoleBindings across all namespaces", totalRoles, totalRoleBindings)
+	
+	securityData["rbac"].(map[string]interface{})["roles_count"] = totalRoles
+	securityData["rbac"].(map[string]interface{})["role_bindings_count"] = totalRoleBindings
+	securityData["rbac"].(map[string]interface{})["has_rbac"] = (clusterRolesCount > 0 || totalRoles > 0)
+
+	// 2. Collect NetworkPolicies - iterate through ALL namespaces
+	totalNetworkPolicies := 0
+	namespacesWithPolicies := 0
+	networkPolicyDetails := []map[string]interface{}{}
+	
+	log.Printf("🔍 Scanning NetworkPolicies in %d namespaces...", len(namespaces.Items))
+	for _, ns := range namespaces.Items {
+		netPolicies, err := clientset.NetworkingV1().NetworkPolicies(ns.Name).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			log.Printf("⚠️  Error listing NetworkPolicies in namespace %s: %v", ns.Name, err)
+			continue
+		}
+		if len(netPolicies.Items) > 0 {
+			totalNetworkPolicies += len(netPolicies.Items)
+			namespacesWithPolicies++
+			// Store details for each namespace with policies
+			for _, np := range netPolicies.Items {
+				networkPolicyDetails = append(networkPolicyDetails, map[string]interface{}{
+					"name":      np.Name,
+					"namespace": np.Namespace,
+				})
+			}
+			log.Printf("✅ Found %d NetworkPolicies in namespace: %s", len(netPolicies.Items), ns.Name)
+		}
+	}
+	log.Printf("📊 NetworkPolicies scan complete: found %d policies in %d namespaces", totalNetworkPolicies, namespacesWithPolicies)
+	
 	securityData["network_policies"].(map[string]interface{})["total_count"] = totalNetworkPolicies
 	securityData["network_policies"].(map[string]interface{})["namespaces_with_policies"] = namespacesWithPolicies
 	securityData["network_policies"].(map[string]interface{})["has_network_policies"] = totalNetworkPolicies > 0
+	securityData["network_policies"].(map[string]interface{})["policies"] = networkPolicyDetails
 
 	// 3. Collect Secrets info (count only, not content)
+	log.Printf("🔍 Collecting Secrets data...")
 	totalSecrets := 0
 	secretTypes := make(map[string]int)
 	for _, ns := range namespaces.Items {
 		secrets, err := clientset.CoreV1().Secrets(ns.Name).List(ctx, metav1.ListOptions{})
-		if err == nil {
-			totalSecrets += len(secrets.Items)
-			for _, s := range secrets.Items {
-				secretTypes[string(s.Type)]++
-			}
+		if err != nil {
+			log.Printf("⚠️  Error listing Secrets in namespace %s: %v", ns.Name, err)
+			continue
+		}
+		totalSecrets += len(secrets.Items)
+		for _, s := range secrets.Items {
+			secretTypes[string(s.Type)]++
 		}
 	}
+	log.Printf("📊 Secrets scan complete: found %d secrets", totalSecrets)
 	securityData["secrets"].(map[string]interface{})["total_count"] = totalSecrets
 	securityData["secrets"].(map[string]interface{})["types"] = secretTypes
 	securityData["secrets"].(map[string]interface{})["has_secrets"] = totalSecrets > 0
 
 	// 4. Collect ResourceQuotas
+	log.Printf("🔍 Collecting ResourceQuotas...")
 	totalQuotas := 0
 	for _, ns := range namespaces.Items {
 		quotas, err := clientset.CoreV1().ResourceQuotas(ns.Name).List(ctx, metav1.ListOptions{})
-		if err == nil {
-			totalQuotas += len(quotas.Items)
+		if err != nil {
+			log.Printf("⚠️  Error listing ResourceQuotas in namespace %s: %v", ns.Name, err)
+			continue
 		}
+		totalQuotas += len(quotas.Items)
 	}
+	log.Printf("📊 ResourceQuotas scan complete: found %d quotas", totalQuotas)
 	securityData["resource_quotas"].(map[string]interface{})["total_count"] = totalQuotas
 	securityData["resource_quotas"].(map[string]interface{})["has_quotas"] = totalQuotas > 0
 
