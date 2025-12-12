@@ -325,6 +325,42 @@ export type Database = {
           },
         ]
       }
+      audit_logs: {
+        Row: {
+          action: string
+          created_at: string
+          details: Json | null
+          id: string
+          ip_address: string | null
+          resource_id: string | null
+          resource_type: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          ip_address?: string | null
+          resource_id?: string | null
+          resource_type: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          ip_address?: string | null
+          resource_id?: string | null
+          resource_type?: string
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       cluster_events: {
         Row: {
           cluster_id: string
@@ -909,6 +945,45 @@ export type Database = {
           },
         ]
       }
+      security_alerts: {
+        Row: {
+          acknowledged: boolean | null
+          acknowledged_at: string | null
+          alert_type: string
+          created_at: string
+          description: string | null
+          details: Json | null
+          id: string
+          severity: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          acknowledged?: boolean | null
+          acknowledged_at?: string | null
+          alert_type: string
+          created_at?: string
+          description?: string | null
+          details?: Json | null
+          id?: string
+          severity?: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          acknowledged?: boolean | null
+          acknowledged_at?: string | null
+          alert_type?: string
+          created_at?: string
+          description?: string | null
+          details?: Json | null
+          id?: string
+          severity?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       subscriptions: {
         Row: {
           ai_analyses_reset_at: string
@@ -1028,6 +1103,17 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_security_alert: {
+        Args: {
+          p_alert_type: string
+          p_description?: string
+          p_details?: Json
+          p_severity: string
+          p_title: string
+          p_user_id: string
+        }
+        Returns: string
+      }
       delete_cluster_data: { Args: { p_cluster_id: string }; Returns: number }
       get_cron_jobs_status: {
         Args: never
@@ -1046,6 +1132,18 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      log_audit_event: {
+        Args: {
+          p_action: string
+          p_details?: Json
+          p_ip_address?: string
+          p_resource_id?: string
+          p_resource_type: string
+          p_user_agent?: string
+          p_user_id: string
+        }
+        Returns: string
       }
       verify_api_key_hash: {
         Args: { p_api_key: string; p_stored_hash: string }

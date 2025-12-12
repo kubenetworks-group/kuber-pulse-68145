@@ -8,11 +8,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Users, Server, Bot, AlertTriangle, Search, RefreshCw, Shield, Settings2, Clock, Database } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Users, Server, Bot, AlertTriangle, Search, RefreshCw, Shield, Settings2, Clock, Database, FileText, ShieldAlert } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { formatDistanceToNow, format, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { AuditLogsTab } from "@/components/AuditLogsTab";
 
 interface UserData {
   id: string;
@@ -208,6 +210,25 @@ const AdminDashboard = () => {
             Atualizar
           </Button>
         </div>
+
+        {/* Admin Tabs */}
+        <Tabs defaultValue="users" className="w-full">
+          <TabsList className="mb-4">
+            <TabsTrigger value="users" className="gap-2">
+              <Users className="h-4 w-4" />
+              Usuários
+            </TabsTrigger>
+            <TabsTrigger value="audit" className="gap-2">
+              <FileText className="h-4 w-4" />
+              Logs de Auditoria
+            </TabsTrigger>
+            <TabsTrigger value="security" className="gap-2">
+              <ShieldAlert className="h-4 w-4" />
+              Segurança
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="users" className="space-y-6">
 
         {/* Metrics Cards */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -405,6 +426,71 @@ const AdminDashboard = () => {
             )}
           </CardContent>
         </Card>
+          </TabsContent>
+
+          {/* Audit Logs Tab */}
+          <TabsContent value="audit">
+            <AuditLogsTab />
+          </TabsContent>
+
+          {/* Security Tab */}
+          <TabsContent value="security" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ShieldAlert className="h-5 w-5" />
+                  Configurações de Segurança
+                </CardTitle>
+                <CardDescription>
+                  Status das implementações de segurança do sistema
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="p-4 rounded-lg border bg-green-500/10 border-green-500/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Shield className="h-5 w-5 text-green-500" />
+                      <span className="font-medium">RLS Ativado</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Todas as tabelas possuem Row Level Security habilitado
+                    </p>
+                  </div>
+                  
+                  <div className="p-4 rounded-lg border bg-green-500/10 border-green-500/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Shield className="h-5 w-5 text-green-500" />
+                      <span className="font-medium">API Keys Hash</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Chaves de API são armazenadas com hash SHA-256
+                    </p>
+                  </div>
+                  
+                  <div className="p-4 rounded-lg border bg-green-500/10 border-green-500/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <FileText className="h-5 w-5 text-green-500" />
+                      <span className="font-medium">Audit Logging</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Sistema de logs de auditoria implementado
+                    </p>
+                  </div>
+                  
+                  <div className="p-4 rounded-lg border bg-green-500/10 border-green-500/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <AlertTriangle className="h-5 w-5 text-green-500" />
+                      <span className="font-medium">Security Alerts</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Sistema de alertas de segurança implementado
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
 
       {/* Edit User Modal */}

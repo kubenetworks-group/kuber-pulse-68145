@@ -3,6 +3,7 @@ import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { logAuditEvent } from "@/hooks/useAuditLog";
 
 interface AuthContextType {
   user: User | null;
@@ -41,7 +42,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const signUp = async (email: string, password: string, fullName: string) => {
     const redirectUrl = `${window.location.origin}/`;
     
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -57,13 +58,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       return { error };
     }
 
+    // Log signup event
+    if (data.user) {
+      await logAuditEvent(data.user.id, 'signup', 'user', data.user.id, { email });
+    }
+
     toast.success("Account created successfully!");
     navigate("/");
     return { error: null };
   };
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -73,12 +79,22 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       return { error };
     }
 
+    // Log login event
+    if (data.user) {
+      await logAuditEvent(data.user.id, 'login', 'user', data.user.id, { email });
+    }
+
     toast.success("Signed in successfully!");
     navigate("/");
     return { error: null };
   };
 
   const signOut = async () => {
+    // Log logout event before signing out
+    if (user) {
+      await logAuditEvent(user.id, 'logout', 'user', user.id, { email: user.email });
+    }
+
     await supabase.auth.signOut();
     toast.success("Signed out successfully!");
     navigate("/auth");
