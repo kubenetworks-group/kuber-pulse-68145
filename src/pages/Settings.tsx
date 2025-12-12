@@ -144,7 +144,7 @@ const Settings = () => {
       name: "Free",
       price: "R$ 0",
       period: "/mês",
-      features: ["1 cluster", "5 análises de IA/mês", "7 dias de histórico", "Suporte por email"],
+      features: ["1 cluster", "10 análises de IA/mês", "7 dias de histórico", "Suporte por email"],
       current: currentPlan === 'free',
       plan: 'free' as const,
     },
@@ -152,18 +152,10 @@ const Settings = () => {
       name: "Pro",
       price: "R$ 99",
       period: "/mês",
-      features: ["10 clusters", "100 análises de IA/mês", "30 dias de histórico", "Auto-healing básico", "Suporte prioritário"],
+      features: ["10 clusters", "Análises de IA ilimitadas", "90 dias de histórico", "Auto-healing", "Suporte prioritário"],
       current: currentPlan === 'pro',
       plan: 'pro' as const,
       popular: true,
-    },
-    {
-      name: "Enterprise",
-      price: "R$ 299",
-      period: "/mês",
-      features: ["Clusters ilimitados", "Análises de IA ilimitadas", "90 dias de histórico", "Auto-healing avançado", "Suporte 24/7", "SLA garantido"],
-      current: currentPlan === 'enterprise',
-      plan: 'enterprise' as const,
     },
   ];
 

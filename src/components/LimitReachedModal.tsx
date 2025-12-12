@@ -41,8 +41,7 @@ export const LimitReachedModal = ({ open, onOpenChange, limitType }: LimitReache
   const Icon = info.icon;
 
   const getUpgradeOptions = (): PlanType[] => {
-    if (currentPlan === 'free') return ['pro', 'enterprise'];
-    if (currentPlan === 'pro') return ['enterprise'];
+    if (currentPlan === 'free') return ['pro'];
     return [];
   };
 

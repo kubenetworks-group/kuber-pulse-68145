@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './AuthContext';
 
-type PlanType = 'free' | 'pro' | 'enterprise';
+type PlanType = 'free' | 'pro';
 type SubscriptionStatus = 'trialing' | 'active' | 'expired' | 'readonly';
 
 interface Subscription {
@@ -36,13 +36,7 @@ const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
     autoHealing: false,
   },
   pro: {
-    clusters: 5,
-    aiAnalysesPerMonth: 100,
-    historyRetentionDays: 30,
-    autoHealing: true,
-  },
-  enterprise: {
-    clusters: Infinity,
+    clusters: 10,
     aiAnalysesPerMonth: Infinity,
     historyRetentionDays: 90,
     autoHealing: true,
@@ -132,8 +126,8 @@ export const SubscriptionProvider = ({ children }: { children: React.ReactNode }
   const currentPlan = subscription?.plan || 'free';
   const planLimits = PLAN_LIMITS[currentPlan];
 
-  // During trial, user has full access (enterprise-like)
-  const effectiveLimits = isTrialActive ? PLAN_LIMITS.enterprise : planLimits;
+  // During trial, user has full access (pro-like)
+  const effectiveLimits = isTrialActive ? PLAN_LIMITS.pro : planLimits;
 
   const canCreateCluster = (currentCount: number): boolean => {
     if (isReadOnly) return false;
