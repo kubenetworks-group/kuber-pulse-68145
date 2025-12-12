@@ -25,11 +25,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { toast } from "sonner";
+import { useAuditLog } from "@/hooks/useAuditLog";
 
 const Clusters = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { canCreateCluster, isReadOnly } = useSubscription();
+  const { logAuditEvent } = useAuditLog();
   const [clusters, setClusters] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
@@ -376,6 +378,14 @@ const Clusters = () => {
       await createClusterLog(data.id, "info", "Cluster connection initiated", {
         cluster_type: formData.cluster_type,
         provider: formData.provider,
+      });
+
+      // Log audit event
+      await logAuditEvent({
+        action: 'cluster_created',
+        resourceType: 'cluster',
+        resourceId: data.id,
+        details: { name: formData.name, provider: formData.provider }
       });
 
       setOpen(false);
