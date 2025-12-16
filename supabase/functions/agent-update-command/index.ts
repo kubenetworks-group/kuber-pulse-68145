@@ -25,14 +25,23 @@ function checkRateLimit(key: string, maxRequests: number, windowMs: number): boo
   const requests = (rateLimiter.get(key) || []).filter(
     timestamp => now - timestamp < windowMs
   );
-  
+
   if (requests.length >= maxRequests) {
     return false;
   }
-  
+
   requests.push(now);
   rateLimiter.set(key, requests);
   return true;
+}
+
+// Hash function using Web Crypto API
+async function hashApiKey(apiKey: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(apiKey);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 serve(async (req) => {
@@ -42,7 +51,7 @@ serve(async (req) => {
 
   try {
     const agentKey = req.headers.get('x-agent-key');
-    
+
     if (!agentKey) {
       console.error('Authentication failed');
       return new Response(JSON.stringify({ error: 'Missing API key' }), {
@@ -51,13 +60,16 @@ serve(async (req) => {
       });
     }
 
+    // Hash the API key for rate limiting
+    const keyHash = await hashApiKey(agentKey);
+
     // Rate limiting: 10 requests per minute
-    if (!checkRateLimit(agentKey, 10, 60000)) {
+    if (!checkRateLimit(keyHash, 10, 60000)) {
       console.warn('Rate limit exceeded');
       return new Response(JSON.stringify({ error: 'Rate limit exceeded' }), {
         status: 429,
-        headers: { 
-          ...corsHeaders, 
+        headers: {
+          ...corsHeaders,
           'Content-Type': 'application/json',
           'X-RateLimit-Limit': '10',
           'X-RateLimit-Window': '60s',
@@ -70,14 +82,35 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Validate API key
-    const { data: apiKeyData, error: keyError } = await supabaseClient
+    // Hash the provided key for authentication
+    const providedKeyHash = await hashApiKey(agentKey);
+
+    // Try hash-based authentication first, then fallback to plaintext
+    let apiKeyData;
+
+    // First, try hash-based authentication
+    const { data: hashData, error: hashError } = await supabaseClient
       .from('agent_api_keys')
       .select('cluster_id, is_active')
-      .eq('api_key', agentKey)
+      .eq('api_key_hash', providedKeyHash)
       .single();
 
-    if (keyError || !apiKeyData || !apiKeyData.is_active) {
+    if (hashData && !hashError) {
+      apiKeyData = hashData;
+    } else {
+      // Fallback: try plaintext (for keys created before hash implementation)
+      const { data: plainData, error: plainError } = await supabaseClient
+        .from('agent_api_keys')
+        .select('cluster_id, is_active')
+        .eq('api_key', agentKey)
+        .single();
+
+      if (plainData && !plainError) {
+        apiKeyData = plainData;
+      }
+    }
+
+    if (!apiKeyData || !apiKeyData.is_active) {
       console.error('Authentication failed');
       return new Response(JSON.stringify({ error: 'Invalid API key' }), {
         status: 401,

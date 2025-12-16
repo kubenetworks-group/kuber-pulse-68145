@@ -86,14 +86,14 @@ export function AutoHealConfig() {
       <CardContent className="space-y-6">
         {/* Main toggle section */}
         <div className={`space-y-4 ${!isEnabled ? "opacity-50 pointer-events-none" : ""}`}>
-          {/* Security Auto-Fix */}
+          {/* Resources Auto-Fix */}
           <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
             <div className="flex items-center gap-3">
               <Shield className="h-5 w-5 text-blue-500" />
               <div>
-                <Label className="font-medium">Correções de Segurança</Label>
+                <Label className="font-medium">Ajuste de Recursos</Label>
                 <p className="text-sm text-muted-foreground">
-                  Aplicar correções de RBAC, Network Policies e Pod Security automaticamente
+                  Ajustar limites de CPU e memoria de pods/containers automaticamente
                 </p>
               </div>
             </div>
@@ -109,9 +109,9 @@ export function AutoHealConfig() {
             <div className="flex items-center gap-3">
               <Activity className="h-5 w-5 text-orange-500" />
               <div>
-                <Label className="font-medium">Correções de Anomalias</Label>
+                <Label className="font-medium">Correcoes de Pods e Jobs</Label>
                 <p className="text-sm text-muted-foreground">
-                  Reiniciar pods, escalar deployments e corrigir problemas de recursos
+                  Reiniciar pods com falhas, containers com restarts e jobs com erro
                 </p>
               </div>
             </div>

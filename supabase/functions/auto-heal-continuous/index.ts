@@ -197,19 +197,125 @@ serve(async (req) => {
       }
     }
 
-    // 2. Check and fix security threats
+    // 2. Check and fix resource-related issues (CPU/Memory limits)
+    // NOTE: We only auto-apply resource adjustments, NOT RBAC or network policies
     if (settings?.auto_apply_security || force) {
+      // Get latest metrics to check for pods with high restart counts
+      const { data: latestMetrics } = await supabase
+        .from('agent_metrics')
+        .select('metric_data')
+        .eq('cluster_id', cluster_id)
+        .eq('metric_type', 'pod_details')
+        .order('collected_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      const podDetails = latestMetrics?.metric_data?.pods || [];
+
+      // Find pods that are Running but have high restart counts (> 3)
+      const podsWithHighRestarts = podDetails.filter((pod: any) =>
+        (pod.phase === 'Running' || pod.status === 'Running') &&
+        pod.ready === true &&
+        (pod.restarts > 3 || pod.total_restarts > 3)
+      );
+
+      for (const pod of podsWithHighRestarts) {
+        const restartCount = pod.restarts || pod.total_restarts || 0;
+
+        // Log the action
+        const { data: actionLog } = await supabase
+          .from('auto_heal_actions_log')
+          .insert({
+            cluster_id,
+            user_id: userId,
+            action_type: 'restart_pod_clear_counter',
+            trigger_reason: `Pod ${pod.name} has ${restartCount} restarts while running OK`,
+            trigger_entity_id: null,
+            trigger_entity_type: 'pod',
+            action_details: {
+              pod_name: pod.name,
+              namespace: pod.namespace,
+              restart_count: restartCount,
+              reason: 'Clear restart counter by recreating pod',
+            },
+            status: 'executing',
+            started_at: new Date().toISOString(),
+          })
+          .select()
+          .single();
+
+        try {
+          // Create restart command for the agent
+          await supabase
+            .from('agent_commands')
+            .insert({
+              cluster_id,
+              user_id: userId,
+              command_type: 'restart_pod',
+              command_params: {
+                pod_name: pod.name,
+                namespace: pod.namespace,
+                reason: 'auto_heal_clear_restarts',
+              },
+              status: 'pending',
+            });
+
+          // Update action log
+          await supabase
+            .from('auto_heal_actions_log')
+            .update({
+              status: 'completed',
+              completed_at: new Date().toISOString(),
+              result: {
+                command_sent: 'restart_pod',
+                params: { pod_name: pod.name, namespace: pod.namespace },
+                message: 'Pod will be recreated to clear restart counter'
+              },
+            })
+            .eq('id', actionLog?.id);
+
+          actionsExecuted.push({
+            type: 'restart_pod_clear_counter',
+            target: `${pod.namespace}/${pod.name}`,
+            action: 'restart_pod',
+            restart_count: restartCount,
+            success: true,
+          });
+
+          console.log(`Scheduled restart for pod ${pod.namespace}/${pod.name} (${restartCount} restarts)`);
+        } catch (error: any) {
+          // Update action log with error
+          await supabase
+            .from('auto_heal_actions_log')
+            .update({
+              status: 'failed',
+              completed_at: new Date().toISOString(),
+              error_message: error.message,
+            })
+            .eq('id', actionLog?.id);
+
+          actionsExecuted.push({
+            type: 'restart_pod_clear_counter',
+            target: `${pod.namespace}/${pod.name}`,
+            success: false,
+            error: error.message,
+          });
+        }
+      }
+
+      // Handle resource limit issues only (NOT RBAC)
       const { data: threats } = await supabase
         .from('security_threats')
         .select('*')
         .eq('cluster_id', cluster_id)
         .eq('status', 'active')
+        .in('threat_type', ['missing_resource_limits', 'resource_exhaustion', 'high_resource_usage'])
         .order('created_at', { ascending: false })
         .limit(10);
 
       for (const threat of threats || []) {
         const threatSeverityIndex = severityOrder.indexOf(threat.severity);
-        
+
         // Skip if below threshold
         if (threatSeverityIndex < thresholdIndex && !force) continue;
 
@@ -219,14 +325,14 @@ serve(async (req) => {
           .insert({
             cluster_id,
             user_id: userId,
-            action_type: 'security_fix',
+            action_type: 'resource_adjustment',
             trigger_reason: threat.title,
             trigger_entity_id: threat.id,
             trigger_entity_type: 'security_threat',
             action_details: {
               threat_type: threat.threat_type,
               severity: threat.severity,
-              remediation_steps: threat.remediation_steps,
+              affected_resources: threat.affected_resources,
             },
             status: 'executing',
             started_at: new Date().toISOString(),
@@ -235,42 +341,32 @@ serve(async (req) => {
           .single();
 
         try {
-          // Determine security fix based on threat type
+          // Only handle resource-related fixes
           let fixCommand = '';
           let fixParams: any = {};
 
-          switch (threat.threat_type) {
-            case 'missing_network_policy':
-              fixCommand = 'create_network_policy';
-              fixParams = {
-                namespace: threat.affected_resources?.[0]?.namespace || 'default',
-                policy_type: 'deny-all-ingress',
-              };
-              break;
-            case 'missing_resource_limits':
-              fixCommand = 'apply_resource_limits';
-              fixParams = {
-                namespace: threat.affected_resources?.[0]?.namespace || 'default',
-                cpu_limit: '500m',
-                memory_limit: '512Mi',
-              };
-              break;
-            case 'overly_permissive_rbac':
-              fixCommand = 'restrict_rbac';
-              fixParams = {
-                namespace: threat.affected_resources?.[0]?.namespace || 'default',
-              };
-              break;
-            case 'missing_pod_security':
-              fixCommand = 'apply_pod_security';
-              fixParams = {
-                namespace: threat.affected_resources?.[0]?.namespace || 'default',
-                level: 'restricted',
-              };
-              break;
-            default:
-              fixCommand = 'security_audit';
-              fixParams = { threat_id: threat.id };
+          if (threat.threat_type === 'missing_resource_limits') {
+            fixCommand = 'update_deployment_resources';
+            fixParams = {
+              namespace: threat.affected_resources?.[0]?.namespace || 'default',
+              deployment_name: threat.affected_resources?.[0]?.name || '',
+              container_name: threat.affected_resources?.[0]?.container || '',
+              cpu_limit: '500m',
+              cpu_request: '100m',
+              memory_limit: '512Mi',
+              memory_request: '128Mi',
+            };
+          } else {
+            // Skip non-resource threats
+            await supabase
+              .from('auto_heal_actions_log')
+              .update({
+                status: 'skipped',
+                completed_at: new Date().toISOString(),
+                result: { message: 'Non-resource threat - requires manual review' },
+              })
+              .eq('id', actionLog?.id);
+            continue;
           }
 
           // Create command for the agent
@@ -306,7 +402,7 @@ serve(async (req) => {
             .eq('id', actionLog?.id);
 
           actionsExecuted.push({
-            type: 'security_fix',
+            type: 'resource_adjustment',
             target: threat.id,
             action: fixCommand,
             success: true,
@@ -323,7 +419,7 @@ serve(async (req) => {
             .eq('id', actionLog?.id);
 
           actionsExecuted.push({
-            type: 'security_fix',
+            type: 'resource_adjustment',
             target: threat.id,
             success: false,
             error: error.message,

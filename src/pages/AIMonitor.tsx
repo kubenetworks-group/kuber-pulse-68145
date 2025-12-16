@@ -7,11 +7,10 @@ import { AIIncidentCard } from "@/components/AIIncidentCard";
 import { MetricCard } from "@/components/MetricCard";
 import { CronJobsStatus } from "@/components/CronJobsStatus";
 import { ScanHistoryTab } from "@/components/ScanHistoryTab";
-import { ClusterSecurityAnalysis } from "@/components/ClusterSecurityAnalysis";
 import { SecurityThreatCard } from "@/components/SecurityThreatCard";
 import { ContainerTerminalAlert } from "@/components/ContainerTerminalAlert";
 import { useSecurityThreats } from "@/hooks/useSecurityThreats";
-import { Bot, Activity, CheckCircle, Clock, Sparkles, TrendingDown, Shield, Zap, Target, AlertCircle, History, ShieldAlert, Terminal, Settings } from "lucide-react";
+import { Bot, Activity, CheckCircle, Sparkles, Shield, Zap, AlertCircle, History, ShieldAlert, Settings } from "lucide-react";
 import { AutoHealConfig } from "@/components/AutoHealConfig";
 import { AutoHealActionsLog } from "@/components/AutoHealActionsLog";
 import { toast } from "@/hooks/use-toast";
@@ -60,11 +59,7 @@ export default function AIMonitor() {
   const [loading, setLoading] = useState(true);
   const [severityFilter, setSeverityFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [scanning, setScanning] = useState(false);
-  const [anomalies, setAnomalies] = useState<any[]>([]);
   const [recentAnomalies, setRecentAnomalies] = useState<any[]>([]);
-  const [scanSummary, setScanSummary] = useState<string>("");
-  const [autoHealEnabled, setAutoHealEnabled] = useState(false);
   const [scanHistory, setScanHistory] = useState<any[]>([]);
   const [agentCommands, setAgentCommands] = useState<any[]>([]);
 
@@ -308,130 +303,6 @@ export default function AIMonitor() {
   };
 
 
-  const handleScanCluster = async () => {
-    if (!selectedClusterId) {
-      toast({
-        title: "Selecione um cluster",
-        description: "Por favor, selecione um cluster específico para varredura",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setScanning(true);
-    setAnomalies([]);
-    setScanSummary("");
-    
-    try {
-      const { data, error } = await supabase.functions.invoke('agent-analyze-anomalies', {
-        body: { cluster_id: selectedClusterId }
-      });
-
-      if (error) throw error;
-
-      console.log('Scan results:', data);
-      
-      const anomaliesCount = data.anomalies?.length || 0;
-      const summary = data.summary || (anomaliesCount > 0 
-        ? `Encontradas ${anomaliesCount} anomalias no cluster`
-        : "Nenhuma anomalia crítica detectada. Cluster está saudável.");
-      
-      // Save scan to history
-      await supabase
-        .from('scan_history')
-        .insert({
-          cluster_id: selectedClusterId,
-          user_id: user?.id,
-          anomalies_found: anomaliesCount,
-          summary: summary,
-          anomalies_data: data.anomalies || []
-        });
-      
-      if (anomaliesCount > 0) {
-        setAnomalies(data.anomalies);
-        setScanSummary(summary);
-        
-        toast({
-          title: "⚠️ Anomalias Detectadas",
-          description: `Foram encontradas ${anomaliesCount} anomalias que precisam de atenção`,
-          variant: "destructive"
-        });
-        
-        fetchData(); // Refresh incidents
-        fetchRecentAnomalies(); // Refresh detected anomalies
-      } else {
-        setScanSummary(summary);
-        toast({
-          title: "✅ Cluster Saudável",
-          description: summary,
-        });
-      }
-      
-      // Refresh scan history
-      fetchScanHistory();
-    } catch (error: any) {
-      console.error('Error scanning cluster:', error);
-      toast({
-        title: "Erro na varredura",
-        description: error.message || "Falha ao analisar o cluster",
-        variant: "destructive"
-      });
-    } finally {
-      setScanning(false);
-    }
-  };
-
-  const handleApplyAutoHeal = async (anomaly: any) => {
-    if (!anomaly.auto_heal || !anomaly.auto_heal_params) {
-      toast({
-        title: "Auto-cura não disponível",
-        description: "Esta anomalia não possui ação de auto-cura definida",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    try {
-      const { data, error } = await supabase.functions.invoke('agent-auto-heal', {
-        body: {
-          cluster_id: selectedClusterId,
-          ...(anomaly.id && { anomaly_id: anomaly.id }),
-          auto_heal_action: anomaly.auto_heal,
-          auto_heal_params: anomaly.auto_heal_params
-        }
-      });
-
-      if (error) throw error;
-
-      toast({
-        title: "🤖 Auto-cura Iniciada",
-        description: `Comando "${anomaly.auto_heal}" enviado para o agente. O cluster será corrigido em breve.`,
-      });
-
-      // Refresh after a delay to see the changes
-      setTimeout(() => {
-        handleScanCluster();
-      }, 3000);
-    } catch (error: any) {
-      console.error('Error applying auto-heal:', error);
-      toast({
-        title: "Erro na Auto-cura",
-        description: error.message || "Falha ao aplicar auto-cura",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const handleEnableAutoHeal = async () => {
-    setAutoHealEnabled(!autoHealEnabled);
-    toast({
-      title: autoHealEnabled ? "Auto-cura desativada" : "Auto-cura ativada",
-      description: autoHealEnabled 
-        ? "A IA não executará ações automaticamente" 
-        : "A IA agora executará ações de correção automaticamente"
-    });
-  };
-
   const handleExecuteAction = async (incidentId: string) => {
     toast({
       title: "Executando ação...",
@@ -527,78 +398,8 @@ export default function AIMonitor() {
           </p>
         </div>
 
-        {/* Security Analysis - First Step */}
-        <ClusterSecurityAnalysis />
-
-        {/* Cluster Analysis Section */}
-        <div className="grid gap-6 lg:grid-cols-2">
-          <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Target className="w-5 h-5" />
-                  <CardTitle>Análise de Cluster</CardTitle>
-                </div>
-                <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/20 animate-pulse">
-                  <Activity className="w-3 h-3 mr-1" />
-                  Monitoramento Ativo
-                </Badge>
-              </div>
-              <CardDescription>
-                O sistema está monitorando automaticamente todos os clusters em tempo real
-              </CardDescription>
-            </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex gap-3">
-              <button
-                onClick={handleScanCluster}
-                disabled={scanning || !selectedClusterId}
-                className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
-              >
-                {scanning ? (
-                  <>
-                    <Activity className="w-4 h-4 animate-spin" />
-                    Analisando...
-                  </>
-                ) : (
-                  <>
-                    <Shield className="w-4 h-4" />
-                    Varredura Manual
-                  </>
-                )}
-              </button>
-              
-              <button
-                onClick={handleEnableAutoHeal}
-                className={`flex-1 px-4 py-2 rounded-lg flex items-center justify-center gap-2 transition-colors ${
-                  autoHealEnabled 
-                    ? 'bg-green-500 text-white hover:bg-green-600' 
-                    : 'bg-secondary text-secondary-foreground hover:bg-secondary/90'
-                }`}
-              >
-                <Zap className="w-4 h-4" />
-                {autoHealEnabled ? 'Auto-cura Ativa' : 'Ativar Auto-cura'}
-              </button>
-            </div>
-
-            {scanSummary && (
-              <div className="mt-4 p-3 bg-primary/5 border border-primary/20 rounded-lg">
-                <p className="text-sm text-foreground">
-                  <span className="font-semibold">📊 Resumo da Análise:</span> {scanSummary}
-                </p>
-                {anomalies.length > 0 && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    ⚠️ {anomalies.length} anomalia{anomalies.length > 1 ? 's' : ''} detectada{anomalies.length > 1 ? 's' : ''} - veja detalhes na aba "Anomalias" abaixo
-                  </p>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-        
         {/* Cron Jobs Status */}
         <CronJobsStatus />
-      </div>
 
         {/* Stats Grid com visualizações melhoradas */}
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
