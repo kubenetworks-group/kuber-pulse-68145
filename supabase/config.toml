@@ -29,3 +29,9 @@ verify_jwt = false
 
 [functions.analyze-cluster-security]
 verify_jwt = true
+
+[functions.auto-heal-continuous]
+verify_jwt = false
+
+[functions.execute-security-fix]
+verify_jwt = true

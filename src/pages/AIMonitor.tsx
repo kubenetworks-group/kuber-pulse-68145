@@ -11,7 +11,9 @@ import { ClusterSecurityAnalysis } from "@/components/ClusterSecurityAnalysis";
 import { SecurityThreatCard } from "@/components/SecurityThreatCard";
 import { ContainerTerminalAlert } from "@/components/ContainerTerminalAlert";
 import { useSecurityThreats } from "@/hooks/useSecurityThreats";
-import { Bot, Activity, CheckCircle, Clock, Sparkles, TrendingDown, Shield, Zap, Target, AlertCircle, History, ShieldAlert, Terminal } from "lucide-react";
+import { Bot, Activity, CheckCircle, Clock, Sparkles, TrendingDown, Shield, Zap, Target, AlertCircle, History, ShieldAlert, Terminal, Settings } from "lucide-react";
+import { AutoHealConfig } from "@/components/AutoHealConfig";
+import { AutoHealActionsLog } from "@/components/AutoHealActionsLog";
 import { toast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -693,6 +695,10 @@ export default function AIMonitor() {
               <History className="h-4 w-4" />
               Historico
             </TabsTrigger>
+            <TabsTrigger value="autoheal" className="flex items-center gap-2">
+              <Settings className="h-4 w-4" />
+              Auto-Cura
+            </TabsTrigger>
           </TabsList>
 
           {/* Security Threats Tab */}
@@ -1033,6 +1039,14 @@ export default function AIMonitor() {
           {/* History Tab */}
           <TabsContent value="history" className="space-y-4">
             <ScanHistoryTab scanHistory={scanHistory} loading={loading} />
+          </TabsContent>
+
+          {/* Auto-Heal Tab */}
+          <TabsContent value="autoheal" className="space-y-4">
+            <div className="grid gap-6 lg:grid-cols-2">
+              <AutoHealConfig />
+              <AutoHealActionsLog />
+            </div>
           </TabsContent>
         </Tabs>
       </div>
