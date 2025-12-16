@@ -1365,6 +1365,11 @@ func sendMetrics(clientset *kubernetes.Clientset, metricsClient *metricsv.Client
 			"data":         collectSecurityData(clientset),
 			"collected_at": time.Now().UTC().Format(time.RFC3339),
 		},
+		{
+			"type":         "security_threats",
+			"data":         collectSecurityThreatsData(clientset),
+			"collected_at": time.Now().UTC().Format(time.RFC3339),
+		},
 	}
 
 	payload := map[string]interface{}{
@@ -1780,4 +1785,382 @@ func updateCommandStatus(config AgentConfig, commandID string, result map[string
 	}
 
 	log.Printf("✅ Command %s status updated: %s", commandID, status)
+}
+
+// ---------------------------------------------
+// SECURITY THREATS DATA COLLECTION
+// Coleta dados para detecção de DDoS, hackers, atividades suspeitas
+// ---------------------------------------------
+func collectSecurityThreatsData(clientset *kubernetes.Clientset) map[string]interface{} {
+	ctx := context.Background()
+
+	securityThreatsData := map[string]interface{}{
+		"suspicious_pods":       []map[string]interface{}{},
+		"suspicious_events":     []map[string]interface{}{},
+		"container_exec_events": []map[string]interface{}{},
+		"network_anomalies":     []map[string]interface{}{},
+		"resource_anomalies":    []map[string]interface{}{},
+		"privileged_containers": []map[string]interface{}{},
+		"host_network_pods":     []map[string]interface{}{},
+		"host_pid_pods":         []map[string]interface{}{},
+	}
+
+	// 1. Collect pods with suspicious configurations
+	log.Printf("🔒 Collecting security threats data...")
+	pods, err := clientset.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		log.Printf("⚠️  Error listing pods for security analysis: %v", err)
+		return securityThreatsData
+	}
+
+	var suspiciousPods []map[string]interface{}
+	var privilegedContainers []map[string]interface{}
+	var hostNetworkPods []map[string]interface{}
+	var hostPidPods []map[string]interface{}
+	var resourceAnomalies []map[string]interface{}
+
+	for _, pod := range pods.Items {
+		// Skip system namespaces for certain checks
+		isSystemNS := pod.Namespace == "kube-system" || pod.Namespace == "kube-public" || pod.Namespace == "kube-node-lease"
+
+		// Check for privileged containers
+		for _, container := range pod.Spec.Containers {
+			if container.SecurityContext != nil && container.SecurityContext.Privileged != nil && *container.SecurityContext.Privileged {
+				privilegedContainers = append(privilegedContainers, map[string]interface{}{
+					"pod_name":       pod.Name,
+					"namespace":      pod.Namespace,
+					"container_name": container.Name,
+					"image":          container.Image,
+					"node":           pod.Spec.NodeName,
+					"threat_level":   "high",
+					"reason":         "Container running in privileged mode",
+				})
+			}
+
+			// Check for containers with dangerous capabilities
+			if container.SecurityContext != nil && container.SecurityContext.Capabilities != nil {
+				for _, cap := range container.SecurityContext.Capabilities.Add {
+					if isDangerousCapability(string(cap)) {
+						privilegedContainers = append(privilegedContainers, map[string]interface{}{
+							"pod_name":       pod.Name,
+							"namespace":      pod.Namespace,
+							"container_name": container.Name,
+							"image":          container.Image,
+							"node":           pod.Spec.NodeName,
+							"capability":     string(cap),
+							"threat_level":   "high",
+							"reason":         fmt.Sprintf("Container has dangerous capability: %s", cap),
+						})
+					}
+				}
+			}
+
+			// Check for unusual resource patterns (potential crypto mining)
+			if !isSystemNS && container.Resources.Limits != nil {
+				cpuLimit := container.Resources.Limits.Cpu()
+				memLimit := container.Resources.Limits.Memory()
+
+				// High CPU with low memory is suspicious (crypto mining pattern)
+				if cpuLimit != nil && memLimit != nil {
+					cpuMillis := cpuLimit.MilliValue()
+					memBytes := memLimit.Value()
+
+					if cpuMillis > 2000 && memBytes < 512*1024*1024 { // >2 cores, <512MB
+						resourceAnomalies = append(resourceAnomalies, map[string]interface{}{
+							"pod_name":       pod.Name,
+							"namespace":      pod.Namespace,
+							"container_name": container.Name,
+							"cpu_limit":      cpuMillis,
+							"memory_limit":   memBytes,
+							"node":           pod.Spec.NodeName,
+							"threat_level":   "medium",
+							"reason":         "High CPU with low memory - potential crypto mining pattern",
+						})
+					}
+				}
+			}
+		}
+
+		// Check for host network access
+		if pod.Spec.HostNetwork && !isSystemNS {
+			hostNetworkPods = append(hostNetworkPods, map[string]interface{}{
+				"pod_name":     pod.Name,
+				"namespace":    pod.Namespace,
+				"node":         pod.Spec.NodeName,
+				"threat_level": "high",
+				"reason":       "Pod has host network access",
+			})
+		}
+
+		// Check for host PID access
+		if pod.Spec.HostPID && !isSystemNS {
+			hostPidPods = append(hostPidPods, map[string]interface{}{
+				"pod_name":     pod.Name,
+				"namespace":    pod.Namespace,
+				"node":         pod.Spec.NodeName,
+				"threat_level": "high",
+				"reason":       "Pod has host PID namespace access",
+			})
+		}
+
+		// Check for suspicious image patterns
+		for _, container := range pod.Spec.Containers {
+			if isSuspiciousImage(container.Image) {
+				suspiciousPods = append(suspiciousPods, map[string]interface{}{
+					"pod_name":       pod.Name,
+					"namespace":      pod.Namespace,
+					"container_name": container.Name,
+					"image":          container.Image,
+					"node":           pod.Spec.NodeName,
+					"threat_level":   "critical",
+					"reason":         "Container using suspicious/known malicious image pattern",
+				})
+			}
+		}
+
+		// Check for pods running as root
+		if pod.Spec.SecurityContext == nil ||
+		   (pod.Spec.SecurityContext.RunAsNonRoot == nil || !*pod.Spec.SecurityContext.RunAsNonRoot) {
+			for _, container := range pod.Spec.Containers {
+				if container.SecurityContext == nil ||
+				   (container.SecurityContext.RunAsNonRoot == nil || !*container.SecurityContext.RunAsNonRoot) {
+					if !isSystemNS {
+						suspiciousPods = append(suspiciousPods, map[string]interface{}{
+							"pod_name":       pod.Name,
+							"namespace":      pod.Namespace,
+							"container_name": container.Name,
+							"image":          container.Image,
+							"node":           pod.Spec.NodeName,
+							"threat_level":   "medium",
+							"reason":         "Container potentially running as root",
+						})
+					}
+				}
+			}
+		}
+	}
+
+	// 2. Collect suspicious Kubernetes events
+	events, err := clientset.CoreV1().Events("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		log.Printf("⚠️  Error listing events for security analysis: %v", err)
+	} else {
+		var suspiciousEvents []map[string]interface{}
+		tenMinutesAgo := time.Now().Add(-10 * time.Minute)
+
+		for _, event := range events.Items {
+			if event.LastTimestamp.Time.Before(tenMinutesAgo) {
+				continue
+			}
+
+			// Check for security-related events
+			if isSecurityEvent(event.Reason, event.Message) {
+				threatLevel := "medium"
+				if strings.Contains(strings.ToLower(event.Message), "unauthorized") ||
+				   strings.Contains(strings.ToLower(event.Message), "forbidden") ||
+				   strings.Contains(strings.ToLower(event.Message), "denied") {
+					threatLevel = "high"
+				}
+
+				suspiciousEvents = append(suspiciousEvents, map[string]interface{}{
+					"type":       event.Type,
+					"reason":     event.Reason,
+					"message":    event.Message,
+					"namespace":  event.InvolvedObject.Namespace,
+					"object":     event.InvolvedObject.Name,
+					"kind":       event.InvolvedObject.Kind,
+					"count":      event.Count,
+					"last_time":  event.LastTimestamp.Time,
+					"threat_level": threatLevel,
+				})
+			}
+		}
+		securityThreatsData["suspicious_events"] = suspiciousEvents
+	}
+
+	// 3. Check for potential network anomalies via Service configurations
+	services, err := clientset.CoreV1().Services("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		log.Printf("⚠️  Error listing services for security analysis: %v", err)
+	} else {
+		var networkAnomalies []map[string]interface{}
+
+		for _, svc := range services.Items {
+			// Skip system namespaces
+			if svc.Namespace == "kube-system" || svc.Namespace == "kube-public" {
+				continue
+			}
+
+			// Check for LoadBalancer or NodePort services (potential attack surface)
+			if svc.Spec.Type == corev1.ServiceTypeLoadBalancer || svc.Spec.Type == corev1.ServiceTypeNodePort {
+				for _, port := range svc.Spec.Ports {
+					// Common ports that shouldn't be exposed
+					if isDangerousPort(int(port.Port)) {
+						networkAnomalies = append(networkAnomalies, map[string]interface{}{
+							"service_name": svc.Name,
+							"namespace":    svc.Namespace,
+							"service_type": string(svc.Spec.Type),
+							"port":         port.Port,
+							"target_port":  port.TargetPort.String(),
+							"node_port":    port.NodePort,
+							"threat_level": "high",
+							"reason":       fmt.Sprintf("Dangerous port %d exposed via %s service", port.Port, svc.Spec.Type),
+						})
+					}
+				}
+			}
+		}
+		securityThreatsData["network_anomalies"] = networkAnomalies
+	}
+
+	securityThreatsData["suspicious_pods"] = suspiciousPods
+	securityThreatsData["privileged_containers"] = privilegedContainers
+	securityThreatsData["host_network_pods"] = hostNetworkPods
+	securityThreatsData["host_pid_pods"] = hostPidPods
+	securityThreatsData["resource_anomalies"] = resourceAnomalies
+
+	// Log summary
+	totalThreats := len(suspiciousPods) + len(privilegedContainers) + len(hostNetworkPods) + len(hostPidPods) + len(resourceAnomalies)
+	log.Printf("🔒 Security threats scan complete: %d potential threats detected", totalThreats)
+
+	if totalThreats > 0 {
+		log.Printf("   - Suspicious pods: %d", len(suspiciousPods))
+		log.Printf("   - Privileged containers: %d", len(privilegedContainers))
+		log.Printf("   - Host network pods: %d", len(hostNetworkPods))
+		log.Printf("   - Host PID pods: %d", len(hostPidPods))
+		log.Printf("   - Resource anomalies: %d", len(resourceAnomalies))
+	}
+
+	return securityThreatsData
+}
+
+// isDangerousCapability checks if a Linux capability is considered dangerous
+func isDangerousCapability(cap string) bool {
+	dangerousCaps := []string{
+		"SYS_ADMIN",
+		"NET_ADMIN",
+		"SYS_PTRACE",
+		"SYS_MODULE",
+		"DAC_OVERRIDE",
+		"SETUID",
+		"SETGID",
+		"NET_RAW",
+		"SYS_RAWIO",
+		"MKNOD",
+	}
+	for _, dc := range dangerousCaps {
+		if cap == dc {
+			return true
+		}
+	}
+	return false
+}
+
+// isSuspiciousImage checks for known malicious or suspicious image patterns
+func isSuspiciousImage(image string) bool {
+	suspiciousPatterns := []string{
+		"xmrig",       // Crypto miner
+		"monero",      // Crypto miner
+		"cryptonight", // Crypto mining algorithm
+		"minerd",      // Miner daemon
+		"cpuminer",    // CPU miner
+		"nicehash",    // Mining pool
+		"stratum",     // Mining protocol
+		"coinhive",    // Web miner
+		"kinsing",     // Known malware
+		"dota",        // Known malware
+		"tsunami",     // Known malware
+		"xorddos",     // Known DDoS malware
+		"backdoor",    // Backdoor indicator
+		"rootkit",     // Rootkit indicator
+		"reverse-shell", // Reverse shell
+		"netcat",      // Network utility (can be suspicious)
+	}
+
+	imageLower := strings.ToLower(image)
+	for _, pattern := range suspiciousPatterns {
+		if strings.Contains(imageLower, pattern) {
+			return true
+		}
+	}
+	return false
+}
+
+// isSecurityEvent checks if an event is security-related
+func isSecurityEvent(reason, message string) bool {
+	securityIndicators := []string{
+		"Forbidden",
+		"Unauthorized",
+		"FailedMount",
+		"FailedAttachVolume",
+		"FailedScheduling",
+		"BackOff",
+		"Unhealthy",
+		"Killing",
+		"OOMKilled",
+		"FailedValidation",
+		"InvalidImageName",
+		"ImagePullBackOff",
+		"ErrImagePull",
+		"NetworkNotReady",
+		"FailedCreatePodSandBox",
+		"FailedSync",
+	}
+
+	reasonLower := strings.ToLower(reason)
+	messageLower := strings.ToLower(message)
+
+	for _, indicator := range securityIndicators {
+		indicatorLower := strings.ToLower(indicator)
+		if strings.Contains(reasonLower, indicatorLower) || strings.Contains(messageLower, indicatorLower) {
+			return true
+		}
+	}
+
+	// Additional security message patterns
+	if strings.Contains(messageLower, "denied") ||
+	   strings.Contains(messageLower, "forbidden") ||
+	   strings.Contains(messageLower, "unauthorized") ||
+	   strings.Contains(messageLower, "permission") ||
+	   strings.Contains(messageLower, "secret") ||
+	   strings.Contains(messageLower, "certificate") ||
+	   strings.Contains(messageLower, "tls") ||
+	   strings.Contains(messageLower, "authentication") {
+		return true
+	}
+
+	return false
+}
+
+// isDangerousPort checks if a port is commonly associated with attacks
+func isDangerousPort(port int) bool {
+	dangerousPorts := []int{
+		22,    // SSH (if exposed externally)
+		23,    // Telnet
+		25,    // SMTP
+		135,   // MSRPC
+		137,   // NetBIOS
+		138,   // NetBIOS
+		139,   // NetBIOS
+		445,   // SMB
+		1433,  // MSSQL
+		1434,  // MSSQL Browser
+		3306,  // MySQL
+		3389,  // RDP
+		5432,  // PostgreSQL
+		5900,  // VNC
+		6379,  // Redis
+		8080,  // HTTP Proxy
+		9200,  // Elasticsearch
+		9300,  // Elasticsearch
+		27017, // MongoDB
+		27018, // MongoDB
+	}
+
+	for _, dp := range dangerousPorts {
+		if port == dp {
+			return true
+		}
+	}
+	return false
 }

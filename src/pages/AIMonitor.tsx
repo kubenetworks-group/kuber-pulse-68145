@@ -8,7 +8,10 @@ import { MetricCard } from "@/components/MetricCard";
 import { CronJobsStatus } from "@/components/CronJobsStatus";
 import { ScanHistoryTab } from "@/components/ScanHistoryTab";
 import { ClusterSecurityAnalysis } from "@/components/ClusterSecurityAnalysis";
-import { Bot, Activity, CheckCircle, Clock, Sparkles, TrendingDown, Shield, Zap, Target, AlertCircle, History } from "lucide-react";
+import { SecurityThreatCard } from "@/components/SecurityThreatCard";
+import { ContainerTerminalAlert } from "@/components/ContainerTerminalAlert";
+import { useSecurityThreats } from "@/hooks/useSecurityThreats";
+import { Bot, Activity, CheckCircle, Clock, Sparkles, TrendingDown, Shield, Zap, Target, AlertCircle, History, ShieldAlert, Terminal } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -62,6 +65,18 @@ export default function AIMonitor() {
   const [autoHealEnabled, setAutoHealEnabled] = useState(false);
   const [scanHistory, setScanHistory] = useState<any[]>([]);
   const [agentCommands, setAgentCommands] = useState<any[]>([]);
+
+  // Security Threats Hook
+  const {
+    threats,
+    stats: threatStats,
+    loading: threatsLoading,
+    scanning: threatsScanning,
+    runSecurityScan,
+    mitigateThreat,
+    markAsFalsePositive,
+    updateThreatStatus,
+  } = useSecurityThreats();
 
   useEffect(() => {
     if (user) {
@@ -651,8 +666,17 @@ export default function AIMonitor() {
 
 
         {/* Tabs para diferentes visualizações */}
-        <Tabs defaultValue="anomalies" className="space-y-4">
+        <Tabs defaultValue="security" className="space-y-4">
           <TabsList>
+            <TabsTrigger value="security" className="flex items-center gap-2">
+              <ShieldAlert className="h-4 w-4" />
+              Seguranca ({threatStats.active})
+              {threatStats.critical > 0 && (
+                <Badge variant="destructive" className="ml-1 h-5 w-5 p-0 flex items-center justify-center text-xs animate-pulse">
+                  {threatStats.critical}
+                </Badge>
+              )}
+            </TabsTrigger>
             <TabsTrigger value="anomalies" className="flex items-center gap-2">
               <AlertCircle className="h-4 w-4" />
               Anomalias ({recentAnomalies.length})
@@ -667,9 +691,128 @@ export default function AIMonitor() {
             </TabsTrigger>
             <TabsTrigger value="history" className="flex items-center gap-2">
               <History className="h-4 w-4" />
-              Histórico
+              Historico
             </TabsTrigger>
           </TabsList>
+
+          {/* Security Threats Tab */}
+          <TabsContent value="security" className="space-y-4">
+            {/* Security Scan Actions */}
+            <Card className="border-red-500/20 bg-gradient-to-br from-red-500/5 to-orange-500/5">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ShieldAlert className="w-5 h-5 text-red-400" />
+                    <CardTitle>Deteccao de Ameacas</CardTitle>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {threatStats.critical > 0 && (
+                      <Badge variant="destructive" className="animate-pulse">
+                        {threatStats.critical} Criticas
+                      </Badge>
+                    )}
+                    {threatStats.high > 0 && (
+                      <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30">
+                        {threatStats.high} Altas
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+                <CardDescription>
+                  Sistema de IA para deteccao de DDoS, hackers, cryptomining e atividades suspeitas em containers
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                  <div className="text-center p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                    <div className="text-2xl font-bold text-red-400">{threatStats.critical}</div>
+                    <div className="text-xs text-muted-foreground">Criticas</div>
+                  </div>
+                  <div className="text-center p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
+                    <div className="text-2xl font-bold text-orange-400">{threatStats.high}</div>
+                    <div className="text-xs text-muted-foreground">Altas</div>
+                  </div>
+                  <div className="text-center p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+                    <div className="text-2xl font-bold text-yellow-400">{threatStats.medium}</div>
+                    <div className="text-xs text-muted-foreground">Medias</div>
+                  </div>
+                  <div className="text-center p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                    <div className="text-2xl font-bold text-blue-400">{threatStats.low}</div>
+                    <div className="text-xs text-muted-foreground">Baixas</div>
+                  </div>
+                  <div className="text-center p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+                    <div className="text-2xl font-bold text-green-400">{threatStats.mitigated}</div>
+                    <div className="text-xs text-muted-foreground">Mitigadas</div>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={runSecurityScan}
+                    disabled={threatsScanning || !selectedClusterId}
+                    className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
+                  >
+                    {threatsScanning ? (
+                      <>
+                        <Shield className="w-4 h-4 animate-spin" />
+                        Escaneando Ameacas...
+                      </>
+                    ) : (
+                      <>
+                        <ShieldAlert className="w-4 h-4" />
+                        Varredura de Seguranca
+                      </>
+                    )}
+                  </button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Container Terminal Alerts */}
+            {threats.filter(t => t.status === 'active').length > 0 && (
+              <ContainerTerminalAlert threats={threats.filter(t => t.status === 'active')} maxItems={5} />
+            )}
+
+            {/* Security Threats List */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Shield className="h-5 w-5" />
+                  Ameacas Detectadas
+                </CardTitle>
+                <CardDescription>
+                  Ameacas de seguranca identificadas pela IA em seus clusters Kubernetes
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {threatsLoading ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    Carregando ameacas...
+                  </div>
+                ) : threats.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Shield className="h-16 w-16 mx-auto mb-4 text-green-500 opacity-50" />
+                    <h3 className="text-lg font-semibold mb-2 text-green-400">Cluster Seguro</h3>
+                    <p className="text-muted-foreground text-sm">
+                      Nenhuma ameaca de seguranca detectada. Execute uma varredura para verificar.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {threats.map((threat) => (
+                      <SecurityThreatCard
+                        key={threat.id}
+                        threat={threat}
+                        onMitigate={mitigateThreat}
+                        onMarkFalsePositive={markAsFalsePositive}
+                        onInvestigate={(id) => updateThreatStatus(id, 'investigating')}
+                      />
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           {/* Anomalies Tab */}
           <TabsContent value="anomalies" className="space-y-4">

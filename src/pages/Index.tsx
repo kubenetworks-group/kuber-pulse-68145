@@ -6,6 +6,7 @@ import { ClusterEvents } from "@/components/ClusterEvents";
 import { WelcomeHeader } from "@/components/WelcomeHeader";
 import { ClusterOnboarding } from "@/components/ClusterOnboarding";
 import { ClusterStatusSummary } from "@/components/ClusterStatusSummary";
+import { SecurityThreatsWidget } from "@/components/SecurityThreatsWidget";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCluster } from "@/contexts/ClusterContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -144,6 +145,13 @@ const Index = () => {
             {clusterData && (
               <div className="animate-scale-in">
                 <ClusterStatusSummary clusterData={clusterData} />
+              </div>
+            )}
+
+            {/* Security Threats Widget */}
+            {selectedClusterId && (
+              <div className="animate-scale-in">
+                <SecurityThreatsWidget />
               </div>
             )}
 

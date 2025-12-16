@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell, Check, X, AlertCircle, CheckCircle, AlertTriangle, Info, Loader2 } from "lucide-react";
+import { Bell, Check, X, AlertCircle, CheckCircle, AlertTriangle, Info, Loader2, ShieldAlert, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -48,13 +48,32 @@ export const NotificationBell = () => {
 
   const handleNotificationClick = (notification: Notification) => {
     markAsRead(notification.id);
-    
+
     // If it's a cluster deletion notification, navigate to clusters page
     if (notification.related_entity_type === 'cluster_deletion') {
       setOpen(false);
       navigate('/clusters');
     }
+
+    // If it's a security threat notification, navigate to AI monitor
+    if (notification.related_entity_type === 'security_threat') {
+      setOpen(false);
+      navigate('/ai-monitor');
+    }
   };
+
+  // Check if notification is security-related
+  const isSecurityNotification = (notification: Notification) => {
+    return notification.related_entity_type === 'security_threat' ||
+           notification.title.toLowerCase().includes('seguranca') ||
+           notification.title.toLowerCase().includes('security') ||
+           notification.title.toLowerCase().includes('ameaca') ||
+           notification.title.toLowerCase().includes('threat') ||
+           notification.title.includes('ALERTA CRITICO');
+  };
+
+  // Count security alerts
+  const securityAlertCount = notifications.filter(n => !n.read && isSecurityNotification(n)).length;
 
   useEffect(() => {
     if (user) {
@@ -167,11 +186,21 @@ export const NotificationBell = () => {
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative">
-          <Bell className="h-5 w-5" />
+        <Button variant="ghost" size="icon" className={cn(
+          "relative",
+          securityAlertCount > 0 && "animate-pulse"
+        )}>
+          {securityAlertCount > 0 ? (
+            <ShieldAlert className="h-5 w-5 text-red-500" />
+          ) : (
+            <Bell className="h-5 w-5" />
+          )}
           {unreadCount > 0 && (
-            <Badge 
-              className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
+            <Badge
+              className={cn(
+                "absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs",
+                securityAlertCount > 0 && "bg-red-600"
+              )}
               variant="destructive"
             >
               {unreadCount > 9 ? '9+' : unreadCount}
@@ -203,11 +232,14 @@ export const NotificationBell = () => {
           ) : (
             <div className="divide-y">
               {notifications.map(notification => {
-                const Icon = notification.related_entity_type === 'cluster_deletion' 
-                  ? Loader2 
+                const isSecurity = isSecurityNotification(notification);
+                const Icon = notification.related_entity_type === 'cluster_deletion'
+                  ? Loader2
+                  : isSecurity
+                  ? ShieldAlert
                   : notificationIcons[notification.type];
                 const isProcessing = notification.related_entity_type === 'cluster_deletion';
-                
+
                 return (
                   <div
                     key={notification.id}
@@ -215,11 +247,17 @@ export const NotificationBell = () => {
                     className={cn(
                       "p-4 hover:bg-muted/50 transition-colors cursor-pointer",
                       !notification.read && "bg-primary/5",
-                      isProcessing && "bg-warning/10 border-l-2 border-warning"
+                      isProcessing && "bg-warning/10 border-l-2 border-warning",
+                      isSecurity && !notification.read && "bg-red-500/10 border-l-2 border-red-500"
                     )}
                   >
                     <div className="flex items-start gap-3">
-                      <div className={cn("mt-1", isProcessing ? "text-warning" : notificationColors[notification.type])}>
+                      <div className={cn(
+                        "mt-1",
+                        isProcessing ? "text-warning" :
+                        isSecurity ? "text-red-500" :
+                        notificationColors[notification.type]
+                      )}>
                         <Icon className={cn("h-5 w-5", isProcessing && "animate-spin")} />
                       </div>
                       <div className="flex-1 min-w-0">
