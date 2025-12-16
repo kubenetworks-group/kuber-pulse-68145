@@ -213,7 +213,7 @@ ${icData.rbac_details?.warnings?.length > 0 ? `⚠️ Avisos: ${icData.rbac_deta
     // Prepare prompt for AI - only for recommendations and details, not boolean flags
     const prompt = `Você é um especialista em segurança Kubernetes. Os dados abaixo foram analisados e os status já foram determinados.
 
-IMPORTANTE: NÃO ALTERE os valores booleanos já definidos. Apenas forneça detalhes e recomendações.
+IMPORTANTE: NÃO ALTERE os valores booleanos já definidos. Forneça SEMPRE detalhes completos, issues e recomendações para CADA área, mesmo quando está configurado corretamente.
 
 Cluster: ${cluster.name} (${cluster.provider}, ${cluster.environment})
 Nodes: ${cluster.nodes || 0} | Pods: ${cluster.pods || 0}
@@ -235,28 +235,62 @@ ${securityData ? `
 - Cluster Role Bindings: ${securityData.rbac?.cluster_role_bindings_count || 0}
 - Roles: ${securityData.rbac?.roles_count || 0}
 - Role Bindings: ${securityData.rbac?.role_bindings_count || 0}
+${securityData.rbac?.service_accounts ? `- Service Accounts: ${JSON.stringify(securityData.rbac.service_accounts)}` : ''}
 
 🌐 INGRESS CONTROLLER:
 ${formatIngressController(securityData.ingress_controller)}
 
 🔒 NETWORK POLICIES:
 ${formatNetworkPolicies(securityData.network_policies)}
+${securityData.network_policies?.policies ? `- Políticas existentes: ${JSON.stringify(securityData.network_policies.policies)}` : ''}
 
 🛡️ POD SECURITY:
-- Pods com Security Context: ${securityData.pod_security?.pods_with_security_context || 0}/${securityData.pod_security?.total_pods || 0}
-- Pods com Resource Limits: ${securityData.pod_security?.pods_with_resource_limits || 0}/${securityData.pod_security?.total_pods || 0}
+- Total de Pods: ${securityData.pod_security?.total_pods || 0}
+- Pods com Security Context: ${securityData.pod_security?.pods_with_security_context || 0}/${securityData.pod_security?.total_pods || 0} (${securityData.pod_security?.total_pods > 0 ? Math.round((securityData.pod_security?.pods_with_security_context / securityData.pod_security?.total_pods) * 100) : 0}%)
+- Pods com Resource Limits: ${securityData.pod_security?.pods_with_resource_limits || 0}/${securityData.pod_security?.total_pods || 0} (${securityData.pod_security?.total_pods > 0 ? Math.round((securityData.pod_security?.pods_with_resource_limits / securityData.pod_security?.total_pods) * 100) : 0}%)
 - Containers privilegiados: ${securityData.pod_security?.privileged_containers || 0}
+- Pods rodando como root: ${securityData.pod_security?.pods_running_as_root || 0}
+- Pods com host network: ${securityData.pod_security?.pods_with_host_network || 0}
+- Pods com host PID: ${securityData.pod_security?.pods_with_host_pid || 0}
 
 🔐 SECRETS:
-- Total: ${securityData.secrets?.total_count || 0}
-` : 'Dados de segurança não disponíveis do agente.'}
+- Total de Secrets: ${securityData.secrets?.total_count || 0}
+- Tipos de secrets: ${securityData.secrets?.types ? JSON.stringify(securityData.secrets.types) : 'N/A'}
+` : 'Dados de segurança não disponíveis do agente. Instale o agente para análise completa.'}
 
-Baseado nos dados acima, forneça:
-1. Detalhes sobre cada área (issues encontradas e recomendações específicas)
-2. Um resumo executivo da postura de segurança
-3. Recomendações prioritárias
+=== INSTRUÇÕES PARA A RESPOSTA ===
 
-IMPORTANTE: Use EXATAMENTE os valores booleanos e scores já definidos acima.`;
+Para CADA área de segurança, forneça:
+
+1. **rbac_details**:
+   - issues: Liste o que está configurado (ex: "X ClusterRoles configurados", "Y RoleBindings ativos") E pontos de atenção
+   - recommendations: Boas práticas para melhorar (ex: "Revisar permissões excessivas", "Implementar least privilege")
+
+2. **network_policy_details**:
+   - issues: Descreva a situação atual (ex: "X NetworkPolicies em Y namespaces") E gaps encontrados
+   - recommendations: Melhorias sugeridas (ex: "Implementar default deny", "Adicionar egress policies")
+
+3. **pod_security_details**:
+   - issues: Status atual (ex: "X% dos pods tem security context") E problemas encontrados
+   - recommendations: Ações para melhorar (ex: "Remover containers privilegiados", "Implementar readOnlyRootFilesystem")
+
+4. **secrets_details**:
+   - issues: Situação atual dos secrets E pontos de atenção
+   - recommendations: Melhorias (ex: "Usar external secrets", "Rotacionar secrets regularmente")
+
+5. **resource_limits_details**:
+   - issues: Status atual (ex: "X% dos pods tem limits definidos") E problemas
+   - recommendations: Ações (ex: "Definir LimitRange por namespace", "Ajustar requests vs limits")
+
+6. **recommendations**: Lista de 5-7 recomendações prioritárias gerais, ordenadas por importância
+
+7. **summary**: Resumo executivo de 2-3 frases sobre a postura de segurança do cluster
+
+IMPORTANTE:
+- SEMPRE forneça pelo menos 2 items em issues e 2 em recommendations para CADA área
+- Mesmo quando algo está OK, mencione o que está bom E o que pode melhorar
+- Use EXATAMENTE os valores booleanos e scores já definidos acima
+- Responda em português`;
 
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
@@ -409,14 +443,86 @@ IMPORTANTE: Use EXATAMENTE os valores booleanos e scores já definidos acima.`;
     if (toolCall?.function?.arguments) {
       aiAnalysis = JSON.parse(toolCall.function.arguments);
     } else {
+      // Fallback com informações baseadas nos dados determinísticos
+      const rbacCount = securityData?.rbac?.cluster_roles_count || 0;
+      const npCount = securityData?.network_policies?.total_count || 0;
+      const totalPods = securityData?.pod_security?.total_pods || 0;
+      const podsWithContext = securityData?.pod_security?.pods_with_security_context || 0;
+      const podsWithLimits = securityData?.pod_security?.pods_with_resource_limits || 0;
+      const secretsCount = securityData?.secrets?.total_count || 0;
+
       aiAnalysis = {
-        rbac_details: { status: 'missing', issues: ['Não foi possível verificar'], recommendations: ['Configure RBAC'] },
-        network_policy_details: { status: 'missing', issues: ['Não verificado'], recommendations: ['Implemente NetworkPolicies'] },
-        pod_security_details: { status: 'missing', issues: ['Não verificado'], recommendations: ['Configure Pod Security'] },
-        secrets_details: { status: 'missing', issues: ['Não verificado'], recommendations: ['Habilite encryption'] },
-        resource_limits_details: { status: 'missing', issues: ['Não verificado'], recommendations: ['Defina limits'] },
-        recommendations: ['Execute análise com agente instalado'],
-        summary: 'Análise preliminar - instale o agente para análise completa.'
+        rbac_details: {
+          status: deterministicFlags.has_rbac ? 'configured' : 'missing',
+          issues: deterministicFlags.has_rbac
+            ? [`${rbacCount} ClusterRoles configurados`, `RBAC está ativo no cluster`]
+            : ['RBAC não detectado ou não configurado', 'Sem controle de acesso baseado em roles'],
+          recommendations: [
+            'Revisar permissões de ClusterRoles periodicamente',
+            'Implementar princípio de least privilege',
+            'Auditar role bindings regularmente'
+          ]
+        },
+        network_policy_details: {
+          status: deterministicFlags.has_network_policies ? 'configured' : 'missing',
+          issues: deterministicFlags.has_network_policies
+            ? [`${npCount} NetworkPolicies configuradas`, 'Isolamento de rede ativo']
+            : ['Nenhuma NetworkPolicy encontrada', 'Pods podem se comunicar livremente'],
+          recommendations: [
+            'Implementar default deny para ingress e egress',
+            'Criar políticas específicas por namespace',
+            'Documentar fluxos de rede permitidos'
+          ]
+        },
+        pod_security_details: {
+          status: deterministicFlags.has_pod_security ? 'configured' : 'partial',
+          issues: [
+            `${podsWithContext}/${totalPods} pods com Security Context (${totalPods > 0 ? Math.round((podsWithContext/totalPods)*100) : 0}%)`,
+            `${securityData?.pod_security?.privileged_containers || 0} containers privilegiados detectados`
+          ],
+          recommendations: [
+            'Remover containers privilegiados quando possível',
+            'Implementar readOnlyRootFilesystem',
+            'Definir runAsNonRoot para todos os pods'
+          ]
+        },
+        secrets_details: {
+          status: deterministicFlags.has_secrets_encryption ? 'configured' : 'missing',
+          issues: deterministicFlags.has_secrets_encryption
+            ? [`${secretsCount} secrets armazenados no cluster`, 'Secrets configurados']
+            : ['Nenhum secret encontrado', 'Verificar configuração de secrets'],
+          recommendations: [
+            'Usar external secrets operator para secrets sensíveis',
+            'Implementar rotação automática de secrets',
+            'Habilitar encryption at rest para secrets'
+          ]
+        },
+        resource_limits_details: {
+          status: deterministicFlags.has_resource_limits ? 'configured' : 'partial',
+          issues: [
+            `${podsWithLimits}/${totalPods} pods com Resource Limits (${totalPods > 0 ? Math.round((podsWithLimits/totalPods)*100) : 0}%)`,
+            deterministicFlags.has_resource_limits ? 'Limites de recursos configurados' : 'Muitos pods sem limites definidos'
+          ],
+          recommendations: [
+            'Definir LimitRange em todos os namespaces',
+            'Configurar ResourceQuotas por namespace',
+            'Ajustar requests e limits baseado em métricas reais'
+          ]
+        },
+        recommendations: [
+          'Revisar e auditar configurações de RBAC',
+          'Implementar NetworkPolicies em todos os namespaces',
+          'Remover containers privilegiados',
+          'Configurar Pod Security Standards',
+          'Definir resource limits para todos os pods',
+          'Implementar rotação de secrets',
+          'Habilitar audit logging'
+        ],
+        summary: `Cluster com score de segurança ${securityScore}/100. ${
+          securityScore >= 80 ? 'Boa postura de segurança com pequenas melhorias recomendadas.' :
+          securityScore >= 50 ? 'Postura de segurança moderada. Algumas áreas precisam de atenção.' :
+          'Postura de segurança precisa de melhorias significativas.'
+        }`
       };
     }
 
