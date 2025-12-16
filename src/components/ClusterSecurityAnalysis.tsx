@@ -22,7 +22,9 @@ import {
   AlertTriangle,
   Sparkles,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Wrench,
+  Play
 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
@@ -51,6 +53,8 @@ interface SecurityScan {
   scan_date: string;
 }
 
+type FixType = 'restrict_rbac' | 'create_network_policy' | 'apply_pod_security' | 'enable_secrets_encryption' | 'apply_resource_limits';
+
 export const ClusterSecurityAnalysis = () => {
   const { selectedClusterId } = useCluster();
   const { user } = useAuth();
@@ -58,6 +62,8 @@ export const ClusterSecurityAnalysis = () => {
   const [latestScan, setLatestScan] = useState<SecurityScan | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+  const [applyingFix, setApplyingFix] = useState<string | null>(null);
+  const [appliedFixes, setAppliedFixes] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (selectedClusterId && user) {
@@ -80,6 +86,7 @@ export const ClusterSecurityAnalysis = () => {
 
       if (error) throw error;
       setLatestScan(data as unknown as SecurityScan | null);
+    } catch (error) {
       console.error('Error fetching security scan:', error);
     } finally {
       setLoading(false);
@@ -122,6 +129,131 @@ export const ClusterSecurityAnalysis = () => {
     }
   };
 
+  const applySecurityFix = async (fixType: FixType, checkKey: string) => {
+    if (!selectedClusterId || !user) {
+      toast({
+        title: "Erro",
+        description: "Cluster ou usuário não identificado",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const fixKey = `${checkKey}-${fixType}`;
+    setApplyingFix(fixKey);
+
+    try {
+      const { data: command, error: commandError } = await supabase
+        .from('agent_commands')
+        .insert({
+          cluster_id: selectedClusterId,
+          user_id: user.id,
+          command_type: fixType,
+          command_params: getFixParams(fixType),
+          status: 'pending',
+        })
+        .select()
+        .single();
+
+      if (commandError) throw commandError;
+
+      await supabase
+        .from('auto_heal_actions_log')
+        .insert({
+          cluster_id: selectedClusterId,
+          user_id: user.id,
+          action_type: 'security_fix',
+          trigger_reason: getFixDescription(fixType),
+          action_details: {
+            fix_type: fixType,
+            check_key: checkKey,
+            command_id: command.id,
+          },
+          status: 'pending',
+        });
+
+      await supabase
+        .from('notifications')
+        .insert({
+          user_id: user.id,
+          title: '🔧 Correção de Segurança Enviada',
+          message: `${getFixDescription(fixType)} foi enviada para execução no cluster`,
+          type: 'info',
+        });
+
+      setAppliedFixes(prev => new Set([...prev, fixKey]));
+
+      toast({
+        title: "✅ Correção Enviada",
+        description: `Comando de ${getFixDescription(fixType)} enviado para o agente`,
+      });
+    } catch (error: any) {
+      console.error('Error applying fix:', error);
+      toast({
+        title: "Erro ao aplicar correção",
+        description: error.message || "Falha ao enviar comando de correção",
+        variant: "destructive"
+      });
+    } finally {
+      setApplyingFix(null);
+    }
+  };
+
+  const getFixParams = (fixType: FixType) => {
+    switch (fixType) {
+      case 'restrict_rbac':
+        return { action: 'create_least_privilege_roles', apply_to_all_namespaces: true };
+      case 'create_network_policy':
+        return { policy_type: 'deny-all-ingress', apply_to_all_namespaces: true };
+      case 'apply_pod_security':
+        return { level: 'restricted', enforce: true, apply_to_all_namespaces: true };
+      case 'enable_secrets_encryption':
+        return { enable_encryption_at_rest: true };
+      case 'apply_resource_limits':
+        return { default_cpu_limit: '500m', default_memory_limit: '512Mi', apply_to_all_pods: true };
+      default:
+        return {};
+    }
+  };
+
+  const getFixDescription = (fixType: FixType): string => {
+    switch (fixType) {
+      case 'restrict_rbac':
+        return 'Configurar RBAC com privilégios mínimos';
+      case 'create_network_policy':
+        return 'Criar Network Policies restritivas';
+      case 'apply_pod_security':
+        return 'Aplicar Pod Security Standards';
+      case 'enable_secrets_encryption':
+        return 'Habilitar encriptação de secrets';
+      case 'apply_resource_limits':
+        return 'Aplicar limites de recursos';
+      default:
+        return fixType;
+    }
+  };
+
+  const applyAllFixes = async () => {
+    const fixTypes: { key: string; type: FixType; enabled: boolean }[] = [
+      { key: 'rbac', type: 'restrict_rbac', enabled: !latestScan?.has_rbac },
+      { key: 'network', type: 'create_network_policy', enabled: !latestScan?.has_network_policies },
+      { key: 'pod', type: 'apply_pod_security', enabled: !latestScan?.has_pod_security },
+      { key: 'secrets', type: 'enable_secrets_encryption', enabled: !latestScan?.has_secrets_encryption },
+      { key: 'limits', type: 'apply_resource_limits', enabled: !latestScan?.has_resource_limits },
+    ];
+
+    const pendingFixes = fixTypes.filter(f => f.enabled && !appliedFixes.has(`${f.key}-${f.type}`));
+    
+    for (const fix of pendingFixes) {
+      await applySecurityFix(fix.type, fix.key);
+    }
+
+    toast({
+      title: "✅ Todas as Correções Enviadas",
+      description: `${pendingFixes.length} correções foram enviadas para execução`,
+    });
+  };
+
   const toggleSection = (section: string) => {
     setExpandedSections(prev => ({
       ...prev,
@@ -143,12 +275,6 @@ export const ClusterSecurityAnalysis = () => {
     return 'text-destructive';
   };
 
-  const getScoreBg = (score: number) => {
-    if (score >= 80) return 'bg-success';
-    if (score >= 50) return 'bg-warning';
-    return 'bg-destructive';
-  };
-
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'passed':
@@ -160,6 +286,17 @@ export const ClusterSecurityAnalysis = () => {
       default:
         return <Badge variant="outline">Pendente</Badge>;
     }
+  };
+
+  const getFixTypeForCheck = (checkKey: string): FixType => {
+    const mapping: Record<string, FixType> = {
+      'rbac': 'restrict_rbac',
+      'network': 'create_network_policy',
+      'pod': 'apply_pod_security',
+      'secrets': 'enable_secrets_encryption',
+      'limits': 'apply_resource_limits',
+    };
+    return mapping[checkKey];
   };
 
   const securityChecks = latestScan ? [
@@ -205,7 +342,8 @@ export const ClusterSecurityAnalysis = () => {
     }
   ] : [];
 
-  // Show first-time analysis prompt if no scan exists
+  const pendingFixesCount = securityChecks.filter(c => !c.enabled).length;
+
   if (!loading && !latestScan) {
     return (
       <Card className="border-primary/30 bg-gradient-to-br from-primary/5 via-background to-accent/5">
@@ -274,7 +412,22 @@ export const ClusterSecurityAnalysis = () => {
               </CardDescription>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            {pendingFixesCount > 0 && (
+              <Button
+                onClick={applyAllFixes}
+                disabled={applyingFix !== null}
+                size="sm"
+                className="gap-2 bg-primary hover:bg-primary/90"
+              >
+                {applyingFix ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Play className="h-4 w-4" />
+                )}
+                Aplicar Todas ({pendingFixesCount})
+              </Button>
+            )}
             {latestScan && getStatusBadge(latestScan.status)}
             <Button
               onClick={runSecurityAnalysis}
@@ -299,7 +452,6 @@ export const ClusterSecurityAnalysis = () => {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Security Score */}
         {latestScan && (
           <div className="p-4 rounded-lg bg-muted/30 border border-border/50">
             <div className="flex items-center justify-between mb-2">
@@ -308,10 +460,7 @@ export const ClusterSecurityAnalysis = () => {
                 {latestScan.security_score}/100
               </span>
             </div>
-            <Progress 
-              value={latestScan.security_score} 
-              className="h-2"
-            />
+            <Progress value={latestScan.security_score} className="h-2" />
             {latestScan.ai_analysis?.summary && (
               <p className="mt-3 text-sm text-muted-foreground">
                 {latestScan.ai_analysis.summary}
@@ -320,75 +469,118 @@ export const ClusterSecurityAnalysis = () => {
           </div>
         )}
 
-        {/* Security Checks */}
         <div className="space-y-2">
-          {securityChecks.map((check) => (
-            <Collapsible
-              key={check.key}
-              open={expandedSections[check.key]}
-              onOpenChange={() => toggleSection(check.key)}
-            >
-              <div className="rounded-lg border border-border/50 overflow-hidden">
-                <CollapsibleTrigger asChild>
-                  <button className="w-full p-3 flex items-center justify-between hover:bg-muted/30 transition-colors">
-                    <div className="flex items-center gap-3">
-                      <check.icon className="h-5 w-5 text-muted-foreground" />
-                      <div className="text-left">
-                        <p className="font-medium text-sm">{check.title}</p>
-                        <p className="text-xs text-muted-foreground">{check.description}</p>
+          {securityChecks.map((check) => {
+            const fixType = getFixTypeForCheck(check.key);
+            const fixKey = `${check.key}-${fixType}`;
+            const isApplying = applyingFix === fixKey;
+            const isApplied = appliedFixes.has(fixKey);
+
+            return (
+              <Collapsible
+                key={check.key}
+                open={expandedSections[check.key]}
+                onOpenChange={() => toggleSection(check.key)}
+              >
+                <div className="rounded-lg border border-border/50 overflow-hidden">
+                  <CollapsibleTrigger asChild>
+                    <button className="w-full p-3 flex items-center justify-between hover:bg-muted/30 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <check.icon className="h-5 w-5 text-muted-foreground" />
+                        <div className="text-left">
+                          <p className="font-medium text-sm">{check.title}</p>
+                          <p className="text-xs text-muted-foreground">{check.description}</p>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {getStatusIcon(check.enabled)}
-                      {expandedSections[check.key] ? (
-                        <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                      ) : (
-                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                      <div className="flex items-center gap-2">
+                        {getStatusIcon(check.enabled)}
+                        {expandedSections[check.key] ? (
+                          <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </div>
+                    </button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="px-3 pb-3 pt-1 border-t border-border/50 bg-muted/10">
+                      {check.details?.issues?.length > 0 && (
+                        <div className="mb-3">
+                          <p className="text-xs font-medium text-destructive mb-1">Problemas Encontrados:</p>
+                          <ul className="text-xs text-muted-foreground space-y-1">
+                            {check.details.issues.map((issue, i) => (
+                              <li key={i} className="flex items-start gap-1">
+                                <XCircle className="h-3 w-3 mt-0.5 text-destructive shrink-0" />
+                                {issue}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {check.details?.recommendations?.length > 0 && (
+                        <div className="mb-3">
+                          <p className="text-xs font-medium text-primary mb-1">O que fazer para corrigir:</p>
+                          <ul className="text-xs text-muted-foreground space-y-1">
+                            {check.details.recommendations.map((rec, i) => (
+                              <li key={i} className="flex items-start gap-1">
+                                <AlertTriangle className="h-3 w-3 mt-0.5 text-warning shrink-0" />
+                                {rec}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      
+                      {!check.enabled && (
+                        <div className="mt-3 pt-3 border-t border-border/30">
+                          <Button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              applySecurityFix(fixType, check.key);
+                            }}
+                            disabled={isApplying || isApplied}
+                            size="sm"
+                            variant={isApplied ? "outline" : "default"}
+                            className="gap-2 w-full"
+                          >
+                            {isApplying ? (
+                              <>
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Aplicando...
+                              </>
+                            ) : isApplied ? (
+                              <>
+                                <CheckCircle2 className="h-4 w-4 text-success" />
+                                Correção Enviada
+                              </>
+                            ) : (
+                              <>
+                                <Wrench className="h-4 w-4" />
+                                Aplicar Correção Automática
+                              </>
+                            )}
+                          </Button>
+                          <p className="text-[10px] text-muted-foreground mt-1 text-center">
+                            {isApplied 
+                              ? "O agente executará a correção no cluster"
+                              : getFixDescription(fixType)
+                            }
+                          </p>
+                        </div>
                       )}
                     </div>
-                  </button>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <div className="px-3 pb-3 pt-1 border-t border-border/50 bg-muted/10">
-                    {check.details?.issues?.length > 0 && (
-                      <div className="mb-2">
-                        <p className="text-xs font-medium text-destructive mb-1">Problemas:</p>
-                        <ul className="text-xs text-muted-foreground space-y-1">
-                          {check.details.issues.map((issue, i) => (
-                            <li key={i} className="flex items-start gap-1">
-                              <XCircle className="h-3 w-3 mt-0.5 text-destructive shrink-0" />
-                              {issue}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    {check.details?.recommendations?.length > 0 && (
-                      <div>
-                        <p className="text-xs font-medium text-primary mb-1">Recomendações:</p>
-                        <ul className="text-xs text-muted-foreground space-y-1">
-                          {check.details.recommendations.map((rec, i) => (
-                            <li key={i} className="flex items-start gap-1">
-                              <AlertTriangle className="h-3 w-3 mt-0.5 text-warning shrink-0" />
-                              {rec}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                </CollapsibleContent>
-              </div>
-            </Collapsible>
-          ))}
+                  </CollapsibleContent>
+                </div>
+              </Collapsible>
+            );
+          })}
         </div>
 
-        {/* Top Recommendations */}
         {latestScan?.recommendations && latestScan.recommendations.length > 0 && (
           <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
             <p className="text-sm font-medium mb-2 flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-primary" />
-              Recomendações Prioritárias
+              Recomendações Prioritárias da IA
             </p>
             <ul className="text-sm text-muted-foreground space-y-1">
               {latestScan.recommendations.slice(0, 5).map((rec, i) => (
