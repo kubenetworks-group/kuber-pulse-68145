@@ -466,7 +466,7 @@ export default function AIMonitor() {
 
 
         {/* Tabs para diferentes visualizações */}
-        <Tabs defaultValue="security" className="space-y-4">
+        <Tabs defaultValue="autoheal" className="space-y-4">
           <TabsList>
             <TabsTrigger value="security" className="flex items-center gap-2">
               <ShieldAlert className="h-4 w-4" />

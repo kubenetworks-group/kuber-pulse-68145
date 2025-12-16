@@ -1523,12 +1523,13 @@ type CommandsResponse struct {
 
 func getCommands(clientset *kubernetes.Clientset, config AgentConfig) {
 	url := fmt.Sprintf("%s/agent-get-commands", config.APIEndpoint)
+	log.Printf("🔍 Polling commands from: %s", url)
 
 	req, _ := http.NewRequest("GET", url, nil)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-agent-key", config.APIKey)
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Printf("❌ Error polling commands: %v", err)
@@ -1536,13 +1537,14 @@ func getCommands(clientset *kubernetes.Clientset, config AgentConfig) {
 	}
 	defer resp.Body.Close()
 
+	body, _ := ioutil.ReadAll(resp.Body)
+
 	if resp.StatusCode != 200 {
-		body, _ := ioutil.ReadAll(resp.Body)
 		log.Printf("⚠️  Commands request returned %d: %s", resp.StatusCode, string(body))
 		return
 	}
 
-	body, _ := ioutil.ReadAll(resp.Body)
+	log.Printf("📥 Commands response: %s", string(body))
 
 	var commandsResp CommandsResponse
 	if err := json.Unmarshal(body, &commandsResp); err != nil {
@@ -1551,8 +1553,13 @@ func getCommands(clientset *kubernetes.Clientset, config AgentConfig) {
 	}
 
 	if len(commandsResp.Commands) > 0 {
-		log.Printf("📥 Received %d commands", len(commandsResp.Commands))
+		log.Printf("📥 Received %d commands to execute", len(commandsResp.Commands))
+		for i, cmd := range commandsResp.Commands {
+			log.Printf("  [%d] ID=%s Type=%s Params=%v", i+1, cmd.ID, cmd.CommandType, cmd.CommandParams)
+		}
 		executeCommands(clientset, config, commandsResp.Commands)
+	} else {
+		log.Printf("📭 No pending commands")
 	}
 }
 
@@ -1561,23 +1568,35 @@ func getCommands(clientset *kubernetes.Clientset, config AgentConfig) {
 // ---------------------------------------------
 func executeCommands(clientset *kubernetes.Clientset, config AgentConfig, commands []Command) {
 	for _, cmd := range commands {
-		log.Printf("⚡ Executing command: %s", cmd.CommandType)
+		log.Printf("⚡ Executing command: %s (ID: %s)", cmd.CommandType, cmd.ID)
+		log.Printf("   Params: %v", cmd.CommandParams)
 
 		var result map[string]interface{}
 		var err error
 
-	switch cmd.CommandType {
-	case "restart_pod", "delete_pod":
-		result, err = deletePod(clientset, cmd.CommandParams)
-	case "scale_deployment":
-		result, err = scaleDeployment(clientset, cmd.CommandParams)
-	case "update_deployment_image":
-		result, err = updateDeploymentImage(clientset, cmd.CommandParams)
-	case "update_deployment_resources":
-		result, err = updateDeploymentResources(clientset, cmd.CommandParams)
-	default:
-		err = fmt.Errorf("unknown command type: %s", cmd.CommandType)
-	}
+		switch cmd.CommandType {
+		case "restart_pod", "delete_pod":
+			log.Printf("   → Deleting/restarting pod...")
+			result, err = deletePod(clientset, cmd.CommandParams)
+		case "scale_deployment":
+			log.Printf("   → Scaling deployment...")
+			result, err = scaleDeployment(clientset, cmd.CommandParams)
+		case "update_deployment_image":
+			log.Printf("   → Updating deployment image...")
+			result, err = updateDeploymentImage(clientset, cmd.CommandParams)
+		case "update_deployment_resources":
+			log.Printf("   → Updating deployment resources...")
+			result, err = updateDeploymentResources(clientset, cmd.CommandParams)
+		default:
+			err = fmt.Errorf("unknown command type: %s", cmd.CommandType)
+			log.Printf("   ❌ Unknown command type!")
+		}
+
+		if err != nil {
+			log.Printf("   ❌ Command failed: %v", err)
+		} else {
+			log.Printf("   ✅ Command succeeded: %v", result)
+		}
 
 		updateCommandStatus(config, cmd.ID, result, err)
 	}

@@ -119,24 +119,75 @@ serve(async (req) => {
           let healAction = '';
           let healParams: any = {};
 
+          // Extract pod info from anomaly data - check multiple locations
+          const autoHealParams = anomaly.ai_analysis?.auto_heal_params || {};
+          const affectedPods = anomaly.ai_analysis?.affected_pods || [];
+
+          // Try to get pod name from various sources
+          let podName = autoHealParams.pod_name || '';
+          let namespace = autoHealParams.namespace || 'default';
+
+          // If not in auto_heal_params, try affected_pods (format: "namespace/pod-name")
+          if (!podName && affectedPods.length > 0) {
+            const firstPod = affectedPods[0];
+            if (typeof firstPod === 'string' && firstPod.includes('/')) {
+              [namespace, podName] = firstPod.split('/');
+            } else if (typeof firstPod === 'string') {
+              podName = firstPod;
+            }
+          }
+
+          // Try to extract from description if still not found
+          if (!podName) {
+            const descMatch = anomaly.description?.match(/pod[:\s]+([a-z0-9-]+)/i);
+            if (descMatch) {
+              podName = descMatch[1];
+            }
+          }
+
+          console.log(`Processing anomaly ${anomaly.id}: type=${anomaly.anomaly_type}, pod=${namespace}/${podName}`);
+
           switch (anomaly.anomaly_type) {
             case 'pod_restart_loop':
             case 'crash_loop_backoff':
               healAction = 'restart_pod';
-              healParams = anomaly.ai_analysis?.auto_heal_params || {};
+              healParams = {
+                pod_name: podName,
+                namespace: namespace,
+                reason: `auto_heal_${anomaly.anomaly_type}`,
+              };
               break;
             case 'high_resource_usage':
             case 'resource_exhaustion':
               healAction = 'scale_deployment';
-              healParams = { replicas: 2 };
+              healParams = {
+                deployment_name: podName.replace(/-[a-z0-9]+-[a-z0-9]+$/, ''), // Remove pod suffix
+                namespace: namespace,
+                replicas: 2
+              };
               break;
             case 'image_pull_error':
-              healAction = 'update_image';
-              healParams = anomaly.ai_analysis?.auto_heal_params || {};
+              healAction = 'restart_pod';
+              healParams = {
+                pod_name: podName,
+                namespace: namespace,
+                reason: 'auto_heal_image_pull_error',
+              };
               break;
             default:
               healAction = anomaly.ai_analysis?.auto_heal || 'restart_pod';
-              healParams = anomaly.ai_analysis?.auto_heal_params || {};
+              healParams = {
+                pod_name: podName,
+                namespace: namespace,
+                reason: `auto_heal_${anomaly.anomaly_type}`,
+                ...anomaly.ai_analysis?.auto_heal_params,
+              };
+          }
+
+          // Skip if we don't have pod name
+          if (!healParams.pod_name && !healParams.deployment_name) {
+            console.log(`Skipping anomaly ${anomaly.id} - no pod/deployment name found`);
+            continue;
           }
 
           // Create command for the agent
@@ -200,7 +251,7 @@ serve(async (req) => {
     // 2. Check and fix resource-related issues (CPU/Memory limits)
     // NOTE: We only auto-apply resource adjustments, NOT RBAC or network policies
     if (settings?.auto_apply_security || force) {
-      // Get latest metrics to check for pods with high restart counts
+      // Get latest metrics to check for pods with issues
       const { data: latestMetrics } = await supabase
         .from('agent_metrics')
         .select('metric_data')
@@ -212,15 +263,58 @@ serve(async (req) => {
 
       const podDetails = latestMetrics?.metric_data?.pods || [];
 
-      // Find pods that are Running but have high restart counts (> 3)
+      // Find pods that are NOT Ready, in CrashLoopBackOff, or have restart issues
+      const podsWithIssues = podDetails.filter((pod: any) => {
+        // Skip system namespaces
+        if (['kube-system', 'kube-public', 'kube-node-lease'].includes(pod.namespace)) {
+          return false;
+        }
+
+        // Check for CrashLoopBackOff or ImagePullBackOff
+        const hasBackOff = pod.containers?.some((c: any) =>
+          c.state?.status === 'waiting' &&
+          (c.state?.reason === 'CrashLoopBackOff' || c.state?.reason === 'ImagePullBackOff')
+        );
+
+        // Check for high restart count
+        const hasHighRestarts = (pod.restarts > 3 || pod.total_restarts > 3);
+
+        // Check if pod is not ready but should be running
+        const isStuck = pod.phase === 'Running' && pod.ready === false;
+
+        return hasBackOff || hasHighRestarts || isStuck;
+      });
+
+      // Also include pods with high restarts that are running OK (clear restart counter)
       const podsWithHighRestarts = podDetails.filter((pod: any) =>
         (pod.phase === 'Running' || pod.status === 'Running') &&
         pod.ready === true &&
-        (pod.restarts > 3 || pod.total_restarts > 3)
+        (pod.restarts > 3 || pod.total_restarts > 3) &&
+        !['kube-system', 'kube-public', 'kube-node-lease'].includes(pod.namespace)
       );
 
+      // Combine and deduplicate
+      const podsToRestart = [...podsWithIssues];
       for (const pod of podsWithHighRestarts) {
+        if (!podsToRestart.some(p => p.name === pod.name && p.namespace === pod.namespace)) {
+          podsToRestart.push(pod);
+        }
+      }
+
+      for (const pod of podsToRestart) {
         const restartCount = pod.restarts || pod.total_restarts || 0;
+        const hasBackOff = pod.containers?.some((c: any) =>
+          c.state?.status === 'waiting' &&
+          (c.state?.reason === 'CrashLoopBackOff' || c.state?.reason === 'ImagePullBackOff')
+        );
+        const isNotReady = pod.phase === 'Running' && pod.ready === false;
+
+        let triggerReason = `Pod ${pod.name} has ${restartCount} restarts`;
+        if (hasBackOff) {
+          triggerReason = `Pod ${pod.name} is in CrashLoopBackOff or ImagePullBackOff`;
+        } else if (isNotReady) {
+          triggerReason = `Pod ${pod.name} is stuck in not-ready state`;
+        }
 
         // Log the action
         const { data: actionLog } = await supabase
@@ -228,15 +322,17 @@ serve(async (req) => {
           .insert({
             cluster_id,
             user_id: userId,
-            action_type: 'restart_pod_clear_counter',
-            trigger_reason: `Pod ${pod.name} has ${restartCount} restarts while running OK`,
+            action_type: 'restart_pod',
+            trigger_reason: triggerReason,
             trigger_entity_id: null,
             trigger_entity_type: 'pod',
             action_details: {
               pod_name: pod.name,
               namespace: pod.namespace,
               restart_count: restartCount,
-              reason: 'Clear restart counter by recreating pod',
+              has_backoff: hasBackOff,
+              is_not_ready: isNotReady,
+              reason: 'Auto-heal pod restart',
             },
             status: 'executing',
             started_at: new Date().toISOString(),
@@ -255,7 +351,7 @@ serve(async (req) => {
               command_params: {
                 pod_name: pod.name,
                 namespace: pod.namespace,
-                reason: 'auto_heal_clear_restarts',
+                reason: hasBackOff ? 'auto_heal_backoff' : isNotReady ? 'auto_heal_not_ready' : 'auto_heal_restarts',
               },
               status: 'pending',
             });
@@ -269,20 +365,21 @@ serve(async (req) => {
               result: {
                 command_sent: 'restart_pod',
                 params: { pod_name: pod.name, namespace: pod.namespace },
-                message: 'Pod will be recreated to clear restart counter'
+                message: 'Pod restart command sent to agent'
               },
             })
             .eq('id', actionLog?.id);
 
           actionsExecuted.push({
-            type: 'restart_pod_clear_counter',
+            type: 'restart_pod',
             target: `${pod.namespace}/${pod.name}`,
             action: 'restart_pod',
             restart_count: restartCount,
+            reason: triggerReason,
             success: true,
           });
 
-          console.log(`Scheduled restart for pod ${pod.namespace}/${pod.name} (${restartCount} restarts)`);
+          console.log(`Scheduled restart for pod ${pod.namespace}/${pod.name} - ${triggerReason}`);
         } catch (error: any) {
           // Update action log with error
           await supabase
@@ -295,7 +392,7 @@ serve(async (req) => {
             .eq('id', actionLog?.id);
 
           actionsExecuted.push({
-            type: 'restart_pod_clear_counter',
+            type: 'restart_pod',
             target: `${pod.namespace}/${pod.name}`,
             success: false,
             error: error.message,
@@ -303,7 +400,138 @@ serve(async (req) => {
         }
       }
 
-      // Handle resource limit issues only (NOT RBAC)
+      // Check security metrics for pods without resource limits
+      const { data: securityMetrics } = await supabase
+        .from('agent_metrics')
+        .select('metric_data')
+        .eq('cluster_id', cluster_id)
+        .eq('metric_type', 'security')
+        .order('collected_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      const podSecurityData = securityMetrics?.metric_data?.pod_security || {};
+      const totalPods = podSecurityData.total_pods || 0;
+      const podsWithLimits = podSecurityData.pods_with_resource_limits || 0;
+      const limitPercentage = podSecurityData.resource_limits_percentage || 0;
+
+      console.log(`Resource limits: ${podsWithLimits}/${totalPods} pods (${limitPercentage.toFixed(1)}%)`);
+
+      // If less than 50% of pods have resource limits, find and fix them
+      if (totalPods > 0 && limitPercentage < 50) {
+        // Find pods without resource limits from pod_details
+        const podsWithoutLimits = podDetails.filter((pod: any) => {
+          // Skip system namespaces
+          if (['kube-system', 'kube-public', 'kube-node-lease'].includes(pod.namespace)) {
+            return false;
+          }
+
+          // Check if any container lacks resource limits
+          return pod.containers?.some((c: any) => {
+            const resources = c.resources || {};
+            return !resources.limits || Object.keys(resources.limits).length === 0;
+          });
+        }).slice(0, 5); // Limit to 5 pods per run to avoid overwhelming
+
+        for (const pod of podsWithoutLimits) {
+          // Get deployment name from pod (usually pod name without the random suffix)
+          const podNameParts = pod.name.split('-');
+          podNameParts.pop(); // Remove random suffix
+          podNameParts.pop(); // Remove replica hash
+          const deploymentName = podNameParts.join('-');
+
+          if (!deploymentName) continue;
+
+          const containerName = pod.containers?.[0]?.name;
+          if (!containerName) continue;
+
+          // Log the action
+          const { data: actionLog } = await supabase
+            .from('auto_heal_actions_log')
+            .insert({
+              cluster_id,
+              user_id: userId,
+              action_type: 'apply_resource_limits',
+              trigger_reason: `Pod ${pod.name} lacks resource limits`,
+              trigger_entity_id: null,
+              trigger_entity_type: 'pod',
+              action_details: {
+                pod_name: pod.name,
+                deployment_name: deploymentName,
+                namespace: pod.namespace,
+                container_name: containerName,
+                reason: 'Auto-apply resource limits',
+              },
+              status: 'executing',
+              started_at: new Date().toISOString(),
+            })
+            .select()
+            .single();
+
+          try {
+            // Create command to update deployment resources
+            await supabase
+              .from('agent_commands')
+              .insert({
+                cluster_id,
+                user_id: userId,
+                command_type: 'update_deployment_resources',
+                command_params: {
+                  deployment_name: deploymentName,
+                  namespace: pod.namespace,
+                  container_name: containerName,
+                  cpu_request: '100m',
+                  cpu_limit: '500m',
+                  memory_request: '128Mi',
+                  memory_limit: '512Mi',
+                },
+                status: 'pending',
+              });
+
+            // Update action log
+            await supabase
+              .from('auto_heal_actions_log')
+              .update({
+                status: 'completed',
+                completed_at: new Date().toISOString(),
+                result: {
+                  command_sent: 'update_deployment_resources',
+                  deployment: deploymentName,
+                  namespace: pod.namespace,
+                  message: 'Resource limits will be applied'
+                },
+              })
+              .eq('id', actionLog?.id);
+
+            actionsExecuted.push({
+              type: 'apply_resource_limits',
+              target: `${pod.namespace}/${deploymentName}`,
+              action: 'update_deployment_resources',
+              success: true,
+            });
+
+            console.log(`Applied resource limits to ${pod.namespace}/${deploymentName}`);
+          } catch (error: any) {
+            await supabase
+              .from('auto_heal_actions_log')
+              .update({
+                status: 'failed',
+                completed_at: new Date().toISOString(),
+                error_message: error.message,
+              })
+              .eq('id', actionLog?.id);
+
+            actionsExecuted.push({
+              type: 'apply_resource_limits',
+              target: `${pod.namespace}/${deploymentName}`,
+              success: false,
+              error: error.message,
+            });
+          }
+        }
+      }
+
+      // Handle resource limit issues from security_threats table (legacy)
       const { data: threats } = await supabase
         .from('security_threats')
         .select('*')
