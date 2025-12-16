@@ -13,6 +13,7 @@ import { useSecurityThreats } from "@/hooks/useSecurityThreats";
 import { Bot, Activity, CheckCircle, Sparkles, Shield, Zap, AlertCircle, History, ShieldAlert, Settings } from "lucide-react";
 import { AutoHealConfig } from "@/components/AutoHealConfig";
 import { AutoHealActionsLog } from "@/components/AutoHealActionsLog";
+import { ClusterSecurityAnalysis } from "@/components/ClusterSecurityAnalysis";
 import { toast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -619,6 +620,9 @@ export default function AIMonitor() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Cluster Security Analysis - RBAC, Network Policies, Pod Security, etc */}
+            <ClusterSecurityAnalysis />
           </TabsContent>
 
           {/* Anomalies Tab */}
