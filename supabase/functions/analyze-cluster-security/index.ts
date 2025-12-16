@@ -107,6 +107,77 @@ serve(async (req) => {
     const securityData = securityMetric?.metric_data as any || null;
     console.log('Security data from agent:', securityData ? JSON.stringify(securityData) : 'Not available');
 
+    // DETERMINISTIC ANALYSIS - Calculate boolean flags based on actual data with fixed thresholds
+    const calculateDeterministicAnalysis = (data: any) => {
+      if (!data) {
+        return {
+          has_rbac: false,
+          has_network_policies: false,
+          has_pod_security: false,
+          has_secrets_encryption: false,
+          has_resource_limits: false,
+        };
+      }
+
+      // RBAC: Consider configured if has cluster roles and role bindings
+      const has_rbac = (data.rbac?.cluster_roles_count > 0 || data.rbac?.roles_count > 0) && 
+                       (data.rbac?.cluster_role_bindings_count > 0 || data.rbac?.role_bindings_count > 0);
+
+      // Network Policies: Consider configured if total_count > 0
+      const has_network_policies = (data.network_policies?.total_count || 0) > 0;
+
+      // Pod Security: Consider configured if >50% of pods have security context AND resource limits
+      const totalPods = data.pod_security?.total_pods || 0;
+      const podsWithContext = data.pod_security?.pods_with_security_context || 0;
+      const podsWithLimits = data.pod_security?.pods_with_resource_limits || 0;
+      const securityContextPercentage = totalPods > 0 ? (podsWithContext / totalPods) * 100 : 0;
+      const has_pod_security = securityContextPercentage >= 50;
+
+      // Secrets: Consider configured if secrets exist
+      const has_secrets_encryption = (data.secrets?.total_count || 0) > 0;
+
+      // Resource Limits: Consider configured if >50% of pods have limits
+      const resourceLimitsPercentage = data.pod_security?.resource_limits_percentage || 
+        (totalPods > 0 ? (podsWithLimits / totalPods) * 100 : 0);
+      const has_resource_limits = resourceLimitsPercentage >= 50;
+
+      return {
+        has_rbac,
+        has_network_policies,
+        has_pod_security,
+        has_secrets_encryption,
+        has_resource_limits,
+      };
+    };
+
+    const deterministicFlags = calculateDeterministicAnalysis(securityData);
+    console.log('Deterministic analysis flags:', JSON.stringify(deterministicFlags));
+
+    // Calculate security score deterministically
+    const calculateSecurityScore = (flags: typeof deterministicFlags, data: any) => {
+      let score = 0;
+      
+      // RBAC: 25 points
+      if (flags.has_rbac) score += 25;
+      
+      // Network Policies: 20 points
+      if (flags.has_network_policies) score += 20;
+      
+      // Pod Security: 20 points
+      if (flags.has_pod_security) score += 20;
+      
+      // Secrets: 15 points
+      if (flags.has_secrets_encryption) score += 15;
+      
+      // Resource Limits: 20 points
+      if (flags.has_resource_limits) score += 20;
+      
+      return Math.min(100, Math.max(0, score));
+    };
+
+    const securityScore = calculateSecurityScore(deterministicFlags, securityData);
+    const overallStatus = securityScore >= 80 ? 'passed' : securityScore >= 50 ? 'warning' : 'failed';
+
     // Format network policies info with namespace details
     const formatNetworkPolicies = (npData: any) => {
       if (!npData) return 'Dados não disponíveis';
@@ -139,75 +210,53 @@ ${icData.rbac_details?.missing_permissions?.length > 0 ? `⚠️ Permissões fal
 ${icData.rbac_details?.warnings?.length > 0 ? `⚠️ Avisos: ${icData.rbac_details.warnings.join(', ')}` : ''}`;
     };
 
-    // Prepare prompt for AI security analysis with real data
-    const prompt = `Você é um especialista em segurança Kubernetes. Analise os dados REAIS coletados do cluster.
+    // Prepare prompt for AI - only for recommendations and details, not boolean flags
+    const prompt = `Você é um especialista em segurança Kubernetes. Os dados abaixo foram analisados e os status já foram determinados.
 
-IMPORTANTE: Os dados foram coletados de TODOS os namespaces do cluster. Analise considerando o cluster inteiro.
+IMPORTANTE: NÃO ALTERE os valores booleanos já definidos. Apenas forneça detalhes e recomendações.
 
 Cluster: ${cluster.name} (${cluster.provider}, ${cluster.environment})
 Nodes: ${cluster.nodes || 0} | Pods: ${cluster.pods || 0}
 
-${securityData ? `
-=== DADOS REAIS DO CLUSTER (COLETADOS DE TODOS OS NAMESPACES) ===
+=== ANÁLISE DETERMINÍSTICA (JÁ CALCULADA - NÃO ALTERAR) ===
+- has_rbac: ${deterministicFlags.has_rbac}
+- has_network_policies: ${deterministicFlags.has_network_policies}
+- has_pod_security: ${deterministicFlags.has_pod_security}
+- has_secrets_encryption: ${deterministicFlags.has_secrets_encryption}
+- has_resource_limits: ${deterministicFlags.has_resource_limits}
+- security_score: ${securityScore}
+- overall_status: ${overallStatus}
 
-📋 RBAC (Role-Based Access Control):
+${securityData ? `
+=== DADOS BRUTOS DO CLUSTER ===
+
+📋 RBAC:
 - Cluster Roles: ${securityData.rbac?.cluster_roles_count || 0}
 - Cluster Role Bindings: ${securityData.rbac?.cluster_role_bindings_count || 0}
-- Roles (todos namespaces): ${securityData.rbac?.roles_count || 0}
-- Role Bindings (todos namespaces): ${securityData.rbac?.role_bindings_count || 0}
-- RBAC configurado: ${securityData.rbac?.has_rbac ? 'SIM' : 'NÃO'}
+- Roles: ${securityData.rbac?.roles_count || 0}
+- Role Bindings: ${securityData.rbac?.role_bindings_count || 0}
 
 🌐 INGRESS CONTROLLER:
 ${formatIngressController(securityData.ingress_controller)}
 
-🔒 NETWORK POLICIES (Coletadas de TODOS os namespaces):
+🔒 NETWORK POLICIES:
 ${formatNetworkPolicies(securityData.network_policies)}
 
-🔐 SECRETS (Coletados de TODOS os namespaces):
-- Total de Secrets: ${securityData.secrets?.total_count || 0}
-- Tipos de Secrets: ${JSON.stringify(securityData.secrets?.types || {})}
-- Secrets existem: ${securityData.secrets?.has_secrets ? 'SIM' : 'NÃO'}
-
-📊 RESOURCE QUOTAS (Todos namespaces):
-- Total: ${securityData.resource_quotas?.total_count || 0}
-- Configurados: ${securityData.resource_quotas?.has_quotas ? 'SIM' : 'NÃO'}
-
-📏 LIMIT RANGES (Todos namespaces):
-- Total: ${securityData.limit_ranges?.total_count || 0}
-- Configurados: ${securityData.limit_ranges?.has_limit_ranges ? 'SIM' : 'NÃO'}
-
-🛡️ POD SECURITY (Análise de todos os pods):
-- Pods com Security Context: ${securityData.pod_security?.pods_with_security_context || 0}
-- Pods rodando como non-root: ${securityData.pod_security?.pods_running_as_non_root || 0}
-- Pods com Resource Limits: ${securityData.pod_security?.pods_with_resource_limits || 0}
+🛡️ POD SECURITY:
+- Pods com Security Context: ${securityData.pod_security?.pods_with_security_context || 0}/${securityData.pod_security?.total_pods || 0}
+- Pods com Resource Limits: ${securityData.pod_security?.pods_with_resource_limits || 0}/${securityData.pod_security?.total_pods || 0}
 - Containers privilegiados: ${securityData.pod_security?.privileged_containers || 0}
-- Total de Pods analisados: ${securityData.pod_security?.total_pods || 0}
-` : `
-ATENÇÃO: Dados de segurança não disponíveis. O agente pode não estar instalado ou atualizado.
-Métricas disponíveis:
-${metricsContext.map(m => `- ${m.type}: ${m.sample}`).join('\n')}
-`}
 
-Baseado nesses dados${securityData ? ' REAIS' : ''}, avalie:
-1. RBAC - está configurado adequadamente? (verifique cluster roles e bindings)
-2. Ingress Controller - foi detectado? Qual tipo (nginx, traefik, etc)? O RBAC está configurado corretamente para ele?
-3. NetworkPolicies - SE total_count > 0, EXISTEM políticas de rede! Avalie se a cobertura é adequada.
-4. Pod Security - containers têm security context e limits?
-5. Secrets - existem secrets configurados? (verifique tipos)
-6. Resource Limits - pods têm limits definidos?
+🔐 SECRETS:
+- Total: ${securityData.secrets?.total_count || 0}
+` : 'Dados de segurança não disponíveis do agente.'}
 
-CRITÉRIO IMPORTANTE PARA INGRESS CONTROLLER:
-- Se detectado, verifique se o RBAC está configurado corretamente
-- Se há permissões faltando, reporte como um problema de segurança
-- Considere que ingress controllers precisam de acesso a services, endpoints, secrets, configmaps e ingresses
+Baseado nos dados acima, forneça:
+1. Detalhes sobre cada área (issues encontradas e recomendações específicas)
+2. Um resumo executivo da postura de segurança
+3. Recomendações prioritárias
 
-CRITÉRIO IMPORTANTE PARA NETWORK POLICIES:
-- Se total_count > 0, marque has_network_policies como TRUE
-- Se namespaces_with_policies > 0, as políticas existem e estão sendo usadas
-- Avalie se a cobertura é parcial (poucos namespaces) ou completa
-
-Retorne a análise com scores baseados nos dados${securityData ? ' reais' : ''} acima.
-Considere que este é um cluster ${cluster.environment}.`;
+IMPORTANTE: Use EXATAMENTE os valores booleanos e scores já definidos acima.`;
 
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
@@ -356,28 +405,63 @@ Considere que este é um cluster ${cluster.environment}.`;
 
     const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
     
-    let analysis;
+    let aiAnalysis;
     if (toolCall?.function?.arguments) {
-      analysis = JSON.parse(toolCall.function.arguments);
+      aiAnalysis = JSON.parse(toolCall.function.arguments);
     } else {
-      // Fallback analysis
-      analysis = {
-        has_rbac: false,
-        rbac_details: { status: 'missing', issues: ['Não foi possível verificar RBAC'], recommendations: ['Configure RBAC no cluster'] },
-        has_network_policies: false,
-        network_policy_details: { status: 'missing', issues: ['NetworkPolicies não detectadas'], recommendations: ['Implemente NetworkPolicies'] },
-        has_pod_security: false,
-        pod_security_details: { status: 'missing', issues: ['Pod Security não configurado'], recommendations: ['Configure Pod Security Standards'] },
-        has_secrets_encryption: false,
-        secrets_details: { status: 'missing', issues: ['Encriptação de secrets não verificada'], recommendations: ['Habilite encryption at rest'] },
-        has_resource_limits: false,
-        resource_limits_details: { status: 'missing', issues: ['Resource limits não definidos'], recommendations: ['Defina limits e requests para pods'] },
-        security_score: 20,
-        overall_status: 'warning',
-        recommendations: ['Execute uma análise completa com o agente instalado'],
-        summary: 'Análise preliminar. Instale o agente Kuberpulse para uma análise completa de segurança.'
+      aiAnalysis = {
+        rbac_details: { status: 'missing', issues: ['Não foi possível verificar'], recommendations: ['Configure RBAC'] },
+        network_policy_details: { status: 'missing', issues: ['Não verificado'], recommendations: ['Implemente NetworkPolicies'] },
+        pod_security_details: { status: 'missing', issues: ['Não verificado'], recommendations: ['Configure Pod Security'] },
+        secrets_details: { status: 'missing', issues: ['Não verificado'], recommendations: ['Habilite encryption'] },
+        resource_limits_details: { status: 'missing', issues: ['Não verificado'], recommendations: ['Defina limits'] },
+        recommendations: ['Execute análise com agente instalado'],
+        summary: 'Análise preliminar - instale o agente para análise completa.'
       };
     }
+
+    // OVERRIDE AI boolean values with deterministic values - this ensures consistency
+    const analysis = {
+      has_rbac: deterministicFlags.has_rbac,
+      rbac_details: {
+        ...aiAnalysis.rbac_details,
+        status: deterministicFlags.has_rbac ? 'configured' : 'missing'
+      },
+      has_network_policies: deterministicFlags.has_network_policies,
+      network_policy_details: {
+        ...aiAnalysis.network_policy_details,
+        status: deterministicFlags.has_network_policies ? 'configured' : 'missing'
+      },
+      has_pod_security: deterministicFlags.has_pod_security,
+      pod_security_details: {
+        ...aiAnalysis.pod_security_details,
+        status: deterministicFlags.has_pod_security ? 'configured' : 'partial'
+      },
+      has_secrets_encryption: deterministicFlags.has_secrets_encryption,
+      secrets_details: {
+        ...aiAnalysis.secrets_details,
+        status: deterministicFlags.has_secrets_encryption ? 'configured' : 'missing'
+      },
+      has_resource_limits: deterministicFlags.has_resource_limits,
+      resource_limits_details: {
+        ...aiAnalysis.resource_limits_details,
+        status: deterministicFlags.has_resource_limits ? 'configured' : 'partial'
+      },
+      security_score: securityScore,
+      overall_status: overallStatus,
+      recommendations: aiAnalysis.recommendations || [],
+      summary: aiAnalysis.summary || 'Análise de segurança concluída.'
+    };
+
+    console.log('Final analysis with deterministic flags:', JSON.stringify({
+      has_rbac: analysis.has_rbac,
+      has_network_policies: analysis.has_network_policies,
+      has_pod_security: analysis.has_pod_security,
+      has_secrets_encryption: analysis.has_secrets_encryption,
+      has_resource_limits: analysis.has_resource_limits,
+      security_score: analysis.security_score,
+      overall_status: analysis.overall_status
+    }));
 
     // Save to database
     const { data: scanResult, error: insertError } = await supabaseAdmin
