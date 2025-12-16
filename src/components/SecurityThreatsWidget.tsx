@@ -11,6 +11,7 @@ import {
   Terminal,
   ArrowRight,
   Activity,
+  Radio,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
@@ -18,7 +19,7 @@ import { ptBR } from 'date-fns/locale';
 
 export function SecurityThreatsWidget() {
   const navigate = useNavigate();
-  const { threats, stats, loading, scanning, runSecurityScan } = useSecurityThreats();
+  const { threats, stats, loading } = useSecurityThreats();
 
   // Get only active threats for display
   const activeThreats = threats.filter(t => t.status === 'active').slice(0, 3);
@@ -99,7 +100,7 @@ export function SecurityThreatsWidget() {
           )}
         </div>
         <CardDescription>
-          Monitoramento em tempo real de ameacas de seguranca
+          IA monitorando continuamente DDoS, hackers e atividades suspeitas
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -177,27 +178,14 @@ export function SecurityThreatsWidget() {
           </div>
         )}
 
+        {/* Real-time Monitoring Status */}
+        <div className="flex items-center gap-2 p-2 rounded-lg bg-green-500/10 border border-green-500/20">
+          <Radio className="w-4 h-4 text-green-400 animate-pulse" />
+          <span className="text-xs text-green-400 font-medium">Monitoramento ativo 24/7</span>
+        </div>
+
         {/* Actions */}
         <div className="flex gap-2 pt-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="flex-1"
-            onClick={runSecurityScan}
-            disabled={scanning || loading}
-          >
-            {scanning ? (
-              <>
-                <Activity className="w-4 h-4 mr-1 animate-spin" />
-                Escaneando...
-              </>
-            ) : (
-              <>
-                <Shield className="w-4 h-4 mr-1" />
-                Escanear
-              </>
-            )}
-          </Button>
           <Button
             variant="default"
             size="sm"

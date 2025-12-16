@@ -116,13 +116,13 @@ serve(async (req) => {
       throw new Error('Unauthorized');
     }
 
-    const { cluster_id } = await req.json();
+    const { cluster_id, silent = false } = await req.json();
 
     if (!cluster_id) {
       throw new Error('cluster_id is required');
     }
 
-    console.log(`🔒 Starting security threat analysis for cluster ${cluster_id}`);
+    console.log(`🔒 Starting ${silent ? 'background ' : ''}security threat analysis for cluster ${cluster_id}`);
 
     // Get recent security_threats metrics
     const { data: metrics, error: metricsError } = await supabaseClient
@@ -379,58 +379,81 @@ Retorne JSON (sem markdown):
 
     const threats = analysisResult.threats || [];
 
-    // Store threats in database
+    // Store threats in database (check for duplicates first)
     if (threats.length > 0) {
-      const threatsToInsert = threats.map((threat: any) => ({
-        cluster_id,
-        user_id: user.id,
-        threat_type: threat.threat_type,
-        severity: threat.severity,
-        title: threat.title,
-        description: threat.description,
-        container_name: threat.container_name,
-        pod_name: threat.pod_name,
-        namespace: threat.namespace,
-        node_name: threat.node_name,
-        suspicious_command: threat.suspicious_command,
-        ai_analysis: threat.ai_analysis,
-        evidence: threat.evidence,
-        raw_data: allThreats.find(t =>
-          t.pod_name === threat.pod_name &&
-          t.namespace === threat.namespace
-        ),
-      }));
-
-      const { error: insertError } = await supabaseClient
+      // Get existing active threats to avoid duplicates
+      const { data: existingThreats } = await supabaseClient
         .from('security_threats')
-        .insert(threatsToInsert);
+        .select('pod_name, namespace, threat_type')
+        .eq('cluster_id', cluster_id)
+        .eq('status', 'active')
+        .gte('created_at', new Date(Date.now() - 30 * 60 * 1000).toISOString()); // Last 30 minutes
 
-      if (insertError) {
-        console.error('Error storing threats:', insertError);
-      }
-
-      // Create critical/high severity notifications
-      const criticalHighThreats = threats.filter((t: any) =>
-        t.severity === 'critical' || t.severity === 'high'
+      const existingThreatKeys = new Set(
+        (existingThreats || []).map((t: any) => `${t.pod_name}-${t.namespace}-${t.threat_type}`)
       );
 
-      if (criticalHighThreats.length > 0) {
-        await supabaseClient
-          .from('notifications')
-          .insert({
-            user_id: user.id,
-            title: criticalHighThreats.some((t: any) => t.severity === 'critical')
-              ? '🚨 ALERTA CRITICO DE SEGURANCA'
-              : '⚠️ Alerta de Seguranca',
-            message: `Detectadas ${criticalHighThreats.length} ameaca(s) de alta severidade no cluster. Verifique imediatamente!`,
-            type: 'error',
-            related_entity_type: 'security_threat',
-            related_entity_id: cluster_id,
-          });
+      const newThreats = threats.filter((threat: any) => {
+        const key = `${threat.pod_name}-${threat.namespace}-${threat.threat_type}`;
+        return !existingThreatKeys.has(key);
+      });
+
+      if (newThreats.length > 0) {
+        const threatsToInsert = newThreats.map((threat: any) => ({
+          cluster_id,
+          user_id: user.id,
+          threat_type: threat.threat_type,
+          severity: threat.severity,
+          title: threat.title,
+          description: threat.description,
+          container_name: threat.container_name,
+          pod_name: threat.pod_name,
+          namespace: threat.namespace,
+          node_name: threat.node_name,
+          suspicious_command: threat.suspicious_command,
+          ai_analysis: threat.ai_analysis,
+          evidence: threat.evidence,
+          raw_data: allThreats.find(t =>
+            t.pod_name === threat.pod_name &&
+            t.namespace === threat.namespace
+          ),
+        }));
+
+        const { error: insertError } = await supabaseClient
+          .from('security_threats')
+          .insert(threatsToInsert);
+
+        if (insertError) {
+          console.error('Error storing threats:', insertError);
+        }
+
+        // Create critical/high severity notifications only for NEW threats and not in silent mode
+        if (!silent) {
+          const criticalHighThreats = newThreats.filter((t: any) =>
+            t.severity === 'critical' || t.severity === 'high'
+          );
+
+          if (criticalHighThreats.length > 0) {
+            await supabaseClient
+              .from('notifications')
+              .insert({
+                user_id: user.id,
+                title: criticalHighThreats.some((t: any) => t.severity === 'critical')
+                  ? '🚨 ALERTA CRITICO DE SEGURANCA'
+                  : '⚠️ Alerta de Seguranca',
+                message: `Detectadas ${criticalHighThreats.length} nova(s) ameaca(s) de alta severidade no cluster. Verifique imediatamente!`,
+                type: 'error',
+                related_entity_type: 'security_threat',
+                related_entity_id: cluster_id,
+              });
+          }
+        }
+
+        console.log(`✅ Security analysis complete: ${newThreats.length} NEW threats detected (${threats.length - newThreats.length} duplicates skipped)`);
+      } else {
+        console.log(`✅ Security analysis complete: No new threats (${threats.length} duplicates skipped)`);
       }
     }
-
-    console.log(`✅ Security analysis complete: ${threats.length} threats detected`);
 
     return new Response(
       JSON.stringify({

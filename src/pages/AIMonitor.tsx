@@ -64,13 +64,11 @@ export default function AIMonitor() {
   const [scanHistory, setScanHistory] = useState<any[]>([]);
   const [agentCommands, setAgentCommands] = useState<any[]>([]);
 
-  // Security Threats Hook
+  // Security Threats Hook - Real-time monitoring
   const {
     threats,
     stats: threatStats,
     loading: threatsLoading,
-    scanning: threatsScanning,
-    runSecurityScan,
     mitigateThreat,
     markAsFalsePositive,
     updateThreatStatus,
@@ -341,8 +339,6 @@ export default function AIMonitor() {
     return true;
   });
 
-  const totalSavingsAmount = Array.from(savings.values()).reduce((sum, s) => sum + Number(s.estimated_savings), 0);
-
   // Stats baseadas no cluster selecionado
   const clusterIncidents = selectedClusterId
     ? incidents.filter(i => i.cluster_id === selectedClusterId)
@@ -505,15 +501,19 @@ export default function AIMonitor() {
 
           {/* Security Threats Tab */}
           <TabsContent value="security" className="space-y-4">
-            {/* Security Scan Actions */}
+            {/* Real-time Security Monitoring Status */}
             <Card className="border-red-500/20 bg-gradient-to-br from-red-500/5 to-orange-500/5">
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <ShieldAlert className="w-5 h-5 text-red-400" />
-                    <CardTitle>Deteccao de Ameacas</CardTitle>
+                    <CardTitle>Monitoramento de Seguranca em Tempo Real</CardTitle>
                   </div>
                   <div className="flex items-center gap-2">
+                    <Badge className="bg-green-500/20 text-green-400 border-green-500/30 animate-pulse">
+                      <Activity className="w-3 h-3 mr-1" />
+                      Monitorando
+                    </Badge>
                     {threatStats.critical > 0 && (
                       <Badge variant="destructive" className="animate-pulse">
                         {threatStats.critical} Criticas
@@ -527,7 +527,7 @@ export default function AIMonitor() {
                   </div>
                 </div>
                 <CardDescription>
-                  Sistema de IA para deteccao de DDoS, hackers, cryptomining e atividades suspeitas em containers
+                  IA monitorando continuamente seus containers para detectar DDoS, hackers, cryptomining e atividades suspeitas em tempo real
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -554,24 +554,14 @@ export default function AIMonitor() {
                   </div>
                 </div>
 
-                <div className="flex gap-3">
-                  <button
-                    onClick={runSecurityScan}
-                    disabled={threatsScanning || !selectedClusterId}
-                    className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
-                  >
-                    {threatsScanning ? (
-                      <>
-                        <Shield className="w-4 h-4 animate-spin" />
-                        Escaneando Ameacas...
-                      </>
-                    ) : (
-                      <>
-                        <ShieldAlert className="w-4 h-4" />
-                        Varredura de Seguranca
-                      </>
-                    )}
-                  </button>
+                {/* Real-time monitoring info */}
+                <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
+                  <div className="flex items-center gap-2 text-sm">
+                    <Bot className="w-4 h-4 text-primary animate-pulse" />
+                    <span className="text-muted-foreground">
+                      O agente Kuberpulse esta analisando automaticamente metricas de rede, CPU, memoria e processos suspeitos para detectar ameacas como DDoS, brute force e cryptomining.
+                    </span>
+                  </div>
                 </div>
               </CardContent>
             </Card>
