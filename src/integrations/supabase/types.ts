@@ -361,6 +361,112 @@ export type Database = {
         }
         Relationships: []
       }
+      auto_heal_actions_log: {
+        Row: {
+          action_details: Json
+          action_type: string
+          cluster_id: string
+          completed_at: string | null
+          created_at: string
+          error_message: string | null
+          id: string
+          result: Json | null
+          started_at: string | null
+          status: string
+          trigger_entity_id: string | null
+          trigger_entity_type: string | null
+          trigger_reason: string
+          user_id: string
+        }
+        Insert: {
+          action_details?: Json
+          action_type: string
+          cluster_id: string
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          result?: Json | null
+          started_at?: string | null
+          status?: string
+          trigger_entity_id?: string | null
+          trigger_entity_type?: string | null
+          trigger_reason: string
+          user_id: string
+        }
+        Update: {
+          action_details?: Json
+          action_type?: string
+          cluster_id?: string
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          result?: Json | null
+          started_at?: string | null
+          status?: string
+          trigger_entity_id?: string | null
+          trigger_entity_type?: string | null
+          trigger_reason?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "auto_heal_actions_log_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      auto_heal_settings: {
+        Row: {
+          auto_apply_anomalies: boolean
+          auto_apply_security: boolean
+          cluster_id: string
+          created_at: string
+          enabled: boolean
+          id: string
+          scan_interval_minutes: number
+          severity_threshold: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          auto_apply_anomalies?: boolean
+          auto_apply_security?: boolean
+          cluster_id: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          scan_interval_minutes?: number
+          severity_threshold?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          auto_apply_anomalies?: boolean
+          auto_apply_security?: boolean
+          cluster_id?: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          scan_interval_minutes?: number
+          severity_threshold?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "auto_heal_settings_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: true
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cluster_events: {
         Row: {
           cluster_id: string
@@ -983,6 +1089,89 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      security_threats: {
+        Row: {
+          acknowledged: boolean | null
+          acknowledged_at: string | null
+          affected_resources: Json | null
+          ai_analysis: Json | null
+          ai_recommendation: string | null
+          auto_remediated: boolean | null
+          cluster_id: string
+          created_at: string
+          description: string | null
+          detection_source: string | null
+          false_positive: boolean | null
+          id: string
+          raw_data: Json | null
+          remediated_at: string | null
+          remediation_result: Json | null
+          remediation_steps: Json | null
+          severity: string
+          status: string
+          threat_type: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          acknowledged?: boolean | null
+          acknowledged_at?: string | null
+          affected_resources?: Json | null
+          ai_analysis?: Json | null
+          ai_recommendation?: string | null
+          auto_remediated?: boolean | null
+          cluster_id: string
+          created_at?: string
+          description?: string | null
+          detection_source?: string | null
+          false_positive?: boolean | null
+          id?: string
+          raw_data?: Json | null
+          remediated_at?: string | null
+          remediation_result?: Json | null
+          remediation_steps?: Json | null
+          severity?: string
+          status?: string
+          threat_type: string
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          acknowledged?: boolean | null
+          acknowledged_at?: string | null
+          affected_resources?: Json | null
+          ai_analysis?: Json | null
+          ai_recommendation?: string | null
+          auto_remediated?: boolean | null
+          cluster_id?: string
+          created_at?: string
+          description?: string | null
+          detection_source?: string | null
+          false_positive?: boolean | null
+          id?: string
+          raw_data?: Json | null
+          remediated_at?: string | null
+          remediation_result?: Json | null
+          remediation_steps?: Json | null
+          severity?: string
+          status?: string
+          threat_type?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "security_threats_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       subscriptions: {
         Row: {

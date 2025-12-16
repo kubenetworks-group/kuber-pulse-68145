@@ -13,6 +13,27 @@ export interface SecurityThreat {
   status: 'active' | 'investigating' | 'mitigated' | 'false_positive';
   title: string;
   description: string | null;
+  affected_resources: any[];
+  ai_analysis: {
+    threat_score?: number;
+    confidence?: number;
+    indicators?: string[];
+    recommendation?: string;
+    mitigation_steps?: string[];
+  } | null;
+  ai_recommendation: string | null;
+  remediation_steps: any[];
+  auto_remediated: boolean;
+  remediated_at: string | null;
+  remediation_result: any;
+  detection_source: string;
+  raw_data: any;
+  false_positive: boolean;
+  acknowledged: boolean;
+  acknowledged_at: string | null;
+  created_at: string;
+  updated_at: string;
+  // Legacy fields for backwards compatibility
   container_name: string | null;
   container_id: string | null;
   pod_name: string | null;
@@ -25,22 +46,11 @@ export interface SecurityThreat {
   affected_port: number | null;
   connection_count: number | null;
   network_activity: any;
-  ai_analysis: {
-    threat_score?: number;
-    confidence?: number;
-    indicators?: string[];
-    recommendation?: string;
-    mitigation_steps?: string[];
-  } | null;
   evidence: any;
-  raw_data: any;
   mitigated: boolean;
   mitigated_at: string | null;
   mitigation_action: string | null;
-  false_positive: boolean;
   detected_at: string;
-  created_at: string;
-  updated_at: string;
 }
 
 export interface ThreatStats {
@@ -69,6 +79,28 @@ export function useSecurityThreats() {
     mitigated: 0,
   });
 
+  // Helper to transform data with defaults
+  const transformThreat = (data: any): SecurityThreat => ({
+    ...data,
+    container_name: data.container_name || data.affected_resources?.[0]?.container || null,
+    container_id: data.container_id || null,
+    pod_name: data.pod_name || data.affected_resources?.[0]?.pod || null,
+    namespace: data.namespace || data.affected_resources?.[0]?.namespace || null,
+    node_name: data.node_name || data.affected_resources?.[0]?.node || null,
+    suspicious_command: data.suspicious_command || data.raw_data?.command || null,
+    suspicious_process: data.suspicious_process || null,
+    source_ip: data.source_ip || data.raw_data?.source_ip || null,
+    destination_ip: data.destination_ip || data.raw_data?.destination_ip || null,
+    affected_port: data.affected_port || data.raw_data?.port || null,
+    connection_count: data.connection_count || null,
+    network_activity: data.network_activity || null,
+    evidence: data.evidence || data.raw_data || null,
+    mitigated: data.mitigated ?? data.status === 'mitigated',
+    mitigated_at: data.mitigated_at || data.remediated_at || null,
+    mitigation_action: data.mitigation_action || data.remediation_result?.action || null,
+    detected_at: data.detected_at || data.created_at,
+  });
+
   // Fetch threats
   const fetchThreats = async () => {
     if (!user) return;
@@ -76,10 +108,10 @@ export function useSecurityThreats() {
     setLoading(true);
     try {
       let query = supabase
-        .from('security_threats')
+        .from('security_threats' as any)
         .select('*')
         .eq('user_id', user.id)
-        .order('detected_at', { ascending: false });
+        .order('created_at', { ascending: false });
 
       if (selectedClusterId) {
         query = query.eq('cluster_id', selectedClusterId);
@@ -89,10 +121,10 @@ export function useSecurityThreats() {
 
       if (error) throw error;
 
-      setThreats((data as SecurityThreat[]) || []);
+      const threatData = ((data as any[]) || []).map(transformThreat);
+      setThreats(threatData);
 
       // Calculate stats
-      const threatData = (data as SecurityThreat[]) || [];
       setStats({
         total: threatData.length,
         critical: threatData.filter(t => t.severity === 'critical').length,
@@ -100,7 +132,7 @@ export function useSecurityThreats() {
         medium: threatData.filter(t => t.severity === 'medium').length,
         low: threatData.filter(t => t.severity === 'low').length,
         active: threatData.filter(t => t.status === 'active').length,
-        mitigated: threatData.filter(t => t.mitigated).length,
+        mitigated: threatData.filter(t => t.status === 'mitigated' || t.mitigated).length,
       });
     } catch (error) {
       console.error('Error fetching threats:', error);
@@ -114,7 +146,7 @@ export function useSecurityThreats() {
     if (!selectedClusterId) {
       toast({
         title: 'Selecione um cluster',
-        description: 'Por favor, selecione um cluster para executar a varredura de seguranca.',
+        description: 'Por favor, selecione um cluster para executar a varredura de segurança.',
         variant: 'destructive',
       });
       return;
@@ -130,14 +162,14 @@ export function useSecurityThreats() {
 
       if (data.threats_found > 0) {
         toast({
-          title: '🚨 Ameacas Detectadas',
-          description: `Foram encontradas ${data.threats_found} ameaca(s) de seguranca!`,
+          title: '🚨 Ameaças Detectadas',
+          description: `Foram encontradas ${data.threats_found} ameaça(s) de segurança!`,
           variant: 'destructive',
         });
       } else {
         toast({
           title: '✅ Cluster Seguro',
-          description: 'Nenhuma ameaca de seguranca foi detectada.',
+          description: 'Nenhuma ameaça de segurança foi detectada.',
         });
       }
 
@@ -149,7 +181,7 @@ export function useSecurityThreats() {
       console.error('Error running security scan:', error);
       toast({
         title: 'Erro na varredura',
-        description: error.message || 'Falha ao executar varredura de seguranca',
+        description: error.message || 'Falha ao executar varredura de segurança',
         variant: 'destructive',
       });
     } finally {
@@ -157,24 +189,55 @@ export function useSecurityThreats() {
     }
   };
 
+  // Implement security fix
+  const implementSecurityFix = async (threatId: string, fixType: string) => {
+    if (!selectedClusterId) return;
+
+    try {
+      const { data, error } = await supabase.functions.invoke('execute-security-fix', {
+        body: { 
+          cluster_id: selectedClusterId,
+          threat_id: threatId,
+          fix_type: fixType
+        },
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: '🔧 Correção Aplicada',
+        description: 'A correção de segurança foi implementada com sucesso.',
+      });
+
+      await fetchThreats();
+      return data;
+    } catch (error: any) {
+      console.error('Error implementing security fix:', error);
+      toast({
+        title: 'Erro',
+        description: error.message || 'Falha ao implementar correção',
+        variant: 'destructive',
+      });
+    }
+  };
+
   // Mark threat as mitigated
   const mitigateThreat = async (threatId: string, action: string) => {
     try {
       const { error } = await supabase
-        .from('security_threats')
+        .from('security_threats' as any)
         .update({
           status: 'mitigated',
-          mitigated: true,
-          mitigated_at: new Date().toISOString(),
-          mitigation_action: action,
+          remediated_at: new Date().toISOString(),
+          remediation_result: { action, manual: true },
         })
         .eq('id', threatId);
 
       if (error) throw error;
 
       toast({
-        title: '✅ Ameaca Mitigada',
-        description: 'A ameaca foi marcada como mitigada.',
+        title: '✅ Ameaça Mitigada',
+        description: 'A ameaça foi marcada como mitigada.',
       });
 
       await fetchThreats();
@@ -182,7 +245,7 @@ export function useSecurityThreats() {
       console.error('Error mitigating threat:', error);
       toast({
         title: 'Erro',
-        description: 'Falha ao mitigar ameaca',
+        description: 'Falha ao mitigar ameaça',
         variant: 'destructive',
       });
     }
@@ -192,7 +255,7 @@ export function useSecurityThreats() {
   const markAsFalsePositive = async (threatId: string) => {
     try {
       const { error } = await supabase
-        .from('security_threats')
+        .from('security_threats' as any)
         .update({
           status: 'false_positive',
           false_positive: true,
@@ -203,7 +266,7 @@ export function useSecurityThreats() {
 
       toast({
         title: 'Marcado como Falso Positivo',
-        description: 'A ameaca foi marcada como falso positivo.',
+        description: 'A ameaça foi marcada como falso positivo.',
       });
 
       await fetchThreats();
@@ -221,7 +284,7 @@ export function useSecurityThreats() {
   const updateThreatStatus = async (threatId: string, status: string) => {
     try {
       const { error } = await supabase
-        .from('security_threats')
+        .from('security_threats' as any)
         .update({ status })
         .eq('id', threatId);
 
@@ -260,13 +323,13 @@ export function useSecurityThreats() {
           ...(selectedClusterId && { filter: `cluster_id=eq.${selectedClusterId}` }),
         },
         (payload) => {
-          const newThreat = payload.new as SecurityThreat;
+          const newThreat = transformThreat(payload.new);
           setThreats(prev => [newThreat, ...prev]);
 
           // Show toast for critical/high threats
           if (newThreat.severity === 'critical' || newThreat.severity === 'high') {
             toast({
-              title: newThreat.severity === 'critical' ? '🚨 AMEACA CRITICA!' : '⚠️ Ameaca Detectada',
+              title: newThreat.severity === 'critical' ? '🚨 AMEAÇA CRÍTICA!' : '⚠️ Ameaça Detectada',
               description: newThreat.title,
               variant: 'destructive',
             });
@@ -282,7 +345,7 @@ export function useSecurityThreats() {
           ...(selectedClusterId && { filter: `cluster_id=eq.${selectedClusterId}` }),
         },
         (payload) => {
-          const updatedThreat = payload.new as SecurityThreat;
+          const updatedThreat = transformThreat(payload.new);
           setThreats(prev =>
             prev.map(t => (t.id === updatedThreat.id ? updatedThreat : t))
           );
@@ -302,6 +365,7 @@ export function useSecurityThreats() {
     scanning,
     fetchThreats,
     runSecurityScan,
+    implementSecurityFix,
     mitigateThreat,
     markAsFalsePositive,
     updateThreatStatus,
