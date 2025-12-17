@@ -4,15 +4,32 @@ import { ClusterSelector } from "./ClusterSelector";
 import { Footer } from "./Footer";
 import { DocsAssistantChat } from "./DocsAssistantChat";
 import { TrialBanner } from "./TrialBanner";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { Menu, PanelLeftClose, PanelLeft, X } from "lucide-react";
 import { Button } from "./ui/button";
 
 export const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
+  // Mobile: closed by default, Desktop: open by default
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const location = useLocation();
+
+  // Ensure sidebar is closed on mobile when component mounts or screen resizes
+  useEffect(() => {
+    const handleResize = () => {
+      // Close mobile sidebar on small screens
+      if (window.innerWidth < 1024) {
+        setSidebarOpen(false);
+      }
+    };
+
+    // Close on mount if mobile
+    handleResize();
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   
   // Hide cluster selector on settings and admin pages
   const hideClusterSelector = ['/settings', '/admin'].includes(location.pathname);
