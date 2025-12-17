@@ -62,6 +62,20 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
           </Button>
         )}
         <Sidebar collapsed={sidebarCollapsed} onNavigate={() => setSidebarOpen(false)} />
+        
+        {/* Desktop collapse button - positioned on the edge */}
+        <Button
+          variant="outline"
+          size="icon"
+          className="hidden lg:flex absolute top-1/2 -translate-y-1/2 -right-3 h-6 w-6 rounded-full border-border bg-background shadow-md hover:bg-accent z-50"
+          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+        >
+          {sidebarCollapsed ? (
+            <PanelLeft className="h-3.5 w-3.5" />
+          ) : (
+            <PanelLeftClose className="h-3.5 w-3.5" />
+          )}
+        </Button>
       </div>
 
       {/* Main content */}
@@ -81,19 +95,6 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
                 onClick={() => setSidebarOpen(!sidebarOpen)}
               >
                 <Menu className="h-5 w-5" />
-              </Button>
-              {/* Desktop collapse button */}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="hidden lg:flex"
-                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              >
-                {sidebarCollapsed ? (
-                  <PanelLeft className="h-5 w-5" />
-                ) : (
-                  <PanelLeftClose className="h-5 w-5" />
-                )}
               </Button>
               {!hideClusterSelector && <ClusterSelector />}
             </div>
