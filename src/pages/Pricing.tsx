@@ -205,8 +205,8 @@ export default function Pricing() {
           </p>
           <p className="mt-2">
             Precisa de ajuda? Entre em contato conosco em{' '}
-            <a href="mailto:suporte@kuberpulse.com" className="text-primary hover:underline">
-              suporte@kuberpulse.com
+            <a href="mailto:suporte@kubenetworks.com.br" className="text-primary hover:underline">
+              suporte@kubenetworks.com.br
             </a>
           </p>
         </div>

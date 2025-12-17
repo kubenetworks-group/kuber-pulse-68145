@@ -31,5 +31,5 @@ jobs:
           file: ./agent/Dockerfile
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/kuberpulse-agent:${{ github.ref_name }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/kuberpulse-agent:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/kodo-agent:${{ github.ref_name }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/kodo-agent:latest

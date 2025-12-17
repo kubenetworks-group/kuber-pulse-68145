@@ -15,14 +15,14 @@ metadata:
   name: kodo-agent
 rules:
 - apiGroups: [""]
-  resources: ["nodes", "pods", "events", "namespaces", "persistentvolumeclaims", "persistentvolumes", "secrets", "resourcequotas", "limitranges"]
+  resources: ["nodes", "pods", "events", "namespaces", "persistentvolumeclaims", "persistentvolumes", "secrets", "resourcequotas", "limitranges", "services", "configmaps", "endpoints"]
   verbs: ["get", "list", "watch"]
 - apiGroups: [""]
   resources: ["pods"]
   verbs: ["delete"]
 - apiGroups: ["apps"]
-  resources: ["deployments"]
-  verbs: ["get", "list", "update"]
+  resources: ["deployments", "daemonsets", "replicasets", "statefulsets"]
+  verbs: ["get", "list", "watch", "update", "patch"]
 - apiGroups: ["metrics.k8s.io"]
   resources: ["nodes", "pods"]
   verbs: ["get", "list", "watch"]
@@ -30,7 +30,10 @@ rules:
   resources: ["roles", "rolebindings", "clusterroles", "clusterrolebindings"]
   verbs: ["get", "list", "watch"]
 - apiGroups: ["networking.k8s.io"]
-  resources: ["networkpolicies"]
+  resources: ["networkpolicies", "ingresses", "ingressclasses"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["coordination.k8s.io"]
+  resources: ["leases"]
   verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -62,8 +65,8 @@ metadata:
   namespace: kodo
 type: Opaque
 stringData:
-  API_KEY: "kp_8b1c4ea59f6d4e50b26ffac15d844692"
-  CLUSTER_ID: "20bd982f-2bdc-47a6-8fd1-5482f18232e8"
+  API_KEY: "kp_5471324356aa4091aae5453794dad2f5"
+  CLUSTER_ID: "4e630bb6-99f5-4787-b662-f8fe38dbc31f"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -85,7 +88,7 @@ spec:
       serviceAccountName: kodo-agent
       containers:
       - name: agent
-        image: docker.io/denercavalcante/kodo-agent:v0.0.34
+        image: denercavalcante/kuberpulse-agent:v0.0.43
         imagePullPolicy: Always
         envFrom:
         - configMapRef:

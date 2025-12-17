@@ -559,7 +559,7 @@ export default function AIMonitor() {
                   <div className="flex items-center gap-2 text-sm">
                     <Bot className="w-4 h-4 text-primary animate-pulse" />
                     <span className="text-muted-foreground">
-                      O agente Kuberpulse esta analisando automaticamente metricas de rede, CPU, memoria e processos suspeitos para detectar ameacas como DDoS, brute force e cryptomining.
+                      O agente Kodo esta analisando automaticamente metricas de rede, CPU, memoria e processos suspeitos para detectar ameacas como DDoS, brute force e cryptomining.
                     </span>
                   </div>
                 </div>
@@ -624,7 +624,7 @@ export default function AIMonitor() {
                   Anomalias Detectadas pelo Agente
                 </CardTitle>
                 <CardDescription>
-                  Problemas detectados automaticamente no cluster através do agente Kuberpulse
+                  Problemas detectados automaticamente no cluster através do agente Kodo
                 </CardDescription>
               </CardHeader>
               <CardContent>

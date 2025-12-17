@@ -27,7 +27,7 @@ export default function TermsOfService() {
             <section>
               <h2 className="text-xl font-semibold mb-3">1. Aceitação dos Termos</h2>
               <p>
-                Ao acessar e usar o KuberPulse, você aceita e concorda em estar vinculado aos termos e condições 
+                Ao acessar e usar o Kodo, você aceita e concorda em estar vinculado aos termos e condições 
                 estabelecidos neste documento. Se você não concordar com estes termos, não utilize nossos serviços.
               </p>
             </section>
@@ -35,7 +35,7 @@ export default function TermsOfService() {
             <section>
               <h2 className="text-xl font-semibold mb-3">2. Descrição do Serviço</h2>
               <p>
-                O KuberPulse é uma plataforma de gerenciamento e monitoramento de clusters Kubernetes que oferece:
+                O Kodo é uma plataforma de gerenciamento e monitoramento de clusters Kubernetes que oferece:
               </p>
               <ul className="list-disc list-inside ml-4 mt-2 space-y-1">
                 <li>Monitoramento em tempo real de recursos</li>
@@ -76,7 +76,7 @@ export default function TermsOfService() {
             <section>
               <h2 className="text-xl font-semibold mb-3">5. Propriedade Intelectual</h2>
               <p>
-                Todo o conteúdo, recursos e tecnologia do KuberPulse são propriedade exclusiva da empresa e 
+                Todo o conteúdo, recursos e tecnologia do Kodo são propriedade exclusiva da empresa e 
                 protegidos por leis de direitos autorais e propriedade intelectual.
               </p>
             </section>
@@ -84,7 +84,7 @@ export default function TermsOfService() {
             <section>
               <h2 className="text-xl font-semibold mb-3">6. Limitação de Responsabilidade</h2>
               <p>
-                O KuberPulse é fornecido "como está" sem garantias de qualquer tipo. Não nos responsabilizamos por:
+                O Kodo é fornecido "como está" sem garantias de qualquer tipo. Não nos responsabilizamos por:
               </p>
               <ul className="list-disc list-inside ml-4 mt-2 space-y-1">
                 <li>Perda de dados ou lucros</li>

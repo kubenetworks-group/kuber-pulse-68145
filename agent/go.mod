@@ -1,4 +1,4 @@
-module kuberpulse-agent
+module kodo-agent
 
 go 1.22.0
 

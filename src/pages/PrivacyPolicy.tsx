@@ -28,7 +28,7 @@ export default function PrivacyPolicy() {
             <section>
               <h2 className="text-xl font-semibold mb-3">1. Introdução</h2>
               <p>
-                O KuberPulse está comprometido com a proteção de seus dados pessoais e com a transparência no 
+                O Kodo está comprometido com a proteção de seus dados pessoais e com a transparência no 
                 tratamento dessas informações, em conformidade com a Lei Geral de Proteção de Dados (LGPD).
               </p>
             </section>
