@@ -294,69 +294,73 @@ serve(async (req) => {
 
     // Process PVCs
     const pvcsMetric = metrics.find(m => m.type === 'pvcs');
-    if (pvcsMetric && pvcsMetric.data?.pvcs) {
+    if (pvcsMetric && pvcsMetric.data?.pvcs !== undefined) {
       const pvcsData = pvcsMetric.data.pvcs as any[];
-      
+
       // Get user_id from cluster
       const { data: clusterData } = await supabaseClient
         .from('clusters')
         .select('user_id')
         .eq('id', cluster_id)
         .single();
-      
-      if (clusterData && pvcsData.length > 0) {
-        // Delete old PVCs for this cluster
+
+      if (clusterData) {
+        // Always delete old PVCs for this cluster (even if new list is empty)
         await supabaseClient
           .from('pvcs')
           .delete()
           .eq('cluster_id', cluster_id);
-        
-        // Insert new PVCs
-        const pvcsToInsert = pvcsData.map(pvc => ({
-          cluster_id,
-          user_id: clusterData.user_id,
-          name: pvc.name,
-          namespace: pvc.namespace,
-          storage_class: pvc.storage_class || null,
-          status: pvc.status,
-          requested_bytes: pvc.requested_bytes || 0,
-          used_bytes: pvc.used_bytes || 0,
-          last_sync: new Date().toISOString(),
-        }));
-        
-        const { error: pvcError } = await supabaseClient
-          .from('pvcs')
-          .insert(pvcsToInsert);
-        
-        if (pvcError) {
-          console.error('Error storing PVCs:', pvcError);
+
+        // Insert new PVCs only if there are any
+        if (pvcsData.length > 0) {
+          const pvcsToInsert = pvcsData.map(pvc => ({
+            cluster_id,
+            user_id: clusterData.user_id,
+            name: pvc.name,
+            namespace: pvc.namespace,
+            storage_class: pvc.storage_class || null,
+            status: pvc.status,
+            requested_bytes: pvc.requested_bytes || 0,
+            used_bytes: pvc.used_bytes || 0,
+            last_sync: new Date().toISOString(),
+          }));
+
+          const { error: pvcError } = await supabaseClient
+            .from('pvcs')
+            .insert(pvcsToInsert);
+
+          if (pvcError) {
+            console.error('Error storing PVCs:', pvcError);
+          } else {
+            console.log(`✅ Stored ${pvcsToInsert.length} PVCs`);
+          }
         } else {
-          console.log(`✅ Stored ${pvcsToInsert.length} PVCs`);
+          console.log(`✅ Cleared all PVCs for cluster (no PVCs in cluster)`);
         }
       }
     }
 
     // Process standalone PVs (Released, Available, Failed)
     const standalonePVsMetric = metrics.find(m => m.type === 'standalone_pvs');
-    if (standalonePVsMetric) {
-      const pvs = (standalonePVsMetric.data as any)?.pvs;
-      
-      if (Array.isArray(pvs) && pvs.length > 0) {
-        // Get user_id from cluster
-        const { data: clusterData } = await supabaseClient
-          .from('clusters')
-          .select('user_id')
-          .eq('id', cluster_id)
-          .single();
-        
-        if (clusterData) {
-          // Delete old PVs for this cluster
-          await supabaseClient
-            .from('persistent_volumes')
-            .delete()
-            .eq('cluster_id', cluster_id);
-          
-          // Insert new PVs
+    if (standalonePVsMetric && standalonePVsMetric.data?.pvs !== undefined) {
+      const pvs = standalonePVsMetric.data.pvs as any[];
+
+      // Get user_id from cluster
+      const { data: clusterData } = await supabaseClient
+        .from('clusters')
+        .select('user_id')
+        .eq('id', cluster_id)
+        .single();
+
+      if (clusterData) {
+        // Always delete old PVs for this cluster (even if new list is empty)
+        await supabaseClient
+          .from('persistent_volumes')
+          .delete()
+          .eq('cluster_id', cluster_id);
+
+        // Insert new PVs only if there are any
+        if (Array.isArray(pvs) && pvs.length > 0) {
           const pvsToInsert = pvs.map(pv => ({
             cluster_id,
             user_id: clusterData.user_id,
@@ -371,16 +375,18 @@ serve(async (req) => {
             claim_ref_name: pv.claim_ref_name || null,
             last_sync: new Date().toISOString(),
           }));
-          
+
           const { error: pvError } = await supabaseClient
             .from('persistent_volumes')
             .insert(pvsToInsert);
-          
+
           if (pvError) {
             console.error('Error storing standalone PVs:', pvError);
           } else {
             console.log(`✅ Stored ${pvsToInsert.length} standalone PVs (Released/Available/Failed)`);
           }
+        } else {
+          console.log(`✅ Cleared all standalone PVs for cluster (no Released/Available/Failed PVs)`);
         }
       }
     }
