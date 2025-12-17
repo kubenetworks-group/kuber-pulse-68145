@@ -22,9 +22,10 @@ interface SidebarProps {
   collapsed?: boolean;
   onNavigate?: () => void;
   onToggleCollapse?: () => void;
+  onCollapse?: () => void;
 }
 
-export const Sidebar = ({ collapsed = false, onNavigate, onToggleCollapse }: SidebarProps) => {
+export const Sidebar = ({ collapsed = false, onNavigate, onToggleCollapse, onCollapse }: SidebarProps) => {
   const location = useLocation();
   const { signOut } = useAuth();
   const { t } = useTranslation();
@@ -77,8 +78,16 @@ export const Sidebar = ({ collapsed = false, onNavigate, onToggleCollapse }: Sid
             </Button>
           );
 
+          const handleClick = () => {
+            onNavigate?.();
+            // Collapse sidebar on navigation (desktop only)
+            if (window.innerWidth >= 1024 && !collapsed) {
+              onCollapse?.();
+            }
+          };
+
           return (
-            <Link key={item.name} to={item.href} onClick={onNavigate}>
+            <Link key={item.name} to={item.href} onClick={handleClick}>
               {collapsed ? (
                 <Tooltip delayDuration={0}>
                   <TooltipTrigger asChild>

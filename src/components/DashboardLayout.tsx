@@ -66,6 +66,7 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
           collapsed={sidebarCollapsed} 
           onNavigate={() => setSidebarOpen(false)}
           onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+          onCollapse={() => setSidebarCollapsed(true)}
         />
       </div>
 
