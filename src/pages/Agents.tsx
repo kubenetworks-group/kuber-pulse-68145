@@ -165,17 +165,26 @@ metadata:
   name: kodo-agent
 rules:
 - apiGroups: [""]
-  resources: ["nodes", "pods", "events", "namespaces"]
+  resources: ["nodes", "pods", "events", "namespaces", "persistentvolumeclaims", "persistentvolumes", "secrets", "resourcequotas", "limitranges", "services", "configmaps", "endpoints"]
   verbs: ["get", "list", "watch"]
 - apiGroups: [""]
   resources: ["pods"]
   verbs: ["delete"]
 - apiGroups: ["apps"]
-  resources: ["deployments"]
-  verbs: ["get", "list", "update"]
+  resources: ["deployments", "daemonsets", "replicasets", "statefulsets"]
+  verbs: ["get", "list", "watch", "update", "patch"]
 - apiGroups: ["metrics.k8s.io"]
   resources: ["nodes", "pods"]
-  verbs: ["get", "list"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["roles", "rolebindings", "clusterroles", "clusterrolebindings"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["networking.k8s.io"]
+  resources: ["networkpolicies", "ingresses", "ingressclasses"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["coordination.k8s.io"]
+  resources: ["leases"]
+  verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -197,7 +206,7 @@ metadata:
   namespace: kodo
 data:
   API_ENDPOINT: "${import.meta.env.VITE_SUPABASE_URL}/functions/v1"
-  COLLECT_INTERVAL: "30"
+  COLLECT_INTERVAL: "15"
 ---
 apiVersion: v1
 kind: Secret
@@ -229,7 +238,7 @@ spec:
       serviceAccountName: kodo-agent
       containers:
       - name: agent
-        image: kodo/agent:latest
+        image: ghcr.io/kubenetworks-group/kodo-agent:v0.0.45
         imagePullPolicy: Always
         envFrom:
         - configMapRef:
