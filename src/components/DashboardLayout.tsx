@@ -46,8 +46,8 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
       
       {/* Sidebar */}
       <div className={`
-        fixed left-0 top-0 bottom-0 z-50 transition-all duration-300 lg:translate-x-0
-        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+        fixed left-0 top-0 bottom-0 z-50 transition-all duration-300
+        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         ${sidebarCollapsed ? 'lg:w-16' : 'lg:w-64'}
       `}>
         {/* Mobile close button */}
