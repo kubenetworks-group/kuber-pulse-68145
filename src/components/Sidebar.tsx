@@ -18,9 +18,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 
 interface SidebarProps {
   collapsed?: boolean;
+  onNavigate?: () => void;
 }
 
-export const Sidebar = ({ collapsed = false }: SidebarProps) => {
+export const Sidebar = ({ collapsed = false, onNavigate }: SidebarProps) => {
   const location = useLocation();
   const { signOut } = useAuth();
   const { t } = useTranslation();
@@ -74,7 +75,7 @@ export const Sidebar = ({ collapsed = false }: SidebarProps) => {
           );
 
           return (
-            <Link key={item.name} to={item.href}>
+            <Link key={item.name} to={item.href} onClick={onNavigate}>
               {collapsed ? (
                 <Tooltip delayDuration={0}>
                   <TooltipTrigger asChild>

@@ -6,7 +6,7 @@ import { DocsAssistantChat } from "./DocsAssistantChat";
 import { TrialBanner } from "./TrialBanner";
 import { useState } from "react";
 import { useLocation } from "react-router-dom";
-import { Menu, PanelLeftClose, PanelLeft } from "lucide-react";
+import { Menu, PanelLeftClose, PanelLeft, X } from "lucide-react";
 import { Button } from "./ui/button";
 
 export const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
@@ -33,7 +33,18 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
         ${sidebarCollapsed ? 'lg:w-16' : 'lg:w-64'}
       `}>
-        <Sidebar collapsed={sidebarCollapsed} />
+        {/* Mobile close button */}
+        {sidebarOpen && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute top-3 right-3 z-50 lg:hidden bg-background/50 hover:bg-background/80"
+            onClick={() => setSidebarOpen(false)}
+          >
+            <X className="h-5 w-5" />
+          </Button>
+        )}
+        <Sidebar collapsed={sidebarCollapsed} onNavigate={() => setSidebarOpen(false)} />
       </div>
 
       {/* Main content */}
@@ -42,14 +53,14 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
         <TrialBanner />
         
         {/* Top bar with cluster selector and notifications */}
-        <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
-          <div className="flex justify-between items-center px-4 sm:px-6 lg:px-8 py-3 gap-2">
+        <div className="sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
+          <div className="flex justify-between items-center px-3 sm:px-4 lg:px-8 py-2 sm:py-3 gap-2">
             <div className="flex items-center gap-2">
-              {/* Mobile menu button */}
+              {/* Mobile menu button - always visible on small screens */}
               <Button
-                variant="ghost"
+                variant="outline"
                 size="icon"
-                className="lg:hidden"
+                className="lg:hidden flex-shrink-0 h-10 w-10 border-border"
                 onClick={() => setSidebarOpen(!sidebarOpen)}
               >
                 <Menu className="h-5 w-5" />
@@ -72,7 +83,7 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
             <NotificationBell />
           </div>
         </div>
-        <div className="flex-1">
+        <div className="flex-1 p-3 sm:p-4 lg:p-6">
           {children}
         </div>
         <Footer />
