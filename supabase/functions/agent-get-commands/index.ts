@@ -49,7 +49,7 @@ serve(async (req) => {
       });
     }
 
-    const keyPrefix = agentKey.substring(0, 15);
+    const keyPrefix = agentKey.substring(0, 12);
     console.log(`Get-commands auth attempt with key prefix: ${keyPrefix}...`);
 
     // Rate limiting: 10 requests per minute
@@ -107,11 +107,33 @@ serve(async (req) => {
           .from('agent_api_keys')
           .update({ api_key_hash: providedKeyHash })
           .eq('api_key', agentKey);
+      } else {
+        // Final fallback: try prefix match (for cases where key was redacted but prefix stored)
+        console.log(`Plaintext auth failed, trying prefix match`);
+        const { data: prefixData, error: prefixError } = await supabaseClient
+          .from('agent_api_keys')
+          .select('cluster_id, is_active')
+          .eq('api_key_prefix', keyPrefix + '...')
+          .single();
+
+        if (prefixData && !prefixError) {
+          console.log(`Auth successful via prefix for cluster: ${prefixData.cluster_id}`);
+          apiKeyData = prefixData;
+          
+          // Update the hash and key for future auth
+          await supabaseClient
+            .from('agent_api_keys')
+            .update({ 
+              api_key_hash: providedKeyHash,
+              api_key: agentKey // Restore the key
+            })
+            .eq('api_key_prefix', keyPrefix + '...');
+        }
       }
     }
 
     if (!apiKeyData || !apiKeyData.is_active) {
-      console.error(`Authentication failed: No valid key found. Hash tried: ${providedKeyHash.substring(0, 16)}...`);
+      console.error(`Authentication failed: No valid key found. Key prefix: ${keyPrefix}, Hash: ${providedKeyHash.substring(0, 16)}...`);
       return new Response(JSON.stringify({ error: 'Invalid API key' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
