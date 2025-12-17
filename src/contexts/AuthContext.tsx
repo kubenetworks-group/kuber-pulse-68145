@@ -78,7 +78,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
 
     toast.success("Account created successfully!");
-    navigate("/");
+    navigate("/dashboard");
     return { error: null };
   };
 
@@ -99,7 +99,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
 
     toast.success("Signed in successfully!");
-    navigate("/");
+    navigate("/dashboard");
     return { error: null };
   };
 

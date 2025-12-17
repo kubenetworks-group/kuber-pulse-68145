@@ -40,7 +40,7 @@ const Auth = () => {
   // Redirect if already logged in
   useEffect(() => {
     if (user) {
-      navigate("/");
+      navigate("/dashboard");
     }
   }, [user, navigate]);
 
@@ -103,7 +103,7 @@ const Auth = () => {
         title: "Login realizado!",
         description: "Bem-vindo de volta!",
       });
-      navigate("/");
+      navigate("/dashboard");
     } catch (err: any) {
       toast({
         title: "Erro",
@@ -121,7 +121,7 @@ const Auth = () => {
       title: "Login realizado!",
       description: "Verificação 2FA concluída com sucesso!",
     });
-    navigate("/");
+    navigate("/dashboard");
   };
 
   const handleMFACancel = async () => {
