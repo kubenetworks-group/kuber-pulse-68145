@@ -16,8 +16,19 @@ import {
   Sparkles,
   Server,
   Lock,
-  BarChart3
+  BarChart3,
+  ChevronDown,
+  Upload,
+  Settings,
+  LineChart,
+  BellRing
 } from "lucide-react";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 
 const features = [
   {
@@ -55,6 +66,68 @@ const features = [
     title: "Multi-Cluster",
     description: "Gerencie múltiplos clusters Kubernetes de diferentes provedores em uma única interface unificada.",
     color: "text-primary"
+  }
+];
+
+const howItWorks = [
+  {
+    step: 1,
+    icon: Upload,
+    title: "Conecte seu Cluster",
+    description: "Instale o agente Kodo no seu cluster Kubernetes em menos de 5 minutos. Suportamos AWS EKS, Google GKE, Azure AKS e clusters on-premises."
+  },
+  {
+    step: 2,
+    icon: Settings,
+    title: "Configure suas Preferências",
+    description: "Defina alertas personalizados, políticas de auto-healing e limites de custo de acordo com as necessidades do seu time."
+  },
+  {
+    step: 3,
+    icon: LineChart,
+    title: "Monitore em Tempo Real",
+    description: "Acompanhe métricas, eventos e anomalias em dashboards interativos. Nossa IA analisa continuamente seu cluster."
+  },
+  {
+    step: 4,
+    icon: BellRing,
+    title: "Receba Insights e Ações",
+    description: "Seja notificado sobre problemas antes que afetem seus usuários. O auto-healing pode corrigir problemas automaticamente."
+  }
+];
+
+const faqs = [
+  {
+    question: "O que é o Kodo?",
+    answer: "Kodo é uma plataforma de gestão Kubernetes com inteligência artificial que oferece auto-healing automático, análise de segurança, FinOps e observabilidade em tempo real para seus clusters K8s. Ajudamos empresas a operar Kubernetes de forma mais eficiente e segura."
+  },
+  {
+    question: "Como funciona o auto-healing do Kodo?",
+    answer: "O auto-healing do Kodo usa IA para detectar anomalias e problemas em seus clusters Kubernetes automaticamente. Quando um problema é identificado, como um pod em crash loop ou uso excessivo de recursos, o sistema pode reiniciar pods, escalar deployments ou aplicar correções sem intervenção manual, reduzindo o tempo de downtime."
+  },
+  {
+    question: "O Kodo funciona com qualquer provedor de cloud?",
+    answer: "Sim! O Kodo é multi-cloud e funciona com AWS EKS, Google GKE, Azure AKS, DigitalOcean Kubernetes, e clusters on-premises como Rancher, OpenShift e K3s. Você pode gerenciar todos os seus clusters de diferentes provedores em uma única interface unificada."
+  },
+  {
+    question: "Quanto tempo leva para configurar o Kodo?",
+    answer: "A configuração do Kodo leva menos de 5 minutos. Basta instalar nosso agente no seu cluster usando kubectl ou helm, e você já começa a ver métricas e insights. Não é necessário configuração complexa ou mudanças na sua infraestrutura existente."
+  },
+  {
+    question: "O Kodo é seguro? Que dados vocês acessam?",
+    answer: "Sim, segurança é nossa prioridade. O Kodo coleta apenas metadados e métricas de performance dos seus clusters, nunca dados de aplicação ou secrets. Somos compatíveis com LGPD, SOC 2 e seguimos as melhores práticas de segurança. Todos os dados são criptografados em trânsito e em repouso."
+  },
+  {
+    question: "Como o Kodo ajuda a reduzir custos de infraestrutura?",
+    answer: "O módulo FinOps do Kodo analisa o uso de recursos dos seus clusters e identifica oportunidades de economia, como pods over-provisioned, recursos idle e reservas não utilizadas. Empresas que usam Kodo economizam em média 40% em custos de infraestrutura cloud através de recomendações inteligentes de right-sizing."
+  },
+  {
+    question: "Posso testar o Kodo gratuitamente?",
+    answer: "Sim! Oferecemos um plano gratuito permanente que inclui 1 cluster e 5 análises de IA por mês. É perfeito para testar a plataforma e ver o valor que podemos agregar. Não pedimos cartão de crédito para começar."
+  },
+  {
+    question: "O Kodo substitui o Prometheus e Grafana?",
+    answer: "O Kodo pode trabalhar junto com suas ferramentas existentes ou substituí-las, dependendo da sua necessidade. Oferecemos integração nativa com Prometheus para coleta de métricas e dashboards próprios. A vantagem do Kodo é adicionar uma camada de IA que analisa os dados e toma ações automaticamente."
   }
 ];
 
@@ -108,7 +181,7 @@ export default function LandingPage() {
           <Link to="/" className="flex items-center gap-3 group">
             <div className="relative">
               <div className="absolute inset-0 bg-gradient-primary rounded-full blur-lg opacity-50 group-hover:opacity-75 transition-opacity" />
-              <img src={kodoLogo} alt="Kodo" className="w-10 h-10 object-contain relative z-10" />
+              <img src={kodoLogo} alt="Kodo - Plataforma de Gestão Kubernetes" className="w-10 h-10 object-contain relative z-10" />
             </div>
             <span className="text-2xl font-bold bg-gradient-primary bg-clip-text text-transparent">
               Kodo
@@ -119,12 +192,15 @@ export default function LandingPage() {
             <a href="#features" className="text-muted-foreground hover:text-foreground transition-colors">
               Recursos
             </a>
+            <a href="#how-it-works" className="text-muted-foreground hover:text-foreground transition-colors">
+              Como Funciona
+            </a>
             <a href="#pricing" className="text-muted-foreground hover:text-foreground transition-colors">
               Preços
             </a>
-            <Link to="/terms" className="text-muted-foreground hover:text-foreground transition-colors">
-              Termos
-            </Link>
+            <a href="#faq" className="text-muted-foreground hover:text-foreground transition-colors">
+              FAQ
+            </a>
           </div>
 
           <div className="flex items-center gap-3">
@@ -160,20 +236,20 @@ export default function LandingPage() {
             </h1>
             
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700 delay-200">
-              Auto-cura, segurança, FinOps e observabilidade em tempo real. 
+              Auto-healing, segurança, FinOps e observabilidade em tempo real para clusters K8s. 
               Tudo em uma única plataforma inteligente para sua operação cloud-native.
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300">
               <Link to="/auth">
                 <Button size="lg" className="bg-gradient-primary hover:opacity-90 transition-opacity gap-2 text-lg px-8 py-6 shadow-lg hover:shadow-primary/30">
-                  Começar Agora
+                  Começar Agora - É Grátis
                   <ArrowRight className="w-5 h-5" />
                 </Button>
               </Link>
-              <a href="#features">
+              <a href="#how-it-works">
                 <Button size="lg" variant="outline" className="gap-2 text-lg px-8 py-6 border-border/50 hover:bg-muted/50">
-                  Ver Recursos
+                  Ver Como Funciona
                 </Button>
               </a>
             </div>
@@ -208,7 +284,7 @@ export default function LandingPage() {
               </h2>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
                 Uma plataforma completa com recursos avançados de IA para simplificar 
-                a operação da sua infraestrutura cloud-native.
+                a operação da sua infraestrutura cloud-native e clusters K8s.
               </p>
             </div>
 
@@ -230,8 +306,58 @@ export default function LandingPage() {
           </div>
         </section>
 
+        {/* How It Works Section */}
+        <section id="how-it-works" className="relative z-10 py-24">
+          <div className="container mx-auto px-4">
+            <div className="text-center mb-16">
+              <h2 className="text-3xl sm:text-4xl font-bold mb-4">
+                Como o{" "}
+                <span className="bg-gradient-primary bg-clip-text text-transparent">
+                  Kodo funciona
+                </span>
+              </h2>
+              <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+                Configure em minutos e comece a receber insights inteligentes sobre seus clusters Kubernetes imediatamente.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+              {howItWorks.map((item, index) => (
+                <div key={item.step} className="relative">
+                  {/* Connector Line */}
+                  {index < howItWorks.length - 1 && (
+                    <div className="hidden lg:block absolute top-12 left-[60%] w-full h-0.5 bg-gradient-to-r from-primary/50 to-transparent" />
+                  )}
+                  
+                  <Card className="p-6 bg-card/50 backdrop-blur-sm border-border/50 hover:border-primary/30 transition-all duration-300 h-full">
+                    <div className="flex items-center gap-4 mb-4">
+                      <div className="w-12 h-12 rounded-full bg-gradient-primary flex items-center justify-center text-primary-foreground font-bold text-lg">
+                        {item.step}
+                      </div>
+                      <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                        <item.icon className="w-5 h-5 text-primary" />
+                      </div>
+                    </div>
+                    <h3 className="text-lg font-semibold mb-2">{item.title}</h3>
+                    <p className="text-sm text-muted-foreground">{item.description}</p>
+                  </Card>
+                </div>
+              ))}
+            </div>
+
+            <div className="text-center mt-12">
+              <Link to="/auth">
+                <Button size="lg" className="bg-gradient-primary hover:opacity-90 transition-opacity gap-2">
+                  Começar em 5 Minutos
+                  <ArrowRight className="w-5 h-5" />
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </section>
+
         {/* Pricing Section */}
-        <section id="pricing" className="relative z-10 py-24">
+        <section id="pricing" className="relative z-10 py-24 bg-muted/30">
           <div className="container mx-auto px-4">
             <div className="text-center mb-16">
               <h2 className="text-3xl sm:text-4xl font-bold mb-4">
@@ -241,7 +367,7 @@ export default function LandingPage() {
                 </span>
               </h2>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                Comece gratuitamente e escale conforme sua necessidade.
+                Comece gratuitamente e escale conforme sua necessidade. Sem surpresas na fatura.
               </p>
             </div>
 
@@ -291,8 +417,55 @@ export default function LandingPage() {
             </div>
 
             <div className="text-center mt-8">
-              <Link to="/auth" className="text-primary hover:underline">
-                Ver todos os planos →
+              <Link to="/pricing" className="text-primary hover:underline">
+                Ver comparação completa dos planos →
+              </Link>
+            </div>
+          </div>
+        </section>
+
+        {/* FAQ Section */}
+        <section id="faq" className="relative z-10 py-24">
+          <div className="container mx-auto px-4">
+            <div className="text-center mb-16">
+              <h2 className="text-3xl sm:text-4xl font-bold mb-4">
+                Perguntas{" "}
+                <span className="bg-gradient-primary bg-clip-text text-transparent">
+                  Frequentes
+                </span>
+              </h2>
+              <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+                Tire suas dúvidas sobre o Kodo e como ele pode ajudar sua operação Kubernetes.
+              </p>
+            </div>
+
+            <div className="max-w-3xl mx-auto">
+              <Accordion type="single" collapsible className="space-y-4">
+                {faqs.map((faq, index) => (
+                  <AccordionItem 
+                    key={index} 
+                    value={`item-${index}`}
+                    className="bg-card/50 backdrop-blur-sm border border-border/50 rounded-lg px-6 data-[state=open]:border-primary/30"
+                  >
+                    <AccordionTrigger className="text-left hover:no-underline py-4">
+                      <span className="font-semibold">{faq.question}</span>
+                    </AccordionTrigger>
+                    <AccordionContent className="text-muted-foreground pb-4">
+                      {faq.answer}
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
+            </div>
+
+            <div className="text-center mt-12">
+              <p className="text-muted-foreground mb-4">
+                Ainda tem dúvidas? Entre em contato com nosso time.
+              </p>
+              <Link to="/auth">
+                <Button variant="outline" className="gap-2">
+                  Falar com Suporte
+                </Button>
               </Link>
             </div>
           </div>
@@ -303,10 +476,10 @@ export default function LandingPage() {
           <div className="container mx-auto px-4">
             <Card className="max-w-4xl mx-auto p-12 text-center bg-gradient-to-br from-primary/10 to-accent/10 border-primary/20">
               <h2 className="text-3xl sm:text-4xl font-bold mb-4">
-                Pronto para transformar sua operação?
+                Pronto para transformar sua operação Kubernetes?
               </h2>
               <p className="text-lg text-muted-foreground mb-8 max-w-xl mx-auto">
-                Junte-se a centenas de empresas que já automatizaram sua gestão Kubernetes com o Kodo.
+                Junte-se a centenas de empresas que já automatizaram sua gestão de clusters K8s com o Kodo.
               </p>
               <Link to="/auth">
                 <Button size="lg" className="bg-gradient-primary hover:opacity-90 transition-opacity gap-2 text-lg px-8 py-6">
@@ -314,6 +487,9 @@ export default function LandingPage() {
                   <ArrowRight className="w-5 h-5" />
                 </Button>
               </Link>
+              <p className="text-sm text-muted-foreground mt-4">
+                Sem cartão de crédito • Setup em 5 minutos • Cancele quando quiser
+              </p>
             </Card>
           </div>
         </section>
