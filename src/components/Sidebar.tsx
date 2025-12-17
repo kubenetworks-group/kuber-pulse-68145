@@ -13,15 +13,18 @@ import {
   Bot,
   HardDrive,
   Shield,
+  PanelLeft,
+  PanelLeftClose,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface SidebarProps {
   collapsed?: boolean;
   onNavigate?: () => void;
+  onToggleCollapse?: () => void;
 }
 
-export const Sidebar = ({ collapsed = false, onNavigate }: SidebarProps) => {
+export const Sidebar = ({ collapsed = false, onNavigate, onToggleCollapse }: SidebarProps) => {
   const location = useLocation();
   const { signOut } = useAuth();
   const { t } = useTranslation();
@@ -38,7 +41,7 @@ export const Sidebar = ({ collapsed = false, onNavigate }: SidebarProps) => {
   ];
 
   return (
-    <div className={`fixed left-0 top-0 bottom-0 bg-card/80 backdrop-blur-xl border-r border-border flex flex-col transition-all duration-300 ${collapsed ? 'w-16' : 'w-64'}`}>
+    <div className={`h-full bg-card/80 backdrop-blur-xl border-r border-border flex flex-col transition-all duration-300 ${collapsed ? 'w-16' : 'w-64'}`}>
       <div className={`border-b border-border ${collapsed ? 'p-3' : 'p-6'}`}>
         <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3'}`}>
           <img 
@@ -94,6 +97,37 @@ export const Sidebar = ({ collapsed = false, onNavigate }: SidebarProps) => {
       </nav>
 
       <div className={`border-t border-border space-y-2 ${collapsed ? 'p-2' : 'p-4'}`}>
+        {/* Collapse/Expand button - hidden on mobile */}
+        {onToggleCollapse && (
+          <div className="hidden lg:block">
+            {collapsed ? (
+              <Tooltip delayDuration={0}>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-center px-2"
+                    onClick={onToggleCollapse}
+                  >
+                    <PanelLeft className="w-4 h-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  Expandir menu
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <Button
+                variant="ghost"
+                className="w-full justify-start gap-3"
+                onClick={onToggleCollapse}
+              >
+                <PanelLeftClose className="w-4 h-4" />
+                Recolher menu
+              </Button>
+            )}
+          </div>
+        )}
+
         {!collapsed && (
           <div className="flex items-center justify-between px-2 mb-2">
             <span className="text-xs text-muted-foreground">{t('settings.theme')}</span>

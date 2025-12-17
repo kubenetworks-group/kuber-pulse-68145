@@ -6,7 +6,7 @@ import { DocsAssistantChat } from "./DocsAssistantChat";
 import { TrialBanner } from "./TrialBanner";
 import { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
-import { Menu, PanelLeftClose, PanelLeft, X } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { Button } from "./ui/button";
 
 export const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
@@ -18,14 +18,12 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
   // Ensure sidebar is closed on mobile and collapsed on medium screens
   useEffect(() => {
     const handleResize = () => {
-      // Close mobile sidebar on small screens
       if (window.innerWidth < 1024) {
         setSidebarOpen(false);
         setSidebarCollapsed(true);
       }
     };
 
-    // Apply on mount
     handleResize();
 
     window.addEventListener('resize', handleResize);
@@ -34,6 +32,9 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
   
   // Hide cluster selector on settings and admin pages
   const hideClusterSelector = ['/settings', '/admin'].includes(location.pathname);
+
+  const sidebarWidth = sidebarCollapsed ? 'w-16' : 'w-64';
+  const mainMargin = sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64';
 
   return (
     <div className="min-h-screen bg-background">
@@ -47,9 +48,8 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
       
       {/* Sidebar */}
       <div className={`
-        fixed left-0 top-0 bottom-0 z-50 transition-all duration-300
+        fixed left-0 top-0 bottom-0 z-50 transition-all duration-300 ${sidebarWidth}
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-        ${sidebarCollapsed ? 'lg:w-16' : 'lg:w-64'}
       `}>
         {/* Mobile close button */}
         {sidebarOpen && (
@@ -62,25 +62,15 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
             <X className="h-5 w-5" />
           </Button>
         )}
-        <Sidebar collapsed={sidebarCollapsed} onNavigate={() => setSidebarOpen(false)} />
-        
-        {/* Collapse button - visible on md screens and up */}
-        <Button
-          variant="outline"
-          size="icon"
-          className="hidden md:flex absolute top-1/2 -translate-y-1/2 -right-3 h-6 w-6 rounded-full border-border bg-background shadow-md hover:bg-accent z-50"
-          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-        >
-          {sidebarCollapsed ? (
-            <PanelLeft className="h-3.5 w-3.5" />
-          ) : (
-            <PanelLeftClose className="h-3.5 w-3.5" />
-          )}
-        </Button>
+        <Sidebar 
+          collapsed={sidebarCollapsed} 
+          onNavigate={() => setSidebarOpen(false)}
+          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+        />
       </div>
 
       {/* Main content */}
-      <div className={`flex flex-col min-h-screen transition-all duration-300 ${sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64'}`}>
+      <div className={`flex flex-col min-h-screen transition-all duration-300 ${mainMargin}`}>
         {/* Trial banner */}
         <TrialBanner />
         
@@ -88,7 +78,7 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
         <div className="sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
           <div className="flex justify-between items-center px-3 sm:px-4 lg:px-8 py-2 sm:py-3 gap-2">
             <div className="flex items-center gap-2">
-              {/* Mobile menu button - always visible on small screens */}
+              {/* Mobile menu button */}
               <Button
                 variant="outline"
                 size="icon"
