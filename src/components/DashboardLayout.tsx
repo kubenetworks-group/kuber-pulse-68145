@@ -12,19 +12,20 @@ import { Button } from "./ui/button";
 export const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
   // Mobile: closed by default, Desktop: open by default
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => window.innerWidth < 1024);
   const location = useLocation();
 
-  // Ensure sidebar is closed on mobile when component mounts or screen resizes
+  // Ensure sidebar is closed on mobile and collapsed on medium screens
   useEffect(() => {
     const handleResize = () => {
       // Close mobile sidebar on small screens
       if (window.innerWidth < 1024) {
         setSidebarOpen(false);
+        setSidebarCollapsed(true);
       }
     };
 
-    // Close on mount if mobile
+    // Apply on mount
     handleResize();
 
     window.addEventListener('resize', handleResize);
@@ -63,11 +64,11 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
         )}
         <Sidebar collapsed={sidebarCollapsed} onNavigate={() => setSidebarOpen(false)} />
         
-        {/* Desktop collapse button - positioned on the edge */}
+        {/* Collapse button - visible on md screens and up */}
         <Button
           variant="outline"
           size="icon"
-          className="hidden lg:flex absolute top-1/2 -translate-y-1/2 -right-3 h-6 w-6 rounded-full border-border bg-background shadow-md hover:bg-accent z-50"
+          className="hidden md:flex absolute top-1/2 -translate-y-1/2 -right-3 h-6 w-6 rounded-full border-border bg-background shadow-md hover:bg-accent z-50"
           onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
         >
           {sidebarCollapsed ? (
