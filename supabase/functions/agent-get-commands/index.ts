@@ -42,25 +42,25 @@ serve(async (req) => {
     const agentKey = req.headers.get('x-agent-key');
 
     if (!agentKey) {
-      console.error('Authentication failed');
+      console.error('Authentication failed: Missing API key');
       return new Response(JSON.stringify({ error: 'Missing API key' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Hash the API key for rate limiting
-    const keyHash = await hashApiKey(agentKey);
+    const keyPrefix = agentKey.substring(0, 15);
+    console.log(`Get-commands auth attempt with key prefix: ${keyPrefix}...`);
 
-    // Rate limiting: 4 requests per minute
-    if (!checkRateLimit(keyHash, 4, 60000)) {
-      console.warn('Rate limit exceeded');
+    // Rate limiting: 10 requests per minute
+    if (!checkRateLimit(keyPrefix, 10, 60000)) {
+      console.warn('Rate limit exceeded for key:', keyPrefix);
       return new Response(JSON.stringify({ error: 'Rate limit exceeded' }), {
         status: 429,
         headers: {
           ...corsHeaders,
           'Content-Type': 'application/json',
-          'X-RateLimit-Limit': '4',
+          'X-RateLimit-Limit': '10',
           'X-RateLimit-Window': '60s',
         },
       });
@@ -73,6 +73,7 @@ serve(async (req) => {
 
     // Hash the provided key for authentication
     const providedKeyHash = await hashApiKey(agentKey);
+    console.log(`Generated hash: ${providedKeyHash.substring(0, 16)}...`);
 
     // Try hash-based authentication first, then fallback to plaintext
     let apiKeyData;
@@ -85,8 +86,11 @@ serve(async (req) => {
       .single();
 
     if (hashData && !hashError) {
+      console.log(`Auth successful via hash for cluster: ${hashData.cluster_id}`);
       apiKeyData = hashData;
     } else {
+      console.log(`Hash auth failed, trying plaintext. Error: ${hashError?.message}`);
+      
       // Fallback: try plaintext (for keys created before hash implementation)
       const { data: plainData, error: plainError } = await supabaseClient
         .from('agent_api_keys')
@@ -95,12 +99,19 @@ serve(async (req) => {
         .single();
 
       if (plainData && !plainError) {
+        console.log(`Auth successful via plaintext for cluster: ${plainData.cluster_id}`);
         apiKeyData = plainData;
+        
+        // Migrate to hash
+        await supabaseClient
+          .from('agent_api_keys')
+          .update({ api_key_hash: providedKeyHash })
+          .eq('api_key', agentKey);
       }
     }
 
     if (!apiKeyData || !apiKeyData.is_active) {
-      console.error('Authentication failed');
+      console.error(`Authentication failed: No valid key found. Hash tried: ${providedKeyHash.substring(0, 16)}...`);
       return new Response(JSON.stringify({ error: 'Invalid API key' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
