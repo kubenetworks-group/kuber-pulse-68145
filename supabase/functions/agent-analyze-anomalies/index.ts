@@ -292,6 +292,14 @@ Kubernetes events are the MOST CRITICAL source of truth for cluster health. Anal
    - OOMKilled in events = memory limit too low, MUST increase
    - CPU throttling in events = CPU limit too low, increase
 
+**CRITICAL RULES FOR IMAGE ERRORS (ImagePullBackOff/ErrImagePull):**
+- For image_pull_error, ONLY suggest auto_heal="update_deployment_image" if you can extract the EXACT failing image from the error message
+- NEVER use placeholders like "<corrigir_imagem>", "<imagem_correta>", "corrigir_imagem_ou_credenciais", etc.
+- If the image error is due to CREDENTIALS or PRIVATE REGISTRY, set auto_heal="restart_pod" and recommend checking imagePullSecrets
+- If you CANNOT determine a valid Docker image name (format: name:tag), set auto_heal="restart_pod" instead
+- Valid image format examples: nginx:1.21, myregistry.io/app:v2.0, library/alpine:3.18
+- NEVER invent or guess image names - only use images that appear in the error messages or pod specs
+
 Return JSON (no markdown):
 {
   "anomalies": [
@@ -327,7 +335,8 @@ Return JSON (no markdown):
 - List EVERY pod with problems
 - Include event_messages in anomaly
 - For resource issues, calculate optimal values based on current usage
-- Be SPECIFIC about what's wrong and how to fix`;
+- Be SPECIFIC about what's wrong and how to fix
+- NEVER use placeholder text for image names - only real Docker image names or null`;
 
     const aiData = await retryWithBackoff(async () => {
       const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {

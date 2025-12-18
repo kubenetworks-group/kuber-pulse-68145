@@ -183,22 +183,41 @@ serve(async (req) => {
               console.log(`📈 Will update resources for ${healParams.deployment_name}: memory=${healParams.memory_limit}`);
               break;
             case 'image_pull_error':
+              // Helper function to validate Docker image name format
+              const isValidDockerImage = (image: string): boolean => {
+                if (!image || typeof image !== 'string') return false;
+                // Check for placeholder text (common AI mistakes)
+                const placeholders = ['corrigir', 'fix', 'update', 'change', '<', '>', 'placeholder', 'example', 'sua_', 'your_', 'imagem', 'image_name'];
+                const lowerImage = image.toLowerCase();
+                if (placeholders.some(p => lowerImage.includes(p))) return false;
+                // Must have valid format: name:tag or registry/name:tag
+                // Valid chars: lowercase letters, numbers, dots, underscores, hyphens, forward slashes
+                const imageRegex = /^[a-z0-9][a-z0-9._\-\/]*[a-z0-9]?(:[a-z0-9][a-z0-9._\-]*)?$/i;
+                return imageRegex.test(image);
+              };
+
               // Use AI-suggested action if available (e.g., update_deployment_image)
               const aiSuggestedAction = anomaly.ai_analysis?.auto_heal;
-              if (aiSuggestedAction === 'update_deployment_image' && autoHealParams.new_image) {
+              const suggestedImage = autoHealParams.new_image;
+              
+              if (aiSuggestedAction === 'update_deployment_image' && suggestedImage && isValidDockerImage(suggestedImage)) {
                 healAction = 'update_deployment_image';
                 healParams = {
                   deployment_name: autoHealParams.deployment_name || podName.replace(/-[a-z0-9]+-[a-z0-9]+$/, ''),
                   namespace: autoHealParams.namespace || namespace,
                   // IMPORTANT: agent previously required container_name; when missing we pass "" and let the agent infer (old_image/single container)
                   container_name: autoHealParams.container_name || '',
-                  new_image: autoHealParams.new_image,
+                  new_image: suggestedImage,
                   old_image: autoHealParams.old_image,
                 };
                 console.log(
                   `🐳 Will update image for ${healParams.deployment_name} (container=${healParams.container_name || 'auto'}) from ${healParams.old_image} to ${healParams.new_image}`
                 );
               } else {
+                // Invalid image or placeholder detected - fallback to pod restart
+                if (suggestedImage) {
+                  console.log(`⚠️ Invalid image detected: "${suggestedImage}" - falling back to pod restart`);
+                }
                 healAction = 'restart_pod';
                 healParams = {
                   pod_name: podName,
