@@ -249,29 +249,13 @@ export function useAutoHeal() {
           if (payload.eventType === 'INSERT') {
             const newAction = payload.new as unknown as AutoHealAction;
             setActions(prev => [newAction, ...prev].slice(0, 50));
-
-            toast({
-              title: '🤖 Auto-Cura em Ação',
-              description: `Executando: ${newAction.action_type}`,
-            });
+            // Silently update without notification
           } else if (payload.eventType === 'UPDATE') {
             const updatedAction = payload.new as unknown as AutoHealAction;
             setActions(prev =>
               prev.map(a => (a.id === updatedAction.id ? updatedAction : a))
             );
-
-            if (updatedAction.status === 'completed') {
-              toast({
-                title: '✅ Correção Concluída',
-                description: `${updatedAction.action_type} executado com sucesso`,
-              });
-            } else if (updatedAction.status === 'failed') {
-              toast({
-                title: '❌ Correção Falhou',
-                description: updatedAction.error_message || 'Erro ao executar correção',
-                variant: 'destructive',
-              });
-            }
+            // Silently update without notification
           }
         }
       )
