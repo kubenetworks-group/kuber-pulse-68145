@@ -90,7 +90,7 @@ export const AuditLogsTab = () => {
   const [resourceFilter, setResourceFilter] = useState<string>("all");
   const [errorDialogOpen, setErrorDialogOpen] = useState(false);
   const [selectedError, setSelectedError] = useState<AuditLog | null>(null);
-  const [userProfiles, setUserProfiles] = useState<Record<string, { email: string; name: string }>>({});
+  const [userProfiles, setUserProfiles] = useState<Record<string, { username: string | null; full_name: string | null }>>({});
 
   const fetchLogs = async () => {
     setLoading(true);
@@ -111,15 +111,14 @@ export const AuditLogsTab = () => {
       if (uniqueUserIds.length > 0) {
         const { data: profiles } = await supabase
           .from('profiles')
-          .select('id, full_name')
+          .select('id, full_name, username')
           .in('id', uniqueUserIds);
 
-        // Also fetch emails from auth admin endpoint if available
-        const profileMap: Record<string, { email: string; name: string }> = {};
+        const profileMap: Record<string, { username: string | null; full_name: string | null }> = {};
         profiles?.forEach(p => {
           profileMap[p.id] = {
-            email: '',
-            name: p.full_name || 'Usuário'
+            username: p.username,
+            full_name: p.full_name
           };
         });
         setUserProfiles(profileMap);
@@ -131,12 +130,20 @@ export const AuditLogsTab = () => {
     }
   };
 
+  // Get display name following same priority as WelcomeHeader: username > full_name > user_id
+  const getDisplayName = (userId: string) => {
+    const profile = userProfiles[userId];
+    if (profile?.username) return profile.username;
+    if (profile?.full_name) return profile.full_name.split(" ")[0];
+    return userId.slice(0, 8) + '...';
+  };
+
   useEffect(() => {
     fetchLogs();
   }, []);
 
   const filteredLogs = logs.filter((log) => {
-    const userName = userProfiles[log.user_id]?.name || '';
+    const userName = getDisplayName(log.user_id);
     const matchesSearch = 
       log.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
       log.resource_type.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -284,7 +291,7 @@ export const AuditLogsTab = () => {
                     </TableRow>
                   ) : (
                     filteredLogs.map((log) => {
-                      const userName = userProfiles[log.user_id]?.name || 'Usuário';
+                      const userName = getDisplayName(log.user_id);
                       const pagePath = getPagePath(log);
                       const errorMsg = getErrorMessage(log);
                       const isError = hasError(log);
@@ -383,7 +390,7 @@ export const AuditLogsTab = () => {
                 <div>
                   <p className="text-xs text-muted-foreground mb-1">Usuário</p>
                   <p className="text-sm font-medium">
-                    {userProfiles[selectedError.user_id]?.name || 'Usuário'}
+                    {getDisplayName(selectedError.user_id)}
                   </p>
                 </div>
                 <div>
