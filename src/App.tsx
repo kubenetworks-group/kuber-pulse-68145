@@ -18,6 +18,7 @@ import Costs from "./pages/Costs";
 import Storage from "./pages/Storage";
 import Settings from "./pages/Settings";
 import Agents from "./pages/Agents";
+import AISavings from "./pages/AISavings";
 
 import Pricing from "./pages/Pricing";
 import TermsOfService from "./pages/TermsOfService";
@@ -108,6 +109,14 @@ const App = () => (
                   element={
                     <ProtectedRoute>
                       <Pricing />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/ai-savings"
+                  element={
+                    <ProtectedRoute>
+                      <AISavings />
                     </ProtectedRoute>
                   }
                 />
