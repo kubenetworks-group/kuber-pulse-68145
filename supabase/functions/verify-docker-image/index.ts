@@ -14,13 +14,26 @@ interface DockerHubResponse {
   results: DockerHubTag[];
 }
 
+interface VerificationResult {
+  exists: boolean;
+  error?: string;
+  image?: string;
+  message: string;
+  requested_tag?: string;
+  suggested_tag?: string;
+  suggested_image?: string;
+  available_tags?: string[];
+  fix_type?: 'tag_only' | 'repository_only' | 'full_image';
+  original_version_available?: boolean;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { image } = await req.json();
+    const { image, deployment_image } = await req.json();
     
     if (!image) {
       return new Response(
@@ -30,6 +43,9 @@ serve(async (req) => {
     }
 
     console.log(`Verifying Docker image: ${image}`);
+    if (deployment_image) {
+      console.log(`Current deployment image: ${deployment_image}`);
+    }
 
     // Parse image (e.g., "nginx:1.19", "library/nginx:1.19", "myuser/myapp:v1.0")
     const parts = image.split(':');
@@ -48,21 +64,140 @@ serve(async (req) => {
 
     console.log(`Checking Docker Hub for ${namespace}/${repository}:${requestedTag}`);
 
-    // Query Docker Hub API
-    const dockerHubUrl = `https://hub.docker.com/v2/repositories/${namespace}/${repository}/tags?page_size=100`;
+    // First, try the exact repository
+    let result = await checkRepository(namespace, repository, requestedTag);
     
+    if (result.exists) {
+      return new Response(JSON.stringify(result), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // If repository not found, try to find similar repositories
+    if (result.error === 'image_not_found') {
+      console.log(`Repository ${namespace}/${repository} not found. Trying alternatives...`);
+      
+      // Try library namespace if it was a custom namespace
+      if (namespace !== 'library') {
+        const libraryResult = await checkRepository('library', repository, requestedTag);
+        if (!libraryResult.error || libraryResult.error !== 'image_not_found') {
+          result = libraryResult;
+          result.fix_type = 'repository_only';
+          result.message = `Repositório "${namespace}/${repository}" não existe. Use "${repository}" (imagem oficial).`;
+        }
+      }
+      
+      // Try common typo fixes
+      const typoFixes = getCommonTypoFixes(repository);
+      for (const fixedRepo of typoFixes) {
+        const fixResult = await checkRepository(namespace, fixedRepo, requestedTag);
+        if (!fixResult.error || fixResult.error !== 'image_not_found') {
+          result = fixResult;
+          result.fix_type = 'repository_only';
+          result.message = `Repositório "${repository}" não existe. Você quis dizer "${fixedRepo}"?`;
+          break;
+        }
+        
+        // Also try in library namespace
+        if (namespace !== 'library') {
+          const libFixResult = await checkRepository('library', fixedRepo, requestedTag);
+          if (!libFixResult.error || libFixResult.error !== 'image_not_found') {
+            result = libFixResult;
+            result.fix_type = 'repository_only';
+            result.message = `Repositório "${namespace}/${repository}" não existe. Use "${fixedRepo}" (imagem oficial).`;
+            break;
+          }
+        }
+      }
+    }
+
+    // If tag not found but repository exists, try to preserve the version
+    if (result.error === 'tag_not_found' && result.available_tags) {
+      const availableTags = result.available_tags;
+      
+      // Extract version number from requested tag
+      const versionMatch = requestedTag.match(/(\d+)\.?(\d+)?\.?(\d+)?/);
+      
+      if (versionMatch) {
+        const [fullMatch, major, minor, patch] = versionMatch;
+        
+        // Try to find exact version in available tags
+        const exactVersionTags = availableTags.filter(tag => {
+          const tagVersion = tag.match(/(\d+)\.?(\d+)?\.?(\d+)?/);
+          if (!tagVersion) return false;
+          
+          // Check if major version matches
+          if (tagVersion[1] !== major) return false;
+          
+          // If minor was specified, check it
+          if (minor && tagVersion[2] && tagVersion[2] !== minor) return false;
+          
+          // If patch was specified, check it
+          if (patch && tagVersion[3] && tagVersion[3] !== patch) return false;
+          
+          return true;
+        });
+        
+        if (exactVersionTags.length > 0) {
+          // Sort to get the most specific match
+          exactVersionTags.sort((a, b) => b.length - a.length);
+          result.suggested_tag = exactVersionTags[0];
+          result.original_version_available = true;
+          result.fix_type = 'tag_only';
+          result.message = `Tag "${requestedTag}" não existe, mas a versão ${major}${minor ? '.' + minor : ''} está disponível como "${exactVersionTags[0]}"`;
+        } else {
+          // No exact version, find closest major version
+          const sameMajorTags = availableTags.filter(tag => {
+            const tagVersion = tag.match(/^v?(\d+)/);
+            return tagVersion && tagVersion[1] === major;
+          });
+          
+          if (sameMajorTags.length > 0) {
+            result.suggested_tag = sameMajorTags[0];
+            result.fix_type = 'tag_only';
+            result.message = `Tag "${requestedTag}" não existe. Versão ${major}.x disponível: "${sameMajorTags[0]}"`;
+          } else {
+            result.suggested_tag = findClosestTag(requestedTag, availableTags);
+            result.fix_type = 'full_image';
+            result.message = `Tag "${requestedTag}" não existe. Sugestão: "${result.suggested_tag}"`;
+          }
+        }
+      }
+      
+      // Update suggested_image with the best tag
+      const finalNamespace = result.suggested_image?.split('/')[0] || namespace;
+      const finalRepo = result.suggested_image?.split('/').pop()?.split(':')[0] || repository;
+      result.suggested_image = finalNamespace === 'library' 
+        ? `${finalRepo}:${result.suggested_tag}`
+        : `${finalNamespace}/${finalRepo}:${result.suggested_tag}`;
+    }
+
+    return new Response(JSON.stringify(result), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+
+  } catch (error) {
+    console.error('Error verifying Docker image:', error);
+    return new Response(
+      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+});
+
+async function checkRepository(namespace: string, repository: string, requestedTag: string): Promise<VerificationResult> {
+  const dockerHubUrl = `https://hub.docker.com/v2/repositories/${namespace}/${repository}/tags?page_size=100`;
+  
+  try {
     const response = await fetch(dockerHubUrl);
     
     if (!response.ok) {
       if (response.status === 404) {
-        return new Response(
-          JSON.stringify({ 
-            exists: false, 
-            error: 'image_not_found',
-            message: `Imagem ${namespace}/${repository} não encontrada no Docker Hub` 
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return {
+          exists: false,
+          error: 'image_not_found',
+          message: `Imagem ${namespace}/${repository} não encontrada no Docker Hub`
+        };
       }
       throw new Error(`Docker Hub API error: ${response.status}`);
     }
@@ -76,43 +211,77 @@ serve(async (req) => {
     const tagExists = availableTags.includes(requestedTag);
 
     if (tagExists) {
-      return new Response(
-        JSON.stringify({ 
-          exists: true, 
-          image: `${namespace === 'library' ? repository : `${namespace}/${repository}`}:${requestedTag}`,
-          message: 'Imagem existe no Docker Hub'
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return {
+        exists: true,
+        image: `${namespace === 'library' ? repository : `${namespace}/${repository}`}:${requestedTag}`,
+        message: 'Imagem existe no Docker Hub'
+      };
     }
 
-    // Tag doesn't exist - find closest match
-    console.log(`Tag ${requestedTag} not found. Finding closest match...`);
-    
-    // Try to find similar versions
+    // Tag doesn't exist - return with available tags for further processing
     const suggestedTag = findClosestTag(requestedTag, availableTags);
 
-    return new Response(
-      JSON.stringify({ 
-        exists: false,
-        error: 'tag_not_found',
-        requested_tag: requestedTag,
-        suggested_tag: suggestedTag,
-        suggested_image: `${namespace === 'library' ? repository : `${namespace}/${repository}`}:${suggestedTag}`,
-        available_tags: availableTags.slice(0, 10), // Return first 10 tags
-        message: `Tag ${requestedTag} não existe. Sugestão: ${suggestedTag}`
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-
+    return {
+      exists: false,
+      error: 'tag_not_found',
+      requested_tag: requestedTag,
+      suggested_tag: suggestedTag,
+      suggested_image: `${namespace === 'library' ? repository : `${namespace}/${repository}`}:${suggestedTag}`,
+      available_tags: availableTags.slice(0, 20),
+      message: `Tag ${requestedTag} não existe. Sugestão: ${suggestedTag}`
+    };
   } catch (error) {
-    console.error('Error verifying Docker image:', error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    console.error(`Error checking repository ${namespace}/${repository}:`, error);
+    return {
+      exists: false,
+      error: 'api_error',
+      message: `Erro ao verificar repositório: ${error instanceof Error ? error.message : 'Unknown'}`
+    };
   }
-});
+}
+
+function getCommonTypoFixes(repository: string): string[] {
+  const fixes: string[] = [];
+  const lower = repository.toLowerCase();
+  
+  // Common typos and alternatives
+  const typoMap: Record<string, string[]> = {
+    'ngnix': ['nginx'],
+    'ngix': ['nginx'],
+    'nginix': ['nginx'],
+    'postgress': ['postgres'],
+    'postgresql': ['postgres'],
+    'mysql': ['mysql', 'mariadb'],
+    'redis': ['redis'],
+    'mongo': ['mongo'],
+    'mongodb': ['mongo'],
+    'node': ['node'],
+    'nodejs': ['node'],
+    'python': ['python'],
+    'python3': ['python'],
+    'alpine': ['alpine'],
+    'ubuntu': ['ubuntu'],
+    'debian': ['debian'],
+    'centos': ['centos'],
+    'busybox': ['busybox'],
+  };
+  
+  // Check direct typo matches
+  if (typoMap[lower]) {
+    fixes.push(...typoMap[lower]);
+  }
+  
+  // Check if repository contains a typo
+  for (const [typo, corrections] of Object.entries(typoMap)) {
+    if (lower.includes(typo) && typo !== lower) {
+      for (const correction of corrections) {
+        fixes.push(lower.replace(typo, correction));
+      }
+    }
+  }
+  
+  return [...new Set(fixes)];
+}
 
 function findClosestTag(requestedTag: string, availableTags: string[]): string {
   // If requested tag is a version number, try to find closest version
