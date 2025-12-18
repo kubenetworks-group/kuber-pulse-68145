@@ -84,37 +84,56 @@ serve(async (req) => {
 
   try {
     const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      throw new Error('Missing authorization header');
-    }
-
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      {
-        global: {
-          headers: { Authorization: authHeader },
-        },
-      }
-    );
-
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
-    if (userError || !user) {
-      throw new Error('Unauthorized');
-    }
-
-    const { cluster_id } = await req.json();
+    const body = await req.json();
+    const { cluster_id, user_id: bodyUserId } = body;
 
     if (!cluster_id) {
       throw new Error('cluster_id is required');
     }
+
+    let supabaseClient;
+    let userId: string;
+
+    // Check if this is a service role call (from cron jobs)
+    const isServiceRoleCall = authHeader?.includes(Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || 'never-match');
+    
+    if (isServiceRoleCall && bodyUserId) {
+      // Service role call from cron - use service role client
+      console.log('🔧 Service role call detected, using provided user_id');
+      supabaseClient = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      );
+      userId = bodyUserId;
+    } else if (authHeader) {
+      // Regular user call
+      supabaseClient = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+        {
+          global: {
+            headers: { Authorization: authHeader },
+          },
+        }
+      );
+
+      const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+      if (userError || !user) {
+        throw new Error('Unauthorized');
+      }
+      userId = user.id;
+    } else {
+      throw new Error('Missing authorization');
+    }
+
+    console.log(`📊 Analyzing cluster ${cluster_id} for user ${userId}`);
 
     // Check for recent scan in last 3 minutes to avoid rate limiting
     const { data: recentScan } = await supabaseClient
       .from('scan_history')
       .select('*')
       .eq('cluster_id', cluster_id)
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .gte('created_at', new Date(Date.now() - 3 * 60 * 1000).toISOString())
       .order('created_at', { ascending: false })
       .limit(1)
@@ -419,7 +438,7 @@ Return JSON (no markdown):
     if (anomalies.length > 0) {
       const anomaliesToInsert = anomalies.map((anomaly: any) => ({
         cluster_id,
-        user_id: user.id,
+        user_id: userId,
         anomaly_type: anomaly.type,
         severity: anomaly.severity,
         description: anomaly.description,
@@ -449,7 +468,7 @@ Return JSON (no markdown):
       
       const incidentsToInsert = anomalies.map((anomaly: any) => ({
         cluster_id,
-        user_id: user.id,
+        user_id: userId,
         incident_type: mapAnomalyTypeToIncidentType(anomaly.type),
         severity: anomaly.severity,
         title: `${anomaly.type.replace(/_/g, ' ').toUpperCase()}: ${anomaly.affected_pods?.[0] || 'Cluster'}`,
@@ -483,7 +502,7 @@ Return JSON (no markdown):
       await supabaseClient
         .from('notifications')
         .insert({
-          user_id: user.id,
+          user_id: userId,
           title: `🤖 ${anomalies.length} anomalia(s) detectada(s)`,
           message: `A IA detectou ${anomalies.length} anomalia(s) no cluster. Verifique a aba de Monitoramento de IA.`,
           type: anomalies.some((a: any) => a.severity === 'critical') ? 'error' : 'warning',
@@ -497,7 +516,7 @@ Return JSON (no markdown):
       .from('scan_history')
       .insert({
         cluster_id,
-        user_id: user.id,
+        user_id: userId,
         anomalies_found: anomalies.length,
         anomalies_data: anomalies,
         summary: analysisResult.summary || 'Análise concluída',
