@@ -61,7 +61,7 @@ const AdminDashboard = () => {
   const [actionLoading, setActionLoading] = useState(false);
   
   // Form states
-  const [trialDays, setTrialDays] = useState<string>("30");
+  const [trialDays, setTrialDays] = useState<string>("7");
   const [customClusterLimit, setCustomClusterLimit] = useState<string>("");
   const [selectedPlan, setSelectedPlan] = useState<string>("");
   const [selectedStatus, setSelectedStatus] = useState<string>("");
@@ -138,7 +138,7 @@ const AdminDashboard = () => {
 
   const openEditModal = (user: UserData) => {
     setSelectedUser(user);
-    setTrialDays("30");
+    setTrialDays("7");
     setCustomClusterLimit(user.subscription?.custom_cluster_limit?.toString() || "");
     setSelectedPlan(user.subscription?.plan || "free");
     setSelectedStatus(user.subscription?.status || "trialing");
@@ -504,28 +504,42 @@ const AdminDashboard = () => {
           </DialogHeader>
           
           <div className="space-y-6 py-4">
-            {/* Extend Trial */}
+            {/* Trial Management */}
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <Clock className="h-4 w-4 text-muted-foreground" />
-                <Label className="font-medium">Extender Trial</Label>
+                <Label className="font-medium">Gerenciar Trial</Label>
               </div>
-              <div className="flex gap-2">
-                <Input
-                  type="number"
-                  placeholder="Dias"
-                  value={trialDays}
-                  onChange={(e) => setTrialDays(e.target.value)}
-                  className="w-24"
-                />
-                <Button 
-                  variant="outline" 
-                  onClick={() => executeAdminAction("extend_trial", trialDays)}
-                  disabled={actionLoading}
-                >
-                  Extender {trialDays} dias
-                </Button>
+              <div className="flex flex-col gap-2">
+                <div className="flex gap-2">
+                  <Input
+                    type="number"
+                    placeholder="Dias"
+                    value={trialDays}
+                    onChange={(e) => setTrialDays(e.target.value)}
+                    className="w-24"
+                    min="1"
+                  />
+                  <Button 
+                    variant="default" 
+                    onClick={() => executeAdminAction("set_trial_days", trialDays)}
+                    disabled={actionLoading}
+                    className="flex-1"
+                  >
+                    Definir para {trialDays} dias
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => executeAdminAction("extend_trial", trialDays)}
+                    disabled={actionLoading}
+                  >
+                    + Extender
+                  </Button>
+                </div>
               </div>
+              <p className="text-xs text-muted-foreground">
+                <strong>Definir:</strong> configura trial para X dias a partir de hoje. <strong>Extender:</strong> adiciona X dias ao prazo atual.
+              </p>
               <p className="text-xs text-muted-foreground">
                 Trial atual expira em: {selectedUser?.subscription?.trial_ends_at 
                   ? format(new Date(selectedUser.subscription.trial_ends_at), "dd/MM/yyyy HH:mm", { locale: ptBR })
