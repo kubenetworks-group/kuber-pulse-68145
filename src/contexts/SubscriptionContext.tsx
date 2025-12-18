@@ -65,15 +65,24 @@ export const SubscriptionProvider = ({ children }: { children: React.ReactNode }
   const { user } = useAuth();
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const fetchSubscription = useCallback(async () => {
     if (!user) {
       setSubscription(null);
+      setIsAdmin(false);
       setLoading(false);
       return;
     }
 
     try {
+      // Check if user is admin
+      const { data: adminCheck } = await supabase.rpc('has_role', {
+        _user_id: user.id,
+        _role: 'admin'
+      });
+      setIsAdmin(!!adminCheck);
+
       const { data, error } = await supabase
         .from('subscriptions')
         .select('*')
@@ -113,23 +122,27 @@ export const SubscriptionProvider = ({ children }: { children: React.ReactNode }
     fetchSubscription();
   }, [fetchSubscription]);
 
-  const isTrialActive = subscription?.status === 'trialing' && 
+  // Admin users are always "pro" without trial restrictions
+  const isTrialActive = !isAdmin && subscription?.status === 'trialing' && 
     new Date(subscription.trial_ends_at) > new Date();
 
-  const daysLeftInTrial = subscription?.trial_ends_at
+  const daysLeftInTrial = isAdmin ? Infinity : (subscription?.trial_ends_at
     ? Math.max(0, Math.ceil((new Date(subscription.trial_ends_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
-    : 0;
+    : 0);
 
-  const isReadOnly = subscription?.status === 'readonly' || 
-    (subscription?.status === 'trialing' && daysLeftInTrial === 0);
+  // Admin users are never read-only
+  const isReadOnly = !isAdmin && (subscription?.status === 'readonly' || 
+    (subscription?.status === 'trialing' && daysLeftInTrial === 0));
 
-  const currentPlan = subscription?.plan || 'free';
+  // Admin users always have pro plan
+  const currentPlan: PlanType = isAdmin ? 'pro' : (subscription?.plan || 'free');
   const planLimits = PLAN_LIMITS[currentPlan];
 
-  // During trial, user has full access (pro-like)
-  const effectiveLimits = isTrialActive ? PLAN_LIMITS.pro : planLimits;
+  // Admin or during trial = full access (pro-like)
+  const effectiveLimits = isAdmin || isTrialActive ? PLAN_LIMITS.pro : planLimits;
 
   const canCreateCluster = (currentCount: number): boolean => {
+    if (isAdmin) return true; // Admin has unlimited access
     if (isReadOnly) return false;
     if (isTrialActive) return true;
     
@@ -139,6 +152,7 @@ export const SubscriptionProvider = ({ children }: { children: React.ReactNode }
   };
 
   const canUseAI = (): boolean => {
+    if (isAdmin) return true; // Admin has unlimited access
     if (isReadOnly) return false;
     if (isTrialActive) return true;
     if (effectiveLimits.aiAnalysesPerMonth === Infinity) return true;
@@ -146,6 +160,7 @@ export const SubscriptionProvider = ({ children }: { children: React.ReactNode }
   };
 
   const canUseAutoHealing = (): boolean => {
+    if (isAdmin) return true; // Admin has unlimited access
     if (isReadOnly) return false;
     if (isTrialActive) return true;
     return effectiveLimits.autoHealing;
