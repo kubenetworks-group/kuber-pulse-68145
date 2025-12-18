@@ -62,9 +62,9 @@ serve(async (req) => {
         let healActionsExecuted = 0;
         
         try {
-          // Step 1: Analyze for anomalies
+          // Step 1: Analyze for anomalies (pass user_id for service role calls)
           const { data: analysisData, error: analysisError } = await supabaseClient.functions.invoke('agent-analyze-anomalies', {
-            body: { cluster_id: cluster.id }
+            body: { cluster_id: cluster.id, user_id: cluster.user_id }
           });
 
           if (analysisError) {
