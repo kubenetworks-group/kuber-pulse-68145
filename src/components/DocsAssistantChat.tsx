@@ -15,6 +15,7 @@ type Message = {
 
 export const DocsAssistantChat = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const [showHint, setShowHint] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
@@ -27,6 +28,32 @@ export const DocsAssistantChat = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const { subscription } = useSubscription();
   const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/docs-assistant`;
+
+  // Hint visibility cycle: show after 3s, hide after 8s, repeat
+  useEffect(() => {
+    if (isOpen) {
+      setShowHint(false);
+      return;
+    }
+
+    // Initial delay before first show
+    const initialTimeout = setTimeout(() => {
+      setShowHint(true);
+    }, 3000);
+
+    // Cycle: show for 5s, hide for 10s
+    const interval = setInterval(() => {
+      setShowHint(true);
+      setTimeout(() => {
+        setShowHint(false);
+      }, 5000);
+    }, 15000);
+
+    return () => {
+      clearTimeout(initialTimeout);
+      clearInterval(interval);
+    };
+  }, [isOpen]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -169,15 +196,17 @@ export const DocsAssistantChat = () => {
   return (
     <>
       {!isOpen && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 animate-in fade-in zoom-in duration-300">
-          <div className="bg-card/95 backdrop-blur-sm border border-border/50 rounded-lg px-3 py-2 shadow-lg max-w-[200px]">
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              Dúvidas sobre como usar alguma ferramenta? <span className="text-primary font-medium">Converse comigo!</span>
-            </p>
-          </div>
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3">
+          {showHint && (
+            <div className="bg-card/95 backdrop-blur-sm border border-border/50 rounded-lg px-3 py-2 shadow-lg max-w-[200px] animate-in fade-in slide-in-from-right-4 duration-500">
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Dúvidas sobre como usar alguma ferramenta? <span className="text-primary font-medium">Converse comigo!</span>
+              </p>
+            </div>
+          )}
           <Button
             onClick={() => setIsOpen(true)}
-            className="h-14 w-14 rounded-full shadow-2xl bg-gradient-primary hover:opacity-90"
+            className="h-14 w-14 rounded-full shadow-2xl bg-gradient-primary hover:opacity-90 animate-in fade-in zoom-in duration-300"
             size="icon"
           >
             <MessageCircle className="h-6 w-6" />
