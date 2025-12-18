@@ -4,16 +4,40 @@ import { ClusterSelector } from "./ClusterSelector";
 import { Footer } from "./Footer";
 import { DocsAssistantChat } from "./DocsAssistantChat";
 import { TrialBanner } from "./TrialBanner";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "react-router-dom";
 import { Menu, X } from "lucide-react";
 import { Button } from "./ui/button";
+import { useAuditLog } from "@/hooks/useAuditLog";
+
+const pageNameMap: Record<string, string> = {
+  '/': 'Dashboard',
+  '/clusters': 'Clusters',
+  '/ai-monitor': 'Monitor IA',
+  '/costs': 'Custos',
+  '/storage': 'Armazenamento',
+  '/agents': 'Agentes',
+  '/settings': 'Configurações',
+  '/admin': 'Admin',
+  '/pricing': 'Preços',
+};
 
 export const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
   // Mobile: closed by default, Desktop: open by default
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => window.innerWidth < 1024);
   const location = useLocation();
+  const { logPageAccess } = useAuditLog();
+  const lastLoggedPath = useRef<string | null>(null);
+
+  // Log page access when route changes
+  useEffect(() => {
+    const pageName = pageNameMap[location.pathname];
+    if (pageName && lastLoggedPath.current !== location.pathname) {
+      lastLoggedPath.current = location.pathname;
+      logPageAccess(location.pathname, pageName);
+    }
+  }, [location.pathname, logPageAccess]);
 
   // Ensure sidebar is closed on mobile and collapsed on medium screens
   useEffect(() => {
