@@ -81,7 +81,7 @@ export const AIInsightsWidget = ({ recentIncidents }: AIInsightsWidgetProps) => 
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(24);
       doc.setFont('helvetica', 'bold');
-      doc.text('Kodo AI Report', 14, 20);
+      doc.text('Relatorio Kodo AI', 14, 20);
       
       doc.setFontSize(12);
       doc.setFont('helvetica', 'normal');
@@ -89,14 +89,14 @@ export const AIInsightsWidget = ({ recentIncidents }: AIInsightsWidgetProps) => 
       
       doc.setTextColor(0, 0, 0);
       doc.setFontSize(10);
-      doc.text(`Generated: ${new Date().toLocaleString('pt-BR')}`, 14, 50);
+      doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, 14, 50);
 
       let yPos = 60;
 
       // Summary Section
       doc.setFontSize(16);
       doc.setFont('helvetica', 'bold');
-      doc.text('Summary', 14, yPos);
+      doc.text('Resumo', 14, yPos);
       yPos += 10;
 
       const totalIncidents = incidents?.length || 0;
@@ -108,32 +108,32 @@ export const AIInsightsWidget = ({ recentIncidents }: AIInsightsWidgetProps) => 
 
       doc.setFontSize(11);
       doc.setFont('helvetica', 'normal');
-      doc.text(`• Total Incidents: ${totalIncidents} (${resolvedIncidents} resolved by AI)`, 20, yPos);
+      doc.text(`• Total de Incidentes: ${totalIncidents} (${resolvedIncidents} resolvidos pela IA)`, 20, yPos);
       yPos += 7;
-      doc.text(`• Total Anomalies: ${totalAnomalies} (${resolvedAnomalies} resolved)`, 20, yPos);
+      doc.text(`• Total de Anomalias: ${totalAnomalies} (${resolvedAnomalies} resolvidas)`, 20, yPos);
       yPos += 7;
-      doc.text(`• Auto-Heal Actions: ${totalHealActions} (${successfulHeals} successful)`, 20, yPos);
+      doc.text(`• Acoes de Auto-Cura: ${totalHealActions} (${successfulHeals} com sucesso)`, 20, yPos);
       yPos += 7;
       
       const resolutionRate = totalIncidents > 0 ? Math.round((resolvedIncidents / totalIncidents) * 100) : 0;
-      doc.text(`• AI Resolution Rate: ${resolutionRate}%`, 20, yPos);
+      doc.text(`• Taxa de Resolucao da IA: ${resolutionRate}%`, 20, yPos);
       yPos += 15;
 
       // Incidents Table
       if (incidents && incidents.length > 0) {
         doc.setFontSize(14);
         doc.setFont('helvetica', 'bold');
-        doc.text('Recent Incidents', 14, yPos);
+        doc.text('Incidentes Recentes', 14, yPos);
         yPos += 5;
 
         autoTable(doc, {
           startY: yPos,
-          head: [['Date', 'Severity', 'Title', 'Status']],
+          head: [['Data', 'Severidade', 'Titulo', 'Status']],
           body: incidents.slice(0, 20).map(i => [
             new Date(i.created_at || '').toLocaleDateString('pt-BR'),
             i.severity?.toUpperCase() || 'N/A',
             (i.title || '').substring(0, 40) + ((i.title || '').length > 40 ? '...' : ''),
-            i.action_taken ? '✓ Resolved' : '⏳ Pending'
+            i.action_taken ? '✓ Resolvido' : '⏳ Pendente'
           ]),
           headStyles: { fillColor: [99, 102, 241] },
           styles: { fontSize: 9 },
@@ -158,17 +158,17 @@ export const AIInsightsWidget = ({ recentIncidents }: AIInsightsWidgetProps) => 
       if (anomalies && anomalies.length > 0) {
         doc.setFontSize(14);
         doc.setFont('helvetica', 'bold');
-        doc.text('Anomalies Detected', 14, yPos);
+        doc.text('Anomalias Detectadas', 14, yPos);
         yPos += 5;
 
         autoTable(doc, {
           startY: yPos,
-          head: [['Date', 'Type', 'Severity', 'Status']],
+          head: [['Data', 'Tipo', 'Severidade', 'Status']],
           body: anomalies.slice(0, 20).map(a => [
             new Date(a.created_at || '').toLocaleDateString('pt-BR'),
             (a.anomaly_type || '').replace(/_/g, ' '),
             a.severity?.toUpperCase() || 'N/A',
-            a.resolved ? (a.auto_heal_applied ? '✓ Auto-healed' : '✓ Resolved') : '⏳ Pending'
+            a.resolved ? (a.auto_heal_applied ? '✓ Auto-curado' : '✓ Resolvido') : '⏳ Pendente'
           ]),
           headStyles: { fillColor: [234, 179, 8] },
           styles: { fontSize: 9 }
@@ -187,17 +187,17 @@ export const AIInsightsWidget = ({ recentIncidents }: AIInsightsWidgetProps) => 
       if (healActions && healActions.length > 0) {
         doc.setFontSize(14);
         doc.setFont('helvetica', 'bold');
-        doc.text('Auto-Heal Actions', 14, yPos);
+        doc.text('Acoes de Auto-Cura', 14, yPos);
         yPos += 5;
 
         autoTable(doc, {
           startY: yPos,
-          head: [['Date', 'Action', 'Reason', 'Status']],
+          head: [['Data', 'Acao', 'Motivo', 'Status']],
           body: healActions.slice(0, 20).map(h => [
             new Date(h.created_at || '').toLocaleDateString('pt-BR'),
             (h.action_type || '').replace(/_/g, ' '),
             (h.trigger_reason || '').substring(0, 35) + ((h.trigger_reason || '').length > 35 ? '...' : ''),
-            h.status === 'completed' ? '✓ Success' : h.status === 'failed' ? '✗ Failed' : '⏳ Pending'
+            h.status === 'completed' ? '✓ Sucesso' : h.status === 'failed' ? '✗ Falhou' : '⏳ Pendente'
           ]),
           headStyles: { fillColor: [34, 197, 94] },
           styles: { fontSize: 9 }
@@ -210,7 +210,7 @@ export const AIInsightsWidget = ({ recentIncidents }: AIInsightsWidgetProps) => 
         doc.setPage(i);
         doc.setFontSize(8);
         doc.setTextColor(128, 128, 128);
-        doc.text(`Page ${i} of ${pageCount} | Generated by Kodo AI`, pageWidth / 2, 290, { align: 'center' });
+        doc.text(`Pagina ${i} de ${pageCount} | Gerado por Kodo AI`, pageWidth / 2, 290, { align: 'center' });
       }
 
       // Download
