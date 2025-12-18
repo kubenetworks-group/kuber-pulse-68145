@@ -190,11 +190,14 @@ serve(async (req) => {
                 healParams = {
                   deployment_name: autoHealParams.deployment_name || podName.replace(/-[a-z0-9]+-[a-z0-9]+$/, ''),
                   namespace: autoHealParams.namespace || namespace,
-                  container_name: autoHealParams.container_name,
+                  // IMPORTANT: agent previously required container_name; when missing we pass "" and let the agent infer (old_image/single container)
+                  container_name: autoHealParams.container_name || '',
                   new_image: autoHealParams.new_image,
                   old_image: autoHealParams.old_image,
                 };
-                console.log(`🐳 Will update image from ${healParams.old_image} to ${healParams.new_image}`);
+                console.log(
+                  `🐳 Will update image for ${healParams.deployment_name} (container=${healParams.container_name || 'auto'}) from ${healParams.old_image} to ${healParams.new_image}`
+                );
               } else {
                 healAction = 'restart_pod';
                 healParams = {

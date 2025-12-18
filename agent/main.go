@@ -1659,10 +1659,15 @@ func scaleDeployment(clientset *kubernetes.Clientset, params map[string]interfac
 }
 
 func updateDeploymentImage(clientset *kubernetes.Clientset, params map[string]interface{}) (map[string]interface{}, error) {
-	deploymentName := params["deployment_name"].(string)
-	namespace := params["namespace"].(string)
-	containerName := params["container_name"].(string)
-	newImage := params["new_image"].(string)
+	deploymentName, _ := params["deployment_name"].(string)
+	namespace, _ := params["namespace"].(string)
+	containerName, _ := params["container_name"].(string)
+	newImage, _ := params["new_image"].(string)
+	oldImage, _ := params["old_image"].(string)
+
+	if deploymentName == "" || namespace == "" || newImage == "" {
+		return nil, fmt.Errorf("missing required params: deployment_name, namespace, new_image")
+	}
 
 	deployment, err := clientset.AppsV1().Deployments(namespace).Get(
 		context.Background(),
@@ -1675,15 +1680,43 @@ func updateDeploymentImage(clientset *kubernetes.Clientset, params map[string]in
 
 	// Find and update the container image
 	updated := false
-	for i, container := range deployment.Spec.Template.Spec.Containers {
-		if container.Name == containerName {
-			deployment.Spec.Template.Spec.Containers[i].Image = newImage
-			updated = true
-			break
+	updatedContainer := ""
+
+	// 1) Prefer explicit container name when provided
+	if containerName != "" {
+		for i, container := range deployment.Spec.Template.Spec.Containers {
+			if container.Name == containerName {
+				deployment.Spec.Template.Spec.Containers[i].Image = newImage
+				updated = true
+				updatedContainer = container.Name
+				break
+			}
 		}
 	}
 
+	// 2) If container not provided or not found, try match by old_image
+	if !updated && oldImage != "" {
+		for i, container := range deployment.Spec.Template.Spec.Containers {
+			if container.Image == oldImage {
+				deployment.Spec.Template.Spec.Containers[i].Image = newImage
+				updated = true
+				updatedContainer = container.Name
+				break
+			}
+		}
+	}
+
+	// 3) If still not updated and there's only one container, update it
+	if !updated && len(deployment.Spec.Template.Spec.Containers) == 1 {
+		deployment.Spec.Template.Spec.Containers[0].Image = newImage
+		updated = true
+		updatedContainer = deployment.Spec.Template.Spec.Containers[0].Name
+	}
+
 	if !updated {
+		if containerName == "" {
+			return nil, fmt.Errorf("unable to determine which container to update (provide container_name or old_image)")
+		}
 		return nil, fmt.Errorf("container %s not found in deployment", containerName)
 	}
 
@@ -1692,20 +1725,21 @@ func updateDeploymentImage(clientset *kubernetes.Clientset, params map[string]in
 		deployment,
 		metav1.UpdateOptions{},
 	)
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to update deployment: %v", err)
 	}
 
 	return map[string]interface{}{
-		"action":          "deployment_image_updated",
-		"deployment":      deploymentName,
-		"namespace":       namespace,
-		"container":       containerName,
-		"new_image":       newImage,
-		"message":         "Deployment image updated successfully. Kubernetes will roll out the new pods.",
+		"action":     "deployment_image_updated",
+		"deployment": deploymentName,
+		"namespace":  namespace,
+		"container":  updatedContainer,
+		"new_image":  newImage,
+		"old_image":  oldImage,
+		"message":    "Deployment image updated successfully. Kubernetes will roll out the new pods.",
 	}, nil
 }
+
 
 func updateDeploymentResources(clientset *kubernetes.Clientset, params map[string]interface{}) (map[string]interface{}, error) {
 	deploymentName := params["deployment_name"].(string)
