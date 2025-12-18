@@ -66,7 +66,7 @@ serve(async (req) => {
 
     switch (action) {
       case "extend_trial": {
-        // value is number of days to extend
+        // value is number of days to extend from current end (or now if expired)
         const daysToExtend = parseInt(value) || 30;
         
         // Get current subscription
@@ -88,6 +88,20 @@ serve(async (req) => {
             updated_at: new Date().toISOString(),
           };
         }
+        break;
+      }
+
+      case "set_trial_days": {
+        // value is number of days from NOW (not extending, but setting)
+        const trialDays = parseInt(value) || 7;
+        const now = new Date();
+        const newEndDate = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000);
+        
+        updateData = {
+          trial_ends_at: newEndDate.toISOString(),
+          status: "trialing",
+          updated_at: new Date().toISOString(),
+        };
         break;
       }
 
