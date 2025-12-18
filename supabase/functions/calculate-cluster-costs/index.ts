@@ -49,13 +49,14 @@ const pricingTables = {
   },
   magalu: {
     compute: {
-      'small': 0.05,
-      'medium': 0.10,
-      'large': 0.20,
-      'default': 0.10
+      'BV2-2-20': 0.02,      // ~R$0.10/h
+      'BV4-8-50': 0.05,      // ~R$0.25/h  
+      'BV8-16-100': 0.10,    // ~R$0.50/h
+      'default': 0.035       // ~R$0.18/h média
     },
-    storage: 0.30,
-    network: 0.05
+    storage: 0.12,           // R$0.58/GiB = ~$0.12/GB
+    network: 0.02,           // R$0.10/GB = ~$0.02/GB
+    management: 0.09         // R$0.45/h = ~$0.09/h (custo do cluster)
   }
 };
 

@@ -4,14 +4,17 @@ import { corsHeaders } from '../_shared/cors.ts';
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-// Node cost estimates by provider ($/hour)
+// Node cost estimates by provider ($/hour) - based on official pricing
 const nodeCostByProvider: Record<string, number> = {
   aws: 0.096,
   gcp: 0.095,
   azure: 0.096,
   digitalocean: 0.018,
-  magalu: 0.10
+  magalu: 0.035  // ~R$0.18/h média (BV2-2-20 a BV8-16-100)
 };
+
+// Revenue multiplier for downtime impact (more conservative)
+const DOWNTIME_MULTIPLIER = 150; // Revenue impact ~150x infrastructure cost
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -82,61 +85,83 @@ Deno.serve(async (req) => {
     let calculationDetails: any = {};
 
     const monthlyMinutes = 30 * 24 * 60;
-    const baseCostPerMinute = cluster.monthly_cost / monthlyMinutes;
-    const revenueMultiplier = 10; // Revenue typically 10x infrastructure cost
+    const baseCostPerMinute = (cluster.monthly_cost || 300) / monthlyMinutes; // Default $300 if not set
+    
+    // More conservative revenue multiplier based on real impact
+    const revenueMultiplier = DOWNTIME_MULTIPLIER;
 
     // 1. Downtime Prevention (for critical/high severity incidents)
     if (incident.severity === 'critical' || incident.severity === 'high') {
       savingType = 'downtime_prevention';
-      downtimeAvoidedMinutes = incident.severity === 'critical' ? 30 : 15;
+      // Realistic downtime estimates: critical ~20min, high ~12min
+      downtimeAvoidedMinutes = incident.severity === 'critical' ? 20 : 12;
       costPerMinute = baseCostPerMinute * revenueMultiplier;
       estimatedSavings = Number((downtimeAvoidedMinutes * costPerMinute).toFixed(2));
+      
+      // Cap maximum savings at reasonable values
+      const maxSavings = incident.severity === 'critical' ? 50 : 30;
+      estimatedSavings = Math.min(estimatedSavings, maxSavings);
       
       calculationDetails = {
         severity: incident.severity,
         revenue_multiplier: revenueMultiplier,
         base_cost_per_minute: baseCostPerMinute,
         downtime_minutes: downtimeAvoidedMinutes,
-        assumption: 'Based on downtime avoided and revenue impact'
+        max_capped: maxSavings,
+        assumption: 'Based on downtime avoided and revenue impact (capped)'
       };
     }
     // 2. Resource Optimization (restart_pod instead of scale_up)
     else if (incident.auto_heal_action === 'restart_pod' && 
              incident.ai_analysis?.recommendation?.toLowerCase().includes('scale')) {
       savingType = 'resource_optimization';
-      const nodesAvoided = 2;
+      const nodesAvoided = 1; // More conservative: 1 node instead of 2
       const provider = cluster.provider.toLowerCase();
-      const nodeHourlyCost = nodeCostByProvider[provider] || nodeCostByProvider.aws;
+      const nodeHourlyCost = nodeCostByProvider[provider] || nodeCostByProvider.magalu;
       const hoursInMonth = 24 * 30;
       estimatedSavings = Number((nodesAvoided * nodeHourlyCost * hoursInMonth).toFixed(2));
+      
+      // Cap at reasonable value
+      estimatedSavings = Math.min(estimatedSavings, 25);
       
       calculationDetails = {
         nodes_avoided: nodesAvoided,
         node_hourly_cost: nodeHourlyCost,
         hours_in_month: hoursInMonth,
-        assumption: 'Avoided unnecessary scale-up by fixing issue with restart'
+        max_capped: 25,
+        assumption: 'Avoided unnecessary scale-up by fixing issue with restart (capped)'
       };
     }
-    // 3. Scale Optimization (intelligent scale_up)
-    else if (incident.auto_heal_action === 'scale_up') {
+    // 3. Scale Optimization (intelligent scale_up or scale_down)
+    else if (incident.auto_heal_action === 'scale_up' || incident.auto_heal_action === 'scale_down') {
       savingType = 'scale_optimization';
-      const optimizationPercent = 0.05; // 5% savings vs over-provisioning
-      estimatedSavings = Number((cluster.monthly_cost * optimizationPercent).toFixed(2));
+      const optimizationPercent = 0.03; // 3% savings vs over-provisioning (more conservative)
+      const monthlyCost = cluster.monthly_cost || 300;
+      estimatedSavings = Number((monthlyCost * optimizationPercent).toFixed(2));
+      
+      // Cap at reasonable value
+      estimatedSavings = Math.min(estimatedSavings, 20);
       
       calculationDetails = {
         optimization_percent: optimizationPercent,
-        monthly_cost: cluster.monthly_cost,
-        assumption: 'Intelligent scaling vs. conservative over-provisioning'
+        monthly_cost: monthlyCost,
+        max_capped: 20,
+        assumption: 'Intelligent scaling vs. conservative over-provisioning (capped)'
       };
     }
     // Default: minimal savings for other actions
     else {
       savingType = 'resource_optimization';
-      estimatedSavings = Number((cluster.monthly_cost * 0.01).toFixed(2)); // 1% minimal savings
+      const monthlyCost = cluster.monthly_cost || 300;
+      estimatedSavings = Number((monthlyCost * 0.02).toFixed(2)); // 2% minimal savings
+      
+      // Cap at reasonable value
+      estimatedSavings = Math.min(estimatedSavings, 15);
       
       calculationDetails = {
         auto_heal_action: incident.auto_heal_action,
-        assumption: 'Minimal optimization from automated remediation'
+        max_capped: 15,
+        assumption: 'Minimal optimization from automated remediation (capped)'
       };
     }
 
