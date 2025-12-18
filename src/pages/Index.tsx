@@ -173,11 +173,9 @@ const Index = () => {
             </div>
 
             {/* AI Insights Widget - Full Width */}
-            {incidents.length > 0 && (
-              <div className="animate-scale-in">
-                <AIInsightsWidget recentIncidents={incidents} />
-              </div>
-            )}
+            <div className="animate-scale-in">
+              <AIInsightsWidget recentIncidents={incidents} />
+            </div>
           </div>
         )}
       </div>
