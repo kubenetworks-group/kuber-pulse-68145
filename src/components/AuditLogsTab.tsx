@@ -130,12 +130,12 @@ export const AuditLogsTab = () => {
     }
   };
 
-  // Get display name following same priority as WelcomeHeader: username > full_name > user_id
+  // Get display name following same priority as WelcomeHeader: username > full_name > 'Usuário'
   const getDisplayName = (userId: string) => {
     const profile = userProfiles[userId];
     if (profile?.username) return profile.username;
     if (profile?.full_name) return profile.full_name.split(" ")[0];
-    return userId.slice(0, 8) + '...';
+    return "Usuário";
   };
 
   useEffect(() => {
