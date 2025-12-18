@@ -19,7 +19,7 @@ import Storage from "./pages/Storage";
 import Settings from "./pages/Settings";
 import Agents from "./pages/Agents";
 import AISavings from "./pages/AISavings";
-
+import PlansComparison from "./pages/PlansComparison";
 import Pricing from "./pages/Pricing";
 import TermsOfService from "./pages/TermsOfService";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
@@ -128,6 +128,7 @@ const App = () => (
                     </AdminProtectedRoute>
                   }
                 />
+                <Route path="/plans" element={<PlansComparison />} />
                 <Route path="/terms" element={<TermsOfService />} />
                 <Route path="/privacy" element={<PrivacyPolicy />} />
                 <Route path="*" element={<NotFound />} />

@@ -627,7 +627,7 @@ export default function LandingPage() {
             </div>
 
             <div className="text-center mt-8">
-              <Link to="/pricing" className="text-primary hover:text-violet-500 transition-colors inline-flex items-center gap-2">
+              <Link to="/plans" className="text-primary hover:text-violet-500 transition-colors inline-flex items-center gap-2">
                 Ver comparacao completa
                 <ArrowRight className="w-4 h-4" />
               </Link>
