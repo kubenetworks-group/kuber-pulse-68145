@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useTranslation } from "react-i18next";
 import { useAdminCheck } from "@/hooks/useAdminCheck";
+import { useSubscription } from "@/contexts/SubscriptionContext";
 import kodoLogo from "@/assets/kodo-logo.png";
 import {
   Server,
@@ -15,6 +16,7 @@ import {
   Shield,
   PanelLeft,
   PanelLeftClose,
+  Sparkles,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -30,11 +32,15 @@ export const Sidebar = ({ collapsed = false, onNavigate, onToggleCollapse, onCol
   const { signOut } = useAuth();
   const { t } = useTranslation();
   const { isAdmin } = useAdminCheck();
+  const { currentPlan, isTrialActive } = useSubscription();
+  
+  const isPro = currentPlan === 'pro' && !isTrialActive;
 
   const navigation = [
     { name: t('common.dashboard'), href: "/dashboard", icon: LayoutDashboard },
     { name: t('common.storage'), href: "/storage", icon: HardDrive },
     { name: t('common.aiMonitor'), href: "/ai-monitor", icon: Bot },
+    ...(isPro ? [{ name: "Economia com IA", href: "/ai-savings", icon: Sparkles }] : []),
     { name: t('common.clusters'), href: "/clusters", icon: Server },
     { name: t('common.agents'), href: "/agents", icon: Bot },
     { name: t('common.settings'), href: "/settings", icon: Settings },
