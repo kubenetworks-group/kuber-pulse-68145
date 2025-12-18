@@ -13,6 +13,8 @@ export interface AutoHealSettings {
   auto_apply_anomalies: boolean;
   severity_threshold: 'low' | 'medium' | 'high' | 'critical';
   scan_interval_minutes: number;
+  require_whatsapp_approval?: boolean;
+  approval_timeout_minutes?: number;
   created_at: string;
   updated_at: string;
 }

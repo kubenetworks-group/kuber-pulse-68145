@@ -11,11 +11,13 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Database, Loader2, Sparkles, GraduationCap, Crown, Clock, Brain, Server, User, CreditCard, Check, Shield } from "lucide-react";
+import { Database, Loader2, Sparkles, GraduationCap, Crown, Clock, Brain, Server, User, CreditCard, Check, Shield, MessageSquare } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { AvatarUpload } from "@/components/AvatarUpload";
 import { MFASetup } from "@/components/MFASetup";
 import { useAdminCheck } from "@/hooks/useAdminCheck";
+import { WhatsAppConfig } from "@/components/WhatsAppConfig";
+import { WhatsAppApprovals } from "@/components/WhatsAppApprovals";
 
 const Settings = () => {
   const { user } = useAuth();
@@ -177,6 +179,13 @@ const Settings = () => {
               <Shield className="w-4 h-4" />
               Segurança
             </TabsTrigger>
+            <TabsTrigger value="whatsapp" className="gap-2">
+              <MessageSquare className="w-4 h-4" />
+              WhatsApp
+              {currentPlan === 'pro' && (
+                <Badge variant="secondary" className="ml-1 text-xs">PRO</Badge>
+              )}
+            </TabsTrigger>
             <TabsTrigger value="upgrade" className="gap-2">
               <Crown className="w-4 h-4" />
               Planos
@@ -289,6 +298,12 @@ const Settings = () => {
                 Encerrar Todas as Outras Sessões
               </Button>
             </Card>
+          </TabsContent>
+
+          {/* WhatsApp Tab */}
+          <TabsContent value="whatsapp" className="space-y-6">
+            <WhatsAppConfig />
+            <WhatsAppApprovals />
           </TabsContent>
 
           {/* Upgrade Tab */}

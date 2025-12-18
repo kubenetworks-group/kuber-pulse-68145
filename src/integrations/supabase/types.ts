@@ -422,36 +422,42 @@ export type Database = {
       }
       auto_heal_settings: {
         Row: {
+          approval_timeout_minutes: number | null
           auto_apply_anomalies: boolean
           auto_apply_security: boolean
           cluster_id: string
           created_at: string
           enabled: boolean
           id: string
+          require_whatsapp_approval: boolean | null
           scan_interval_minutes: number
           severity_threshold: string
           updated_at: string
           user_id: string
         }
         Insert: {
+          approval_timeout_minutes?: number | null
           auto_apply_anomalies?: boolean
           auto_apply_security?: boolean
           cluster_id: string
           created_at?: string
           enabled?: boolean
           id?: string
+          require_whatsapp_approval?: boolean | null
           scan_interval_minutes?: number
           severity_threshold?: string
           updated_at?: string
           user_id: string
         }
         Update: {
+          approval_timeout_minutes?: number | null
           auto_apply_anomalies?: boolean
           auto_apply_security?: boolean
           cluster_id?: string
           created_at?: string
           enabled?: boolean
           id?: string
+          require_whatsapp_approval?: boolean | null
           scan_interval_minutes?: number
           severity_threshold?: string
           updated_at?: string
@@ -936,6 +942,11 @@ export type Database = {
           id: string
           updated_at: string | null
           username: string | null
+          whatsapp_notifications_enabled: boolean | null
+          whatsapp_phone: string | null
+          whatsapp_verification_code: string | null
+          whatsapp_verification_expires_at: string | null
+          whatsapp_verified: boolean | null
         }
         Insert: {
           avatar_url?: string | null
@@ -945,6 +956,11 @@ export type Database = {
           id: string
           updated_at?: string | null
           username?: string | null
+          whatsapp_notifications_enabled?: boolean | null
+          whatsapp_phone?: string | null
+          whatsapp_verification_code?: string | null
+          whatsapp_verification_expires_at?: string | null
+          whatsapp_verified?: boolean | null
         }
         Update: {
           avatar_url?: string | null
@@ -954,6 +970,11 @@ export type Database = {
           id?: string
           updated_at?: string | null
           username?: string | null
+          whatsapp_notifications_enabled?: boolean | null
+          whatsapp_phone?: string | null
+          whatsapp_verification_code?: string | null
+          whatsapp_verification_expires_at?: string | null
+          whatsapp_verified?: boolean | null
         }
         Relationships: []
       }
@@ -1286,6 +1307,66 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      whatsapp_approvals: {
+        Row: {
+          action_params: Json
+          action_type: string
+          anomaly_id: string | null
+          cluster_id: string | null
+          created_at: string | null
+          expires_at: string | null
+          id: string
+          responded_at: string | null
+          status: string | null
+          user_id: string
+          user_response: string | null
+          whatsapp_message_id: string | null
+        }
+        Insert: {
+          action_params?: Json
+          action_type: string
+          anomaly_id?: string | null
+          cluster_id?: string | null
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          responded_at?: string | null
+          status?: string | null
+          user_id: string
+          user_response?: string | null
+          whatsapp_message_id?: string | null
+        }
+        Update: {
+          action_params?: Json
+          action_type?: string
+          anomaly_id?: string | null
+          cluster_id?: string | null
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          responded_at?: string | null
+          status?: string | null
+          user_id?: string
+          user_response?: string | null
+          whatsapp_message_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_approvals_anomaly_id_fkey"
+            columns: ["anomaly_id"]
+            isOneToOne: false
+            referencedRelation: "agent_anomalies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_approvals_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
