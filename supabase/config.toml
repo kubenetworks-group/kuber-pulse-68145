@@ -35,3 +35,15 @@ verify_jwt = false
 
 [functions.execute-security-fix]
 verify_jwt = true
+
+[functions.whatsapp-send-approval]
+verify_jwt = true
+
+[functions.whatsapp-webhook]
+verify_jwt = false
+
+[functions.whatsapp-verify-phone]
+verify_jwt = true
+
+[functions.whatsapp-confirm-verification]
+verify_jwt = true
