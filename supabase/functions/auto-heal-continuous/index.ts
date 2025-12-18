@@ -166,13 +166,43 @@ serve(async (req) => {
                 replicas: 2
               };
               break;
-            case 'image_pull_error':
-              healAction = 'restart_pod';
+            case 'oom_killed':
+            case 'resource_limit_too_low':
+              // Increase memory/CPU limits
+              const resourceParams = anomaly.ai_analysis?.auto_heal_params || {};
+              healAction = 'update_deployment_resources';
               healParams = {
-                pod_name: podName,
-                namespace: namespace,
-                reason: 'auto_heal_image_pull_error',
+                deployment_name: resourceParams.deployment_name || podName.replace(/-[a-z0-9]+-[a-z0-9]+$/, ''),
+                namespace: resourceParams.namespace || namespace,
+                container_name: resourceParams.container_name || podName.split('-')[0],
+                memory_limit: resourceParams.memory_limit || '1Gi',
+                memory_request: resourceParams.memory_request || '512Mi',
+                cpu_limit: resourceParams.cpu_limit || '1000m',
+                cpu_request: resourceParams.cpu_request || '500m',
               };
+              console.log(`📈 Will update resources for ${healParams.deployment_name}: memory=${healParams.memory_limit}`);
+              break;
+            case 'image_pull_error':
+              // Use AI-suggested action if available (e.g., update_deployment_image)
+              const aiSuggestedAction = anomaly.ai_analysis?.auto_heal;
+              if (aiSuggestedAction === 'update_deployment_image' && autoHealParams.new_image) {
+                healAction = 'update_deployment_image';
+                healParams = {
+                  deployment_name: autoHealParams.deployment_name || podName.replace(/-[a-z0-9]+-[a-z0-9]+$/, ''),
+                  namespace: autoHealParams.namespace || namespace,
+                  container_name: autoHealParams.container_name,
+                  new_image: autoHealParams.new_image,
+                  old_image: autoHealParams.old_image,
+                };
+                console.log(`🐳 Will update image from ${healParams.old_image} to ${healParams.new_image}`);
+              } else {
+                healAction = 'restart_pod';
+                healParams = {
+                  pod_name: podName,
+                  namespace: namespace,
+                  reason: 'auto_heal_image_pull_error',
+                };
+              }
               break;
             default:
               healAction = anomaly.ai_analysis?.auto_heal || 'restart_pod';
