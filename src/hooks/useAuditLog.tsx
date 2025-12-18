@@ -17,7 +17,9 @@ type AuditAction =
   | 'auto_heal_executed'
   | 'subscription_changed'
   | 'profile_updated'
-  | 'settings_changed';
+  | 'settings_changed'
+  | 'page_accessed'
+  | 'action_failed';
 
 type ResourceType = 
   | 'user'
@@ -27,13 +29,17 @@ type ResourceType =
   | 'security_scan'
   | 'ai_analysis'
   | 'profile'
-  | 'settings';
+  | 'settings'
+  | 'page'
+  | 'system';
 
 interface AuditLogParams {
   action: AuditAction;
   resourceType: ResourceType;
   resourceId?: string;
   details?: Record<string, unknown>;
+  errorMessage?: string;
+  pagePath?: string;
 }
 
 export const useAuditLog = () => {
@@ -43,18 +49,26 @@ export const useAuditLog = () => {
     action,
     resourceType,
     resourceId,
-    details
+    details,
+    errorMessage,
+    pagePath
   }: AuditLogParams) => {
     if (!user) return;
 
     try {
+      const enrichedDetails = {
+        ...details,
+        ...(errorMessage && { error_message: errorMessage }),
+        ...(pagePath && { page_path: pagePath }),
+      };
+
       const { error } = await supabase.rpc('log_audit_event', {
         p_user_id: user.id,
         p_action: action,
         p_resource_type: resourceType,
         p_resource_id: resourceId || null,
-        p_details: details ? JSON.stringify(details) : null,
-        p_ip_address: null, // Browser can't reliably get IP
+        p_details: Object.keys(enrichedDetails).length > 0 ? JSON.stringify(enrichedDetails) : null,
+        p_ip_address: null,
         p_user_agent: navigator.userAgent
       });
 
@@ -66,7 +80,30 @@ export const useAuditLog = () => {
     }
   };
 
-  return { logAuditEvent };
+  const logPageAccess = async (pagePath: string, pageName: string) => {
+    await logAuditEvent({
+      action: 'page_accessed',
+      resourceType: 'page',
+      details: { page_name: pageName },
+      pagePath
+    });
+  };
+
+  const logError = async (
+    action: string,
+    resourceType: ResourceType,
+    errorMessage: string,
+    details?: Record<string, unknown>
+  ) => {
+    await logAuditEvent({
+      action: 'action_failed',
+      resourceType,
+      errorMessage,
+      details: { ...details, original_action: action }
+    });
+  };
+
+  return { logAuditEvent, logPageAccess, logError };
 };
 
 // Standalone function for use outside React components
@@ -75,15 +112,21 @@ export const logAuditEvent = async (
   action: AuditAction,
   resourceType: ResourceType,
   resourceId?: string,
-  details?: Record<string, unknown>
+  details?: Record<string, unknown>,
+  errorMessage?: string
 ) => {
   try {
+    const enrichedDetails = {
+      ...details,
+      ...(errorMessage && { error_message: errorMessage }),
+    };
+
     const { error } = await supabase.rpc('log_audit_event', {
       p_user_id: userId,
       p_action: action,
       p_resource_type: resourceType,
       p_resource_id: resourceId || null,
-      p_details: details ? JSON.stringify(details) : null,
+      p_details: Object.keys(enrichedDetails).length > 0 ? JSON.stringify(enrichedDetails) : null,
       p_ip_address: null,
       p_user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null
     });
