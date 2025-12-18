@@ -169,13 +169,20 @@ export const DocsAssistantChat = () => {
   return (
     <>
       {!isOpen && (
-        <Button
-          onClick={() => setIsOpen(true)}
-          className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-2xl bg-gradient-primary hover:opacity-90 z-50 animate-in fade-in zoom-in duration-300"
-          size="icon"
-        >
-          <MessageCircle className="h-6 w-6" />
-        </Button>
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 animate-in fade-in zoom-in duration-300">
+          <div className="bg-card/95 backdrop-blur-sm border border-border/50 rounded-lg px-3 py-2 shadow-lg max-w-[200px]">
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Dúvidas sobre como usar alguma ferramenta? <span className="text-primary font-medium">Converse comigo!</span>
+            </p>
+          </div>
+          <Button
+            onClick={() => setIsOpen(true)}
+            className="h-14 w-14 rounded-full shadow-2xl bg-gradient-primary hover:opacity-90"
+            size="icon"
+          >
+            <MessageCircle className="h-6 w-6" />
+          </Button>
+        </div>
       )}
 
       {isOpen && (
