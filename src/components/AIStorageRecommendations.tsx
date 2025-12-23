@@ -46,7 +46,7 @@ interface RecommendationCardProps {
   recommendation: StorageRecommendation;
   onAccept: (id: string) => void;
   onReject: (id: string) => void;
-  formatCurrency: (value: number) => string;
+  formatCurrency: (value: number) => { value: string; converted: boolean; note?: string };
 }
 
 const RecommendationCard = ({ recommendation, onAccept, onReject, formatCurrency }: RecommendationCardProps) => {
@@ -151,7 +151,7 @@ const RecommendationCard = ({ recommendation, onAccept, onReject, formatCurrency
                   Economia/mes
                 </p>
                 <p className="text-lg font-bold text-green-500">
-                  {formatCurrency(recommendation.potential_savings_month)}
+                  {formatCurrency(recommendation.potential_savings_month).value}
                 </p>
                 {savingsPercent > 0 && (
                   <p className="text-xs text-green-500/80">
@@ -290,7 +290,7 @@ export const AIStorageRecommendations = () => {
               Economia Potencial
             </p>
             <p className="text-2xl font-bold text-green-500">
-              {formatCurrency(stats.totalSavings)}
+              {formatCurrency(stats.totalSavings).value}
             </p>
             <p className="text-xs text-muted-foreground">por mes</p>
           </div>
