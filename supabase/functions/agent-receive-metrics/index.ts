@@ -321,7 +321,7 @@ serve(async (req) => {
             storage_class: pvc.storage_class || null,
             status: pvc.status,
             requested_bytes: pvc.requested_bytes || 0,
-            used_bytes: pvc.used_bytes || 0,
+            used_bytes: pvc.used_bytes || 0, // Now contains real usage from Kubelet
             last_sync: new Date().toISOString(),
           }));
 
@@ -332,7 +332,10 @@ serve(async (req) => {
           if (pvcError) {
             console.error('Error storing PVCs:', pvcError);
           } else {
-            console.log(`✅ Stored ${pvcsToInsert.length} PVCs`);
+            // Log with real usage info
+            const totalUsed = pvcsData.reduce((sum, p) => sum + (p.used_bytes || 0), 0);
+            const totalRequested = pvcsData.reduce((sum, p) => sum + (p.requested_bytes || 0), 0);
+            console.log(`✅ Stored ${pvcsToInsert.length} PVCs (real usage: ${(totalUsed / (1024**3)).toFixed(2)}GB / ${(totalRequested / (1024**3)).toFixed(2)}GB allocated)`);
           }
         } else {
           console.log(`✅ Cleared all PVCs for cluster (no PVCs in cluster)`);
