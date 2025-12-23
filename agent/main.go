@@ -219,7 +219,13 @@ func collectKubernetesEvents(clientset *kubernetes.Clientset) []map[string]inter
 // Kubelet Stats Summary API structures
 // Based on: https://github.com/kubernetes/kubelet/blob/master/pkg/apis/stats/v1alpha1/types.go
 type StatsSummary struct {
+	Node NodeStats  `json:"node"`
 	Pods []PodStats `json:"pods"`
+}
+
+type NodeStats struct {
+	NodeName string   `json:"nodeName"`
+	Fs       *FsStats `json:"fs,omitempty"`
 }
 
 type PodStats struct {
@@ -550,7 +556,7 @@ func collectStorageMetrics(clientset *kubernetes.Clientset) map[string]interface
 }
 
 // ---------------------------------------------
-// NODE STORAGE METRICS COLLECTION (Physical disk from nodes)
+// NODE STORAGE METRICS COLLECTION (Physical disk from nodes via Kubelet)
 // ---------------------------------------------
 func collectNodeStorageMetrics(clientset *kubernetes.Clientset) map[string]interface{} {
 	nodes, err := clientset.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
@@ -564,49 +570,86 @@ func collectNodeStorageMetrics(clientset *kubernetes.Clientset) map[string]inter
 		}
 	}
 
-	var totalPhysicalStorage int64
-	var allocatableStorage int64
+	var totalCapacity int64
+	var totalUsed int64
+	var totalAvailable int64
 	var nodeStorageDetails []map[string]interface{}
 
+	log.Printf("🔍 Fetching real storage metrics from %d nodes via Kubelet...", len(nodes.Items))
+
 	for _, node := range nodes.Items {
-		// Get ephemeral-storage capacity (physical disk)
-		storageCapacity := int64(0)
-		storageAllocatable := int64(0)
+		// Try to get REAL storage usage from Kubelet stats/summary API
+		request := clientset.CoreV1().RESTClient().Get().
+			Resource("nodes").
+			Name(node.Name).
+			SubResource("proxy").
+			Suffix("stats/summary")
 
-		if ephemeralStorage, ok := node.Status.Capacity[corev1.ResourceEphemeralStorage]; ok {
-			storageCapacity = ephemeralStorage.Value()
+		responseBytes, err := request.DoRaw(context.Background())
+
+		var nodeCapacity int64
+		var nodeUsed int64
+		var nodeAvailable int64
+		var source string
+
+		if err == nil {
+			var summary StatsSummary
+			if err := json.Unmarshal(responseBytes, &summary); err == nil && summary.Node.Fs != nil {
+				// Use REAL data from Kubelet
+				if summary.Node.Fs.CapacityBytes != nil {
+					nodeCapacity = int64(*summary.Node.Fs.CapacityBytes)
+				}
+				if summary.Node.Fs.UsedBytes != nil {
+					nodeUsed = int64(*summary.Node.Fs.UsedBytes)
+				}
+				if summary.Node.Fs.AvailableBytes != nil {
+					nodeAvailable = int64(*summary.Node.Fs.AvailableBytes)
+				}
+				source = "kubelet"
+			}
 		}
-		if ephemeralStorage, ok := node.Status.Allocatable[corev1.ResourceEphemeralStorage]; ok {
-			storageAllocatable = ephemeralStorage.Value()
+
+		// Fallback to node status if Kubelet stats unavailable
+		if nodeCapacity == 0 {
+			if ephemeralStorage, ok := node.Status.Capacity[corev1.ResourceEphemeralStorage]; ok {
+				nodeCapacity = ephemeralStorage.Value()
+			}
+			if ephemeralStorage, ok := node.Status.Allocatable[corev1.ResourceEphemeralStorage]; ok {
+				nodeAvailable = ephemeralStorage.Value()
+			}
+			nodeUsed = nodeCapacity - nodeAvailable
+			source = "fallback"
 		}
 
-		totalPhysicalStorage += storageCapacity
-		allocatableStorage += storageAllocatable
+		totalCapacity += nodeCapacity
+		totalUsed += nodeUsed
+		totalAvailable += nodeAvailable
 
-		// Usado = Capacity - Allocatable (sistema + reservado)
-		usedBySystem := storageCapacity - storageAllocatable
+		log.Printf("   💾 Node %s (%s): capacity=%.2fGB, used=%.2fGB, available=%.2fGB",
+			node.Name, source,
+			float64(nodeCapacity)/(1024*1024*1024),
+			float64(nodeUsed)/(1024*1024*1024),
+			float64(nodeAvailable)/(1024*1024*1024))
 
 		nodeStorageDetails = append(nodeStorageDetails, map[string]interface{}{
-			"node_name":        node.Name,
-			"capacity_bytes":   storageCapacity,
-			"allocatable_bytes": storageAllocatable,
-			"used_bytes":       usedBySystem,
+			"node_name":         node.Name,
+			"capacity_bytes":    nodeCapacity,
+			"used_bytes":        nodeUsed,
+			"available_bytes":   nodeAvailable,
+			"source":            source,
 		})
 	}
 
-	// Storage usado pelo sistema = total - allocatable
-	usedPhysicalStorage := totalPhysicalStorage - allocatableStorage
-
 	log.Printf("💿 Node physical storage: total=%.2fGB, used=%.2fGB, available=%.2fGB across %d nodes",
-		float64(totalPhysicalStorage)/(1024*1024*1024),
-		float64(usedPhysicalStorage)/(1024*1024*1024),
-		float64(allocatableStorage)/(1024*1024*1024),
+		float64(totalCapacity)/(1024*1024*1024),
+		float64(totalUsed)/(1024*1024*1024),
+		float64(totalAvailable)/(1024*1024*1024),
 		len(nodes.Items))
 
 	return map[string]interface{}{
-		"total_physical_bytes":     totalPhysicalStorage,
-		"used_physical_bytes":      usedPhysicalStorage,
-		"available_physical_bytes": allocatableStorage,
+		"total_physical_bytes":     totalCapacity,
+		"used_physical_bytes":      totalUsed,
+		"available_physical_bytes": totalAvailable,
 		"nodes":                    nodeStorageDetails,
 	}
 }
