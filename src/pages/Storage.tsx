@@ -111,16 +111,17 @@ const Storage = () => {
         console.error('Error fetching PVCs:', pvcsError);
       } else if (pvcsData) {
         const allocatedBytes = pvcsData.reduce((sum, pvc) => sum + (pvc.requested_bytes || 0), 0);
+        const usedBytes = pvcsData.reduce((sum, pvc) => sum + (pvc.used_bytes || 0), 0);
         const physicalCapacityGB = cluster?.storage_total_gb || 0;
-        // Use physical disk usage from cluster, not PVC used_bytes
-        const physicalUsedGB = cluster?.storage_used_gb || 0;
+        // Use real PVC usage for the donut chart to be consistent with "Usado Real" card
+        const realUsedGB = usedBytes / (1024 ** 3);
         const allocatedGB = allocatedBytes / (1024 ** 3);
-        const availableGB = Math.max(0, physicalCapacityGB - physicalUsedGB);
+        const availableGB = Math.max(0, physicalCapacityGB - realUsedGB);
 
         setStorageMetrics({
           total: physicalCapacityGB,
           allocated: allocatedGB,
-          used: physicalUsedGB,
+          used: realUsedGB,
           available: availableGB,
           pvcs: pvcsData || []
         });
