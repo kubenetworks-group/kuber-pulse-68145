@@ -20,6 +20,7 @@ import { ClusterCard } from "@/components/ClusterCard";
 import { ClusterLogs } from "@/components/ClusterLogs";
 import { ClusterDeletionProgress } from "@/components/ClusterDeletionProgress";
 import { LimitReachedModal } from "@/components/LimitReachedModal";
+import { ClusterAnalysisPopup } from "@/components/ClusterAnalysisPopup";
 import { Plus, Trash2, RefreshCw, Edit, Bot, ArrowRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -48,6 +49,9 @@ const Clusters = () => {
   const [limitModalOpen, setLimitModalOpen] = useState(false);
   const [successDialogOpen, setSuccessDialogOpen] = useState(false);
   const [createdCluster, setCreatedCluster] = useState<{ id: string; name: string } | null>(null);
+  const [analysisPopupOpen, setAnalysisPopupOpen] = useState(false);
+  const [analysisCluster, setAnalysisCluster] = useState<{ id: string; name: string } | null>(null);
+  const [previousStatuses, setPreviousStatuses] = useState<Record<string, string>>({});
   const [formData, setFormData] = useState({
     name: "",
     environment: "production",
@@ -81,16 +85,32 @@ const Clusters = () => {
           if (import.meta.env.DEV) {
             console.log('Cluster updated');
           }
+          
+          const oldCluster = payload.old as any;
+          const newCluster = payload.new as any;
+          const previousStatus = previousStatuses[newCluster.id] || oldCluster?.status;
+          
           setClusters((current) =>
             current.map((cluster) =>
-              cluster.id === payload.new.id ? { ...cluster, ...payload.new } : cluster
+              cluster.id === newCluster.id ? { ...cluster, ...newCluster } : cluster
             )
           );
           
+          // Track status for future comparisons
+          setPreviousStatuses(prev => ({ ...prev, [newCluster.id]: newCluster.status }));
+          
           // Show toast notification for status changes
-          const newCluster = payload.new as any;
           if (newCluster.status === 'healthy') {
             toast.success(`${newCluster.name} connected successfully!`);
+            
+            // Check if this is the first successful connection (from connecting/pending to healthy)
+            if (previousStatus === 'connecting' || previousStatus === 'pending') {
+              // Wait a bit for metrics to arrive, then show analysis popup
+              setTimeout(() => {
+                setAnalysisCluster({ id: newCluster.id, name: newCluster.name });
+                setAnalysisPopupOpen(true);
+              }, 3000);
+            }
           } else if (newCluster.status === 'error') {
             toast.error(`${newCluster.name} connection failed`);
           } else if (newCluster.status === 'warning') {
@@ -916,6 +936,14 @@ const Clusters = () => {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Cluster Analysis Popup */}
+        <ClusterAnalysisPopup
+          open={analysisPopupOpen}
+          onOpenChange={setAnalysisPopupOpen}
+          clusterId={analysisCluster?.id || null}
+          clusterName={analysisCluster?.name || ""}
+        />
       </div>
     </DashboardLayout>
   );

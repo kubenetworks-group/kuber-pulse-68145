@@ -396,36 +396,36 @@ export const ClusterSecurityAnalysis = () => {
   return (
     <Card className="border-border/50">
       <CardHeader className="pb-2">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+          <div className="flex items-center gap-2 sm:gap-3">
             {latestScan?.status === 'passed' ? (
-              <ShieldCheck className="h-6 w-6 text-success" />
+              <ShieldCheck className="h-5 w-5 sm:h-6 sm:w-6 text-success shrink-0" />
             ) : latestScan?.status === 'warning' ? (
-              <ShieldAlert className="h-6 w-6 text-warning" />
+              <ShieldAlert className="h-5 w-5 sm:h-6 sm:w-6 text-warning shrink-0" />
             ) : (
-              <ShieldX className="h-6 w-6 text-destructive" />
+              <ShieldX className="h-5 w-5 sm:h-6 sm:w-6 text-destructive shrink-0" />
             )}
             <div>
-              <CardTitle className="text-lg">Análise de Segurança</CardTitle>
-              <CardDescription className="text-xs">
+              <CardTitle className="text-base sm:text-lg">Análise de Segurança</CardTitle>
+              <CardDescription className="text-[10px] sm:text-xs">
                 Última análise: {latestScan?.scan_date ? new Date(latestScan.scan_date).toLocaleString('pt-BR') : 'N/A'}
               </CardDescription>
             </div>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
             {pendingFixesCount > 0 && (
               <Button
                 onClick={applyAllFixes}
                 disabled={applyingFix !== null}
                 size="sm"
-                className="gap-2 bg-primary hover:bg-primary/90"
+                className="gap-1.5 sm:gap-2 bg-primary hover:bg-primary/90 text-xs sm:text-sm h-8 sm:h-9"
               >
                 {applyingFix ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 animate-spin" />
                 ) : (
-                  <Play className="h-4 w-4" />
+                  <Play className="h-3 w-3 sm:h-4 sm:w-4" />
                 )}
-                Aplicar Todas ({pendingFixesCount})
+                <span className="hidden xs:inline">Aplicar Todas</span> ({pendingFixesCount})
               </Button>
             )}
             {latestScan && getStatusBadge(latestScan.status)}
@@ -434,17 +434,17 @@ export const ClusterSecurityAnalysis = () => {
               disabled={scanning}
               size="sm"
               variant="outline"
-              className="gap-2"
+              className="gap-1.5 sm:gap-2 text-xs sm:text-sm h-8 sm:h-9"
             >
               {scanning ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Analisando...
+                  <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 animate-spin" />
+                  <span className="hidden xs:inline">Analisando...</span>
                 </>
               ) : (
                 <>
-                  <Sparkles className="h-4 w-4" />
-                  Nova Análise
+                  <Sparkles className="h-3 w-3 sm:h-4 sm:w-4" />
+                  <span className="hidden xs:inline">Nova Análise</span>
                 </>
               )}
             </Button>

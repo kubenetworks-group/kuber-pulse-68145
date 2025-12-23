@@ -18,6 +18,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Link } from "react-router-dom";
 import { PasswordInput } from "@/components/PasswordInput";
 import { MFAVerification } from "@/components/MFAVerification";
+import { BackupCodeVerification } from "@/components/BackupCodeVerification";
 
 // Password validation schema
 const passwordSchema = z.string()
@@ -35,6 +36,7 @@ const Auth = () => {
   const [resetEmail, setResetEmail] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
   const [showMFAVerification, setShowMFAVerification] = useState(false);
+  const [showBackupCodeVerification, setShowBackupCodeVerification] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
   // Redirect if already logged in
@@ -80,17 +82,14 @@ const Auth = () => {
         return;
       }
 
-      // Check if MFA is required
+      // Check if MFA is required using getAuthenticatorAssuranceLevel
+      // This is the recommended approach per Supabase docs - uses JWT/session info
       if (data.session) {
-        const { data: factorsData } = await supabase.auth.mfa.listFactors();
+        const { data: aalData, error: aalError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
         
-        const hasVerifiedTOTP = factorsData?.totp?.some(f => f.status === 'verified');
-        
-        if (hasVerifiedTOTP) {
-          // Check AAL level - if aal1, need MFA verification
-          const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-          
-          if (aalData?.currentLevel === 'aal1' && aalData?.nextLevel === 'aal2') {
+        if (!aalError && aalData) {
+          // If currentLevel is aal1 but nextLevel is aal2, user has MFA enrolled but hasn't verified yet
+          if (aalData.currentLevel === 'aal1' && aalData.nextLevel === 'aal2') {
             setShowMFAVerification(true);
             setLoading(false);
             return;
@@ -117,6 +116,7 @@ const Auth = () => {
 
   const handleMFAVerified = () => {
     setShowMFAVerification(false);
+    setShowBackupCodeVerification(false);
     toast({
       title: "Login realizado!",
       description: "Verificação 2FA concluída com sucesso!",
@@ -127,6 +127,26 @@ const Auth = () => {
   const handleMFACancel = async () => {
     await supabase.auth.signOut();
     setShowMFAVerification(false);
+    setShowBackupCodeVerification(false);
+  };
+
+  const handleUseBackupCode = () => {
+    setShowMFAVerification(false);
+    setShowBackupCodeVerification(true);
+  };
+
+  const handleBackToMFA = () => {
+    setShowBackupCodeVerification(false);
+    setShowMFAVerification(true);
+  };
+
+  const handleBackupCodeVerified = () => {
+    setShowBackupCodeVerification(false);
+    toast({
+      title: "Acesso recuperado!",
+      description: "Seu 2FA foi desativado. Configure novamente nas configurações.",
+    });
+    navigate("/dashboard");
   };
 
   const handleSignUp = async (e: React.FormEvent) => {
@@ -221,7 +241,24 @@ const Auth = () => {
 
   // Show MFA verification screen if needed
   if (showMFAVerification) {
-    return <MFAVerification onVerified={handleMFAVerified} onCancel={handleMFACancel} />;
+    return (
+      <MFAVerification 
+        onVerified={handleMFAVerified} 
+        onCancel={handleMFACancel} 
+        onUseBackupCode={handleUseBackupCode}
+      />
+    );
+  }
+
+  // Show backup code verification screen if needed
+  if (showBackupCodeVerification) {
+    return (
+      <BackupCodeVerification 
+        onVerified={handleBackupCodeVerified} 
+        onCancel={handleMFACancel}
+        onBackToMFA={handleBackToMFA}
+      />
+    );
   }
 
   return (

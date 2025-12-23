@@ -214,6 +214,100 @@ func collectKubernetesEvents(clientset *kubernetes.Clientset) []map[string]inter
 }
 
 // ---------------------------------------------
+// PVC VOLUME STATS (Real usage from Kubelet)
+// ---------------------------------------------
+type StatsSummary struct {
+	Pods []PodStats `json:"pods"`
+}
+
+type PodStats struct {
+	PodRef      PodReference   `json:"podRef"`
+	VolumeStats []VolumeStats  `json:"volume,omitempty"`
+}
+
+type PodReference struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+}
+
+type VolumeStats struct {
+	Name           string        `json:"name"`
+	PVCRef         *PVCReference `json:"pvcRef,omitempty"`
+	UsedBytes      *uint64       `json:"usedBytes,omitempty"`
+	CapacityBytes  *uint64       `json:"capacityBytes,omitempty"`
+	AvailableBytes *uint64       `json:"availableBytes,omitempty"`
+}
+
+type PVCReference struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+}
+
+type PVCVolumeUsage struct {
+	UsedBytes      int64
+	CapacityBytes  int64
+	AvailableBytes int64
+}
+
+func collectPVCVolumeStats(clientset *kubernetes.Clientset) map[string]PVCVolumeUsage {
+	pvcUsage := make(map[string]PVCVolumeUsage)
+	
+	nodes, err := clientset.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		log.Printf("⚠️  Error listing nodes for PVC stats: %v", err)
+		return pvcUsage
+	}
+
+	for _, node := range nodes.Items {
+		// Call Kubelet stats/summary API via API server proxy
+		request := clientset.CoreV1().RESTClient().Get().
+			Resource("nodes").
+			Name(node.Name).
+			SubResource("proxy").
+			Suffix("stats/summary")
+
+		responseBytes, err := request.DoRaw(context.Background())
+		if err != nil {
+			log.Printf("⚠️  Error fetching stats from node %s: %v", node.Name, err)
+			continue
+		}
+
+		var summary StatsSummary
+		if err := json.Unmarshal(responseBytes, &summary); err != nil {
+			log.Printf("⚠️  Error parsing stats from node %s: %v", node.Name, err)
+			continue
+		}
+
+		// Extract PVC volume stats from each pod
+		for _, pod := range summary.Pods {
+			for _, vol := range pod.VolumeStats {
+				if vol.PVCRef == nil {
+					continue // Skip volumes without PVC reference
+				}
+
+				key := vol.PVCRef.Namespace + "/" + vol.PVCRef.Name
+				
+				usage := PVCVolumeUsage{}
+				if vol.UsedBytes != nil {
+					usage.UsedBytes = int64(*vol.UsedBytes)
+				}
+				if vol.CapacityBytes != nil {
+					usage.CapacityBytes = int64(*vol.CapacityBytes)
+				}
+				if vol.AvailableBytes != nil {
+					usage.AvailableBytes = int64(*vol.AvailableBytes)
+				}
+
+				pvcUsage[key] = usage
+			}
+		}
+	}
+
+	log.Printf("📊 Collected real volume stats for %d PVCs via Kubelet", len(pvcUsage))
+	return pvcUsage
+}
+
+// ---------------------------------------------
 // PVC COLLECTION
 // ---------------------------------------------
 func collectPVCs(clientset *kubernetes.Clientset) []map[string]interface{} {
@@ -222,6 +316,9 @@ func collectPVCs(clientset *kubernetes.Clientset) []map[string]interface{} {
 		log.Printf("⚠️  Error collecting PVCs: %v", err)
 		return []map[string]interface{}{}
 	}
+
+	// Get real PVC usage from Kubelet
+	pvcVolumeStats := collectPVCVolumeStats(clientset)
 
 	// Get PVs to match with PVCs
 	pvs, err := clientset.CoreV1().PersistentVolumes().List(context.Background(), metav1.ListOptions{})
@@ -249,6 +346,7 @@ func collectPVCs(clientset *kubernetes.Clientset) []map[string]interface{} {
 		}
 
 		usedBytes := int64(0)
+		capacityBytes := int64(0)
 		actualCapacity := int64(0)
 		
 		// Get actual capacity from the bound PV
@@ -260,16 +358,29 @@ func collectPVCs(clientset *kubernetes.Clientset) []map[string]interface{} {
 			}
 		}
 
-		// Use PVC status capacity if available
-		if pvc.Status.Capacity != nil {
-			if storage, ok := pvc.Status.Capacity[corev1.ResourceStorage]; ok {
-				usedBytes = storage.Value()
+		// Try to get real usage from Kubelet stats first
+		pvcKey := pvc.Namespace + "/" + pvc.Name
+		if stats, exists := pvcVolumeStats[pvcKey]; exists {
+			usedBytes = stats.UsedBytes
+			capacityBytes = stats.CapacityBytes
+			log.Printf("📊 PVC %s: real usage = %.2f GB / %.2f GB", 
+				pvcKey, float64(usedBytes)/(1024*1024*1024), float64(capacityBytes)/(1024*1024*1024))
+		} else {
+			// Fallback: Use PVC status capacity if available
+			if pvc.Status.Capacity != nil {
+				if storage, ok := pvc.Status.Capacity[corev1.ResourceStorage]; ok {
+					capacityBytes = storage.Value()
+				}
 			}
-		}
 
-		// If we have actual capacity from PV and no used bytes, use it
-		if actualCapacity > 0 && usedBytes == 0 {
-			usedBytes = actualCapacity
+			// If we have actual capacity from PV and no capacity bytes, use it
+			if actualCapacity > 0 && capacityBytes == 0 {
+				capacityBytes = actualCapacity
+			}
+			
+			// For fallback, we don't have real usage data, so set to 0
+			// This is better than reporting allocated as used
+			usedBytes = 0
 		}
 
 		storageClassName := ""
@@ -284,6 +395,7 @@ func collectPVCs(clientset *kubernetes.Clientset) []map[string]interface{} {
 			"status":          string(pvc.Status.Phase),
 			"requested_bytes": requestedBytes,
 			"used_bytes":      usedBytes,
+			"capacity_bytes":  capacityBytes,
 			"volume_name":     pvc.Spec.VolumeName,
 			"created_at":      pvc.CreationTimestamp.Time,
 		})
@@ -294,7 +406,8 @@ func collectPVCs(clientset *kubernetes.Clientset) []map[string]interface{} {
 		}
 	}
 
-	log.Printf("📦 Collected %d PVCs (matched with %d PVs)", len(pvcDetails), len(pvMap))
+	log.Printf("📦 Collected %d PVCs (matched with %d PVs, %d with real usage data)", 
+		len(pvcDetails), len(pvMap), len(pvcVolumeStats))
 	return pvcDetails
 }
 
