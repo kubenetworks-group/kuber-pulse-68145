@@ -10,6 +10,7 @@ import { Shield, ShieldCheck, ShieldOff, Loader2, Copy, CheckCircle2, AlertTrian
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useAuditLog } from "@/hooks/useAuditLog";
+import { BackupCodesDisplay } from "@/components/BackupCodesDisplay";
 
 interface MFAFactor {
   id: string;
@@ -174,7 +175,7 @@ export const MFASetup = () => {
   }
 
   return (
-    <>
+    <div className="space-y-4">
       <Card className={`p-6 ${isMFAEnabled ? 'bg-green-500/5 border-green-500/20' : 'bg-amber-500/5 border-amber-500/20'}`}>
         <div className="flex items-start gap-4">
           <div className={`p-3 rounded-lg ${isMFAEnabled ? 'bg-green-500/20' : 'bg-amber-500/20'}`}>
@@ -334,6 +335,9 @@ export const MFASetup = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </>
+
+      {/* Backup Codes Section */}
+      <BackupCodesDisplay isMFAEnabled={isMFAEnabled} />
+    </div>
   );
 };

@@ -12,9 +12,10 @@ import { AnimatedParticles } from "@/components/AnimatedParticles";
 interface MFAVerificationProps {
   onVerified: () => void;
   onCancel: () => void;
+  onUseBackupCode?: () => void;
 }
 
-export const MFAVerification = ({ onVerified, onCancel }: MFAVerificationProps) => {
+export const MFAVerification = ({ onVerified, onCancel, onUseBackupCode }: MFAVerificationProps) => {
   const [verifyCode, setVerifyCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -155,6 +156,17 @@ export const MFAVerification = ({ onVerified, onCancel }: MFAVerificationProps) 
                   "Verificar"
                 )}
               </Button>
+              
+              {onUseBackupCode && (
+                <Button 
+                  variant="outline" 
+                  className="w-full"
+                  onClick={onUseBackupCode}
+                  disabled={loading}
+                >
+                  Usar código de backup
+                </Button>
+              )}
               
               <Button 
                 variant="ghost" 
