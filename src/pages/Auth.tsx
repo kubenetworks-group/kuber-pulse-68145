@@ -80,17 +80,14 @@ const Auth = () => {
         return;
       }
 
-      // Check if MFA is required
+      // Check if MFA is required using getAuthenticatorAssuranceLevel
+      // This is the recommended approach per Supabase docs - uses JWT/session info
       if (data.session) {
-        const { data: factorsData } = await supabase.auth.mfa.listFactors();
+        const { data: aalData, error: aalError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
         
-        const hasVerifiedTOTP = factorsData?.totp?.some(f => f.status === 'verified');
-        
-        if (hasVerifiedTOTP) {
-          // Check AAL level - if aal1, need MFA verification
-          const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-          
-          if (aalData?.currentLevel === 'aal1' && aalData?.nextLevel === 'aal2') {
+        if (!aalError && aalData) {
+          // If currentLevel is aal1 but nextLevel is aal2, user has MFA enrolled but hasn't verified yet
+          if (aalData.currentLevel === 'aal1' && aalData.nextLevel === 'aal2') {
             setShowMFAVerification(true);
             setLoading(false);
             return;
