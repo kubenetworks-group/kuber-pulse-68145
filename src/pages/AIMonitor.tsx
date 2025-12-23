@@ -467,35 +467,37 @@ export default function AIMonitor() {
 
         {/* Tabs para diferentes visualizações */}
         <Tabs defaultValue="autoheal" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="security" className="flex items-center gap-2">
-              <ShieldAlert className="h-4 w-4" />
-              Seguranca ({threatStats.active})
+          <TabsList className="flex flex-nowrap overflow-x-auto w-full max-w-full h-auto p-1">
+            <TabsTrigger value="security" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">
+              <ShieldAlert className="h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden xs:inline">Seguranca</span> ({threatStats.active})
               {threatStats.critical > 0 && (
-                <Badge variant="destructive" className="ml-1 h-5 w-5 p-0 flex items-center justify-center text-xs animate-pulse">
+                <Badge variant="destructive" className="ml-1 h-4 w-4 sm:h-5 sm:w-5 p-0 flex items-center justify-center text-[10px] sm:text-xs animate-pulse">
                   {threatStats.critical}
                 </Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="anomalies" className="flex items-center gap-2">
-              <AlertCircle className="h-4 w-4" />
-              Anomalias ({recentAnomalies.length})
+            <TabsTrigger value="anomalies" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">
+              <AlertCircle className="h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden xs:inline">Anomalias</span> ({recentAnomalies.length})
             </TabsTrigger>
-            <TabsTrigger value="commands" className="flex items-center gap-2">
-              <Zap className="h-4 w-4" />
-              Comandos ({agentCommands.length})
+            <TabsTrigger value="commands" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">
+              <Zap className="h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden xs:inline">Comandos</span> ({agentCommands.length})
             </TabsTrigger>
-            <TabsTrigger value="incidents" className="flex items-center gap-2">
-              <Activity className="h-4 w-4" />
-              {t('aiMonitor.incidents')}
+            <TabsTrigger value="incidents" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">
+              <Activity className="h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden xs:inline">{t('aiMonitor.incidents')}</span>
+              <span className="xs:hidden">Inc.</span>
             </TabsTrigger>
-            <TabsTrigger value="history" className="flex items-center gap-2">
-              <History className="h-4 w-4" />
-              Historico
+            <TabsTrigger value="history" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">
+              <History className="h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden xs:inline">Histórico</span>
+              <span className="xs:hidden">Hist.</span>
             </TabsTrigger>
-            <TabsTrigger value="autoheal" className="flex items-center gap-2">
-              <Settings className="h-4 w-4" />
-              Auto-Cura
+            <TabsTrigger value="autoheal" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">
+              <Settings className="h-3 w-3 sm:h-4 sm:w-4" />
+              Auto-Heal
             </TabsTrigger>
           </TabsList>
 
@@ -503,24 +505,24 @@ export default function AIMonitor() {
           <TabsContent value="security" className="space-y-4">
             {/* Real-time Security Monitoring Status */}
             <Card className="border-red-500/20 bg-gradient-to-br from-red-500/5 to-orange-500/5">
-              <CardHeader>
-                <div className="flex items-center justify-between">
+              <CardHeader className="pb-2 sm:pb-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4">
                   <div className="flex items-center gap-2">
-                    <ShieldAlert className="w-5 h-5 text-red-400" />
-                    <CardTitle>Monitoramento de Seguranca em Tempo Real</CardTitle>
+                    <ShieldAlert className="w-4 h-4 sm:w-5 sm:h-5 text-red-400 shrink-0" />
+                    <CardTitle className="text-sm sm:text-base">Monitoramento de Seguranca em Tempo Real</CardTitle>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Badge className="bg-green-500/20 text-green-400 border-green-500/30 animate-pulse">
-                      <Activity className="w-3 h-3 mr-1" />
+                  <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                    <Badge className="bg-green-500/20 text-green-400 border-green-500/30 animate-pulse text-xs">
+                      <Activity className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1" />
                       Monitorando
                     </Badge>
                     {threatStats.critical > 0 && (
-                      <Badge variant="destructive" className="animate-pulse">
+                      <Badge variant="destructive" className="animate-pulse text-xs">
                         {threatStats.critical} Criticas
                       </Badge>
                     )}
                     {threatStats.high > 0 && (
-                      <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30">
+                      <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30 text-xs">
                         {threatStats.high} Altas
                       </Badge>
                     )}
@@ -530,27 +532,27 @@ export default function AIMonitor() {
                   IA monitorando continuamente seus containers para detectar DDoS, hackers, cryptomining e atividades suspeitas em tempo real
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                  <div className="text-center p-3 rounded-lg bg-red-500/10 border border-red-500/20">
-                    <div className="text-2xl font-bold text-red-400">{threatStats.critical}</div>
-                    <div className="text-xs text-muted-foreground">Criticas</div>
+              <CardContent className="space-y-3 sm:space-y-4">
+                <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-3">
+                  <div className="text-center p-2 sm:p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                    <div className="text-lg sm:text-2xl font-bold text-red-400">{threatStats.critical}</div>
+                    <div className="text-[10px] sm:text-xs text-muted-foreground">Criticas</div>
                   </div>
-                  <div className="text-center p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
-                    <div className="text-2xl font-bold text-orange-400">{threatStats.high}</div>
-                    <div className="text-xs text-muted-foreground">Altas</div>
+                  <div className="text-center p-2 sm:p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
+                    <div className="text-lg sm:text-2xl font-bold text-orange-400">{threatStats.high}</div>
+                    <div className="text-[10px] sm:text-xs text-muted-foreground">Altas</div>
                   </div>
-                  <div className="text-center p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
-                    <div className="text-2xl font-bold text-yellow-400">{threatStats.medium}</div>
-                    <div className="text-xs text-muted-foreground">Medias</div>
+                  <div className="text-center p-2 sm:p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+                    <div className="text-lg sm:text-2xl font-bold text-yellow-400">{threatStats.medium}</div>
+                    <div className="text-[10px] sm:text-xs text-muted-foreground">Medias</div>
                   </div>
-                  <div className="text-center p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                    <div className="text-2xl font-bold text-blue-400">{threatStats.low}</div>
-                    <div className="text-xs text-muted-foreground">Baixas</div>
+                  <div className="text-center p-2 sm:p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 col-span-1">
+                    <div className="text-lg sm:text-2xl font-bold text-blue-400">{threatStats.low}</div>
+                    <div className="text-[10px] sm:text-xs text-muted-foreground">Baixas</div>
                   </div>
-                  <div className="text-center p-3 rounded-lg bg-green-500/10 border border-green-500/20">
-                    <div className="text-2xl font-bold text-green-400">{threatStats.mitigated}</div>
-                    <div className="text-xs text-muted-foreground">Mitigadas</div>
+                  <div className="text-center p-2 sm:p-3 rounded-lg bg-green-500/10 border border-green-500/20 col-span-2 sm:col-span-1">
+                    <div className="text-lg sm:text-2xl font-bold text-green-400">{threatStats.mitigated}</div>
+                    <div className="text-[10px] sm:text-xs text-muted-foreground">Mitigadas</div>
                   </div>
                 </div>
 
@@ -648,38 +650,38 @@ export default function AIMonitor() {
                           'border-l-blue-500 bg-blue-500/5'
                         }`}
                       >
-                        <div className="flex items-start justify-between gap-4">
+                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 sm:gap-4">
                           <div className="flex-1">
-                            <div className="flex items-center gap-2 flex-wrap mb-2">
+                            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap mb-2">
                               <Badge variant={
                                 anomaly.severity === 'critical' ? 'destructive' :
                                 anomaly.severity === 'high' ? 'default' :
                                 'secondary'
-                              }>
+                              } className="text-xs">
                                 {anomaly.severity}
                               </Badge>
-                              <Badge variant="outline">{anomaly.anomaly_type}</Badge>
+                              <Badge variant="outline" className="text-xs">{anomaly.anomaly_type}</Badge>
                               {anomaly.resolved && (
-                                <Badge className="bg-success/20 text-success border-success/30">
+                                <Badge className="bg-success/20 text-success border-success/30 text-xs">
                                   Resolvido
                                 </Badge>
                               )}
                               {anomaly.auto_heal_applied && (
-                                <Badge className="bg-primary/20 text-primary border-primary/30">
-                                  <Zap className="w-3 h-3 mr-1" />
+                                <Badge className="bg-primary/20 text-primary border-primary/30 text-xs">
+                                  <Zap className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1" />
                                   Auto-curado
                                 </Badge>
                               )}
                             </div>
-                            <p className="text-sm font-medium mb-2">{anomaly.description}</p>
+                            <p className="text-xs sm:text-sm font-medium mb-2">{anomaly.description}</p>
                             {anomaly.recommendation && (
-                              <p className="text-xs text-muted-foreground bg-background/50 p-2 rounded">
+                              <p className="text-[10px] sm:text-xs text-muted-foreground bg-background/50 p-1.5 sm:p-2 rounded">
                                 💡 <strong>Recomendação:</strong> {anomaly.recommendation}
                               </p>
                             )}
                           </div>
-                          <div className="text-right">
-                            <span className="text-xs text-muted-foreground">
+                          <div className="text-left sm:text-right">
+                            <span className="text-[10px] sm:text-xs text-muted-foreground">
                               {format(new Date(anomaly.created_at), 'dd/MM/yyyy HH:mm', { locale: getDateLocale() })}
                             </span>
                           </div>
@@ -725,42 +727,42 @@ export default function AIMonitor() {
                           'bg-muted/50 border-border'
                         }`}
                       >
-                        <div className="flex items-start justify-between gap-4">
+                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 sm:gap-4">
                           <div className="flex-1">
-                            <div className="flex items-center gap-2 flex-wrap mb-2">
+                            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap mb-2">
                               <Badge variant={
                                 cmd.status === 'completed' ? 'default' :
                                 cmd.status === 'failed' ? 'destructive' :
                                 'secondary'
-                              }>
+                              } className="text-xs">
                                 {cmd.status === 'completed' ? '✅ Completado' :
                                  cmd.status === 'failed' ? '❌ Falhou' :
                                  cmd.status === 'executing' ? '⚡ Executando' :
                                  cmd.status === 'pending' ? '⏳ Pendente' : cmd.status}
                               </Badge>
-                              <Badge variant="outline" className="gap-1">
-                                <Zap className="w-3 h-3" />
+                              <Badge variant="outline" className="gap-1 text-xs">
+                                <Zap className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                                 {cmd.command_type.replace(/_/g, ' ')}
                               </Badge>
                             </div>
-                            <div className="text-sm space-y-1">
+                            <div className="text-xs sm:text-sm space-y-1">
                               <p className="font-medium">Tipo: {cmd.command_type}</p>
                               {cmd.command_params && (
-                                <div className="bg-background/50 p-2 rounded text-xs font-mono">
+                                <div className="bg-background/50 p-1.5 sm:p-2 rounded text-[10px] sm:text-xs font-mono overflow-x-auto">
                                   {JSON.stringify(cmd.command_params, null, 2)}
                                 </div>
                               )}
                               {cmd.result && (
-                                <div className="mt-2 p-2 bg-success/10 rounded">
-                                  <p className="text-xs font-semibold text-success mb-1">Resultado:</p>
-                                  <pre className="text-xs overflow-auto">
+                                <div className="mt-2 p-1.5 sm:p-2 bg-success/10 rounded">
+                                  <p className="text-[10px] sm:text-xs font-semibold text-success mb-1">Resultado:</p>
+                                  <pre className="text-[10px] sm:text-xs overflow-auto">
                                     {JSON.stringify(cmd.result, null, 2)}
                                   </pre>
                                 </div>
                               )}
                             </div>
                           </div>
-                          <div className="text-right text-xs text-muted-foreground">
+                          <div className="text-left sm:text-right text-[10px] sm:text-xs text-muted-foreground">
                             <div>Criado: {format(new Date(cmd.created_at), 'dd/MM HH:mm', { locale: getDateLocale() })}</div>
                             {cmd.executed_at && (
                               <div>Executado: {format(new Date(cmd.executed_at), 'dd/MM HH:mm', { locale: getDateLocale() })}</div>
@@ -777,9 +779,9 @@ export default function AIMonitor() {
           {/* Incidents Tab */}
           <TabsContent value="incidents" className="space-y-4">
             {/* Filters */}
-            <div className="flex gap-4">
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
               <Select value={severityFilter} onValueChange={setSeverityFilter}>
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-full sm:w-[180px]">
                   <SelectValue placeholder={t('aiMonitor.severity')} />
                 </SelectTrigger>
                 <SelectContent>
@@ -792,7 +794,7 @@ export default function AIMonitor() {
               </Select>
 
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-full sm:w-[180px]">
                   <SelectValue placeholder={t('aiMonitor.status')} />
                 </SelectTrigger>
                 <SelectContent>

@@ -180,36 +180,36 @@ export function CronJobsStatus() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 pt-3 border-t">
+                <div className="grid grid-cols-1 xs:grid-cols-2 gap-3 sm:gap-4 pt-3 border-t">
                   <div className="space-y-1">
-                    <p className="text-xs font-medium text-muted-foreground">Última Execução</p>
+                    <p className="text-[10px] sm:text-xs font-medium text-muted-foreground">Última Execução</p>
                     {job.last_run_time ? (
                       <>
-                        <p className="text-sm font-mono">
+                        <p className="text-xs sm:text-sm font-mono truncate">
                           {format(parseISO(job.last_run_time), "dd/MM/yyyy HH:mm:ss", { locale: ptBR })}
                         </p>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-[10px] sm:text-xs text-muted-foreground">
                           {getTimeDifference(job.last_run_time)}
                         </p>
                       </>
                     ) : (
-                      <p className="text-sm text-muted-foreground">Nunca executado</p>
+                      <p className="text-xs sm:text-sm text-muted-foreground">Nunca executado</p>
                     )}
                   </div>
 
                   <div className="space-y-1">
-                    <p className="text-xs font-medium text-muted-foreground">Próxima Execução</p>
+                    <p className="text-[10px] sm:text-xs font-medium text-muted-foreground">Próxima Execução</p>
                     {job.next_run_time ? (
                       <>
-                        <p className="text-sm font-mono">
+                        <p className="text-xs sm:text-sm font-mono truncate">
                           {format(parseISO(job.next_run_time), "dd/MM/yyyy HH:mm:ss", { locale: ptBR })}
                         </p>
-                        <p className="text-xs text-primary font-medium">
+                        <p className="text-[10px] sm:text-xs text-primary font-medium">
                           {getTimeDifference(job.next_run_time)}
                         </p>
                       </>
                     ) : (
-                      <p className="text-sm text-muted-foreground">Não agendado</p>
+                      <p className="text-xs sm:text-sm text-muted-foreground">Não agendado</p>
                     )}
                   </div>
                 </div>
