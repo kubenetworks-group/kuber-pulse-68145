@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { StorageChart } from "@/components/StorageChart";
 import { PVCleanupRecommendations } from "@/components/PVCleanupRecommendations";
+import { AIStorageRecommendations } from "@/components/AIStorageRecommendations";
 import { useCluster } from "@/contexts/ClusterContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useTranslation } from "react-i18next";
@@ -186,6 +187,10 @@ const Storage = () => {
             
             <div className="animate-in fade-in slide-in-from-bottom-5 duration-700" style={{ animationDelay: '200ms' }}>
               <PVCleanupRecommendations pvs={standalonePVs} clusterProvider={selectedCluster?.provider} />
+            </div>
+
+            <div className="animate-in fade-in slide-in-from-bottom-5 duration-700" style={{ animationDelay: '300ms' }}>
+              <AIStorageRecommendations />
             </div>
           </div>
         )}

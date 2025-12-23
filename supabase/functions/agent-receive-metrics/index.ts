@@ -336,6 +336,37 @@ serve(async (req) => {
             const totalUsed = pvcsData.reduce((sum, p) => sum + (p.used_bytes || 0), 0);
             const totalRequested = pvcsData.reduce((sum, p) => sum + (p.requested_bytes || 0), 0);
             console.log(`✅ Stored ${pvcsToInsert.length} PVCs (real usage: ${(totalUsed / (1024**3)).toFixed(2)}GB / ${(totalRequested / (1024**3)).toFixed(2)}GB allocated)`);
+
+            // Insert into pvc_usage_history for historical tracking (AI analysis)
+            const historyToInsert = pvcsData.map(pvc => ({
+              pvc_name: pvc.name,
+              namespace: pvc.namespace,
+              cluster_id,
+              used_bytes: pvc.used_bytes || 0,
+              capacity_bytes: pvc.capacity_bytes || 0,
+              requested_bytes: pvc.requested_bytes || 0,
+              collected_at: new Date().toISOString(),
+            }));
+
+            const { error: historyError } = await supabaseClient
+              .from('pvc_usage_history')
+              .insert(historyToInsert);
+
+            if (historyError) {
+              console.error('Error storing PVC usage history:', historyError);
+            } else {
+              console.log(`📊 Stored ${historyToInsert.length} PVC usage history records`);
+            }
+
+            // Cleanup old history occasionally (1% of requests to avoid overhead)
+            if (Math.random() < 0.01) {
+              try {
+                await supabaseClient.rpc('cleanup_old_pvc_usage_history');
+                console.log('🧹 Triggered PVC usage history cleanup');
+              } catch (cleanupErr) {
+                console.error('Error in PVC history cleanup:', cleanupErr);
+              }
+            }
           }
         } else {
           console.log(`✅ Cleared all PVCs for cluster (no PVCs in cluster)`);
