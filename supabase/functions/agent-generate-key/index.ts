@@ -69,13 +69,13 @@ serve(async (req) => {
     // Store only a prefix for display purposes (first 12 characters)
     const apiKeyPrefix = apiKey.substring(0, 12) + '...';
 
-    // Insert API key with hash - never store plaintext
+    // Insert API key with hash - store unique identifier but not the actual key
     const { data: apiKeyData, error: insertError } = await supabaseClient
       .from('agent_api_keys')
       .insert({
         user_id: user.id,
         cluster_id,
-        api_key: 'REDACTED', // Never store plaintext API key
+        api_key: apiKeyHash, // Store hash as the unique identifier (not the actual key)
         api_key_hash: apiKeyHash,
         api_key_prefix: apiKeyPrefix,
         name,
