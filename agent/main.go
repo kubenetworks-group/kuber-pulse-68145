@@ -216,13 +216,16 @@ func collectKubernetesEvents(clientset *kubernetes.Clientset) []map[string]inter
 // ---------------------------------------------
 // PVC VOLUME STATS (Real usage from Kubelet)
 // ---------------------------------------------
+// Kubelet Stats Summary API structures
+// Based on: https://github.com/kubernetes/kubelet/blob/master/pkg/apis/stats/v1alpha1/types.go
 type StatsSummary struct {
 	Pods []PodStats `json:"pods"`
 }
 
 type PodStats struct {
-	PodRef      PodReference   `json:"podRef"`
-	VolumeStats []VolumeStats  `json:"volume,omitempty"`
+	PodRef         PodReference  `json:"podRef"`
+	VolumeStats    []VolumeStats `json:"volume,omitempty"`
+	EphemeralStorage *FsStats    `json:"ephemeral-storage,omitempty"`
 }
 
 type PodReference struct {
@@ -231,11 +234,21 @@ type PodReference struct {
 }
 
 type VolumeStats struct {
-	Name           string        `json:"name"`
-	PVCRef         *PVCReference `json:"pvcRef,omitempty"`
-	UsedBytes      *uint64       `json:"usedBytes,omitempty"`
-	CapacityBytes  *uint64       `json:"capacityBytes,omitempty"`
-	AvailableBytes *uint64       `json:"availableBytes,omitempty"`
+	// FsStats contains filesystem stats
+	FsStats
+	// Name is the name of the volume
+	Name   string        `json:"name"`
+	PVCRef *PVCReference `json:"pvcRef,omitempty"`
+}
+
+type FsStats struct {
+	Time           string  `json:"time,omitempty"`
+	AvailableBytes *uint64 `json:"availableBytes,omitempty"`
+	CapacityBytes  *uint64 `json:"capacityBytes,omitempty"`
+	UsedBytes      *uint64 `json:"usedBytes,omitempty"`
+	InodesFree     *uint64 `json:"inodesFree,omitempty"`
+	Inodes         *uint64 `json:"inodes,omitempty"`
+	InodesUsed     *uint64 `json:"inodesUsed,omitempty"`
 }
 
 type PVCReference struct {
@@ -258,6 +271,11 @@ func collectPVCVolumeStats(clientset *kubernetes.Clientset) map[string]PVCVolume
 		return pvcUsage
 	}
 
+	log.Printf("🔍 Fetching PVC volume stats from %d nodes...", len(nodes.Items))
+	
+	totalVolumes := 0
+	totalPVCVolumes := 0
+
 	for _, node := range nodes.Items {
 		// Call Kubelet stats/summary API via API server proxy
 		request := clientset.CoreV1().RESTClient().Get().
@@ -278,13 +296,22 @@ func collectPVCVolumeStats(clientset *kubernetes.Clientset) map[string]PVCVolume
 			continue
 		}
 
+		nodeVolumes := 0
+		nodePVCVolumes := 0
+
 		// Extract PVC volume stats from each pod
 		for _, pod := range summary.Pods {
 			for _, vol := range pod.VolumeStats {
+				nodeVolumes++
+				totalVolumes++
+				
 				if vol.PVCRef == nil {
-					continue // Skip volumes without PVC reference
+					continue // Skip volumes without PVC reference (emptyDir, configMap, etc.)
 				}
 
+				nodePVCVolumes++
+				totalPVCVolumes++
+				
 				key := vol.PVCRef.Namespace + "/" + vol.PVCRef.Name
 				
 				usage := PVCVolumeUsage{}
@@ -298,12 +325,24 @@ func collectPVCVolumeStats(clientset *kubernetes.Clientset) map[string]PVCVolume
 					usage.AvailableBytes = int64(*vol.AvailableBytes)
 				}
 
+				// Log each PVC's real usage
+				if usage.UsedBytes > 0 || usage.CapacityBytes > 0 {
+					log.Printf("   💾 PVC %s: used=%.2fGB, capacity=%.2fGB, available=%.2fGB",
+						key,
+						float64(usage.UsedBytes)/(1024*1024*1024),
+						float64(usage.CapacityBytes)/(1024*1024*1024),
+						float64(usage.AvailableBytes)/(1024*1024*1024))
+				}
+
 				pvcUsage[key] = usage
 			}
 		}
+		
+		log.Printf("   📦 Node %s: %d pods, %d volumes, %d PVC volumes", 
+			node.Name, len(summary.Pods), nodeVolumes, nodePVCVolumes)
 	}
 
-	log.Printf("📊 Collected real volume stats for %d PVCs via Kubelet", len(pvcUsage))
+	log.Printf("📊 Kubelet stats: %d total volumes, %d PVC volumes with real usage data", totalVolumes, totalPVCVolumes)
 	return pvcUsage
 }
 
