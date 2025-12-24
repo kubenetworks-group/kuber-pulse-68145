@@ -142,13 +142,22 @@ export const ClusterSecurityAnalysis = () => {
     const fixKey = `${checkKey}-${fixType}`;
     setApplyingFix(fixKey);
 
+    // Map fix types to valid agent command types
+    const commandTypeMap: Record<FixType, string> = {
+      'restrict_rbac': 'restrict_rbac',
+      'create_network_policy': 'create_network_policy',
+      'apply_pod_security': 'apply_pod_security',
+      'enable_secrets_encryption': 'enable_secrets_encryption',
+      'apply_resource_limits': 'update_deployment_resources',
+    };
+
     try {
       const { data: command, error: commandError } = await supabase
         .from('agent_commands')
         .insert({
           cluster_id: selectedClusterId,
           user_id: user.id,
-          command_type: fixType,
+          command_type: commandTypeMap[fixType] || fixType,
           command_params: getFixParams(fixType),
           status: 'pending',
         })
@@ -210,7 +219,13 @@ export const ClusterSecurityAnalysis = () => {
       case 'enable_secrets_encryption':
         return { enable_encryption_at_rest: true };
       case 'apply_resource_limits':
-        return { default_cpu_limit: '500m', default_memory_limit: '512Mi', apply_to_all_pods: true };
+        return {
+          cpu_request: '100m',
+          cpu_limit: '500m',
+          memory_request: '128Mi',
+          memory_limit: '512Mi',
+          apply_to_all_pods: true
+        };
       default:
         return {};
     }

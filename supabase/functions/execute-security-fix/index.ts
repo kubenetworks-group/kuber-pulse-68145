@@ -95,10 +95,11 @@ serve(async (req) => {
         break;
 
       case 'apply_resource_limits':
-        commandType = 'apply_resource_limits';
+        commandType = 'update_deployment_resources';
         commandParams = {
           namespace: threat.affected_resources?.[0]?.namespace || 'default',
-          deployment: threat.affected_resources?.[0]?.name,
+          deployment_name: threat.affected_resources?.[0]?.name,
+          container_name: threat.affected_resources?.[0]?.container || '',
           cpu_request: '100m',
           cpu_limit: '500m',
           memory_request: '128Mi',

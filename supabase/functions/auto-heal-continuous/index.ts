@@ -333,13 +333,27 @@ serve(async (req) => {
 
     const podDetails = latestMetrics?.metric_data?.pods || [];
 
+    // System namespaces that should be skipped (infrastructure components, CNI, etc.)
+    const systemNamespaces = [
+      'kube-system', 'kube-public', 'kube-node-lease',
+      'calico-system', 'calico-apiserver', 'tigera-operator',
+      'cilium', 'cilium-system',
+      'istio-system', 'istio-operator',
+      'linkerd', 'linkerd-viz',
+      'metallb-system', 'ingress-nginx', 'cert-manager',
+      'monitoring', 'prometheus', 'grafana',
+      'flux-system', 'argocd', 'argo',
+      'velero', 'external-secrets', 'sealed-secrets',
+      'gatekeeper-system', 'kyverno',
+    ];
+
     // 3. Check and fix pods with issues (controlled by auto_apply_anomalies)
     // This includes: CrashLoopBackOff, ImagePullBackOff, high restarts, stuck pods
     if (settings?.auto_apply_anomalies || force) {
       // Find pods that are NOT Ready, in CrashLoopBackOff, or have restart issues
       const podsWithIssues = podDetails.filter((pod: any) => {
         // Skip system namespaces
-        if (['kube-system', 'kube-public', 'kube-node-lease'].includes(pod.namespace)) {
+        if (systemNamespaces.includes(pod.namespace)) {
           return false;
         }
 
@@ -363,7 +377,7 @@ serve(async (req) => {
         (pod.phase === 'Running' || pod.status === 'Running') &&
         pod.ready === true &&
         (pod.restarts > 3 || pod.total_restarts > 3) &&
-        !['kube-system', 'kube-public', 'kube-node-lease'].includes(pod.namespace)
+        !systemNamespaces.includes(pod.namespace)
       );
 
       // Combine and deduplicate
@@ -498,8 +512,8 @@ serve(async (req) => {
       if (totalPods > 0 && limitPercentage < 50) {
         // Find pods without resource limits from pod_details
         const podsWithoutLimits = podDetails.filter((pod: any) => {
-          // Skip system namespaces
-          if (['kube-system', 'kube-public', 'kube-node-lease'].includes(pod.namespace)) {
+          // Skip system namespaces (using the constant defined above)
+          if (systemNamespaces.includes(pod.namespace)) {
             return false;
           }
 

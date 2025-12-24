@@ -21,6 +21,9 @@ import (
 	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
 )
 
+// Agent version - update this when releasing new versions
+const AgentVersion = "v0.0.51"
+
 // ---------------------------------------------
 // CONFIG
 // ---------------------------------------------
@@ -44,7 +47,7 @@ func loadConfig() AgentConfig {
 // MAIN
 // ---------------------------------------------
 func main() {
-	log.Println("🚀 Kodo Agent starting...")
+	log.Printf("🚀 Kodo Agent %s starting...", AgentVersion)
 
 	config := loadConfig()
 
@@ -1581,12 +1584,13 @@ func sendMetrics(clientset *kubernetes.Clientset, metricsClient *metricsv.Client
 
 	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(body))
 
-	// HEADER CORRETO: x-agent-key
+	// Headers for authentication and version tracking
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-agent-key", config.APIKey)
+	req.Header.Set("x-agent-version", AgentVersion)
 
-	log.Printf("🔍 Headers: Content-Type=application/json, x-agent-key=%s...%s",
-		config.APIKey[:8], config.APIKey[len(config.APIKey)-4:])
+	log.Printf("🔍 Headers: Content-Type=application/json, x-agent-key=%s...%s, x-agent-version=%s",
+		config.APIKey[:8], config.APIKey[len(config.APIKey)-4:], AgentVersion)
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -1723,6 +1727,7 @@ func getCommands(clientset *kubernetes.Clientset, config AgentConfig) {
 	req, _ := http.NewRequest("GET", url, nil)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-agent-key", config.APIKey)
+	req.Header.Set("x-agent-version", AgentVersion)
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
@@ -1782,6 +1787,10 @@ func executeCommands(clientset *kubernetes.Clientset, config AgentConfig, comman
 		case "update_deployment_resources":
 			log.Printf("   → Updating deployment resources...")
 			result, err = updateDeploymentResources(clientset, cmd.CommandParams)
+		case "self_update", "agent_update":
+			log.Printf("   → Self-updating agent...")
+			result, err = selfUpdate(clientset, cmd.CommandParams)
+			// After successful update, the pod will restart and won't continue execution
 		default:
 			err = fmt.Errorf("unknown command type: %s", cmd.CommandType)
 			log.Printf("   ❌ Unknown command type!")
@@ -2025,6 +2034,7 @@ func updateCommandStatus(config AgentConfig, commandID string, result map[string
 	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-agent-key", config.APIKey)
+	req.Header.Set("x-agent-version", AgentVersion)
 
 	client := &http.Client{}
 	resp, _ := client.Do(req)
@@ -2033,6 +2043,76 @@ func updateCommandStatus(config AgentConfig, commandID string, result map[string
 	}
 
 	log.Printf("✅ Command %s status updated: %s", commandID, status)
+}
+
+// ---------------------------------------------
+// SELF UPDATE
+// Performs a rollout restart of the agent deployment
+// ---------------------------------------------
+func selfUpdate(clientset *kubernetes.Clientset, params map[string]interface{}) (map[string]interface{}, error) {
+	// Get namespace and deployment name from params or use defaults
+	namespace := "kodo"
+	deploymentName := "kodo-agent"
+
+	if ns, ok := params["namespace"].(string); ok && ns != "" {
+		namespace = ns
+	}
+	if dn, ok := params["deployment_name"].(string); ok && dn != "" {
+		deploymentName = dn
+	}
+
+	// Optional: new image tag
+	newImage, hasNewImage := params["new_image"].(string)
+
+	log.Printf("🔄 Starting self-update for %s/%s (current version: %s)", namespace, deploymentName, AgentVersion)
+
+	// Get the deployment
+	deployment, err := clientset.AppsV1().Deployments(namespace).Get(
+		context.Background(),
+		deploymentName,
+		metav1.GetOptions{},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get deployment %s/%s: %v", namespace, deploymentName, err)
+	}
+
+	// If new image provided, update it
+	if hasNewImage && newImage != "" {
+		log.Printf("📦 Updating image to: %s", newImage)
+		for i := range deployment.Spec.Template.Spec.Containers {
+			if deployment.Spec.Template.Spec.Containers[i].Name == "agent" {
+				deployment.Spec.Template.Spec.Containers[i].Image = newImage
+				break
+			}
+		}
+	}
+
+	// Add/update annotation to trigger rollout restart
+	if deployment.Spec.Template.Annotations == nil {
+		deployment.Spec.Template.Annotations = make(map[string]string)
+	}
+	deployment.Spec.Template.Annotations["kubectl.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339)
+
+	// Update the deployment
+	_, err = clientset.AppsV1().Deployments(namespace).Update(
+		context.Background(),
+		deployment,
+		metav1.UpdateOptions{},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update deployment: %v", err)
+	}
+
+	log.Printf("✅ Self-update triggered! Deployment %s/%s will restart...", namespace, deploymentName)
+
+	return map[string]interface{}{
+		"action":          "self_update",
+		"deployment":      deploymentName,
+		"namespace":       namespace,
+		"previous_version": AgentVersion,
+		"new_image":       newImage,
+		"message":         "Agent deployment updated. Pod will restart with new version.",
+	}, nil
 }
 
 // ---------------------------------------------

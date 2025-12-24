@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-agent-key',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-agent-key, x-agent-version',
 };
 
 // Rate limiting map (in-memory)
@@ -149,11 +149,45 @@ serve(async (req) => {
 
     const { cluster_id } = apiKeyData;
 
+    // Get agent version from header
+    const agentVersion = req.headers.get('x-agent-version') || 'unknown';
+    console.log(`Agent version: ${agentVersion}`);
+
     // Update last_seen using the ID (more secure than using the plaintext key)
     await supabaseClient
       .from('agent_api_keys')
       .update({ last_seen: new Date().toISOString() })
       .eq('id', apiKeyData.id);
+
+    // Update cluster with agent version and check for updates
+    const { data: latestVersionData } = await supabaseClient
+      .from('agent_versions')
+      .select('version, release_notes, is_required')
+      .eq('is_latest', true)
+      .single();
+
+    const compareVersions = (v1: string, v2: string): number => {
+      if (!v1 || !v2 || v1 === 'unknown' || v2 === 'unknown') return 0;
+      const normalize = (v: string) => v.replace(/^v/, '').split('.').map(Number);
+      const [major1, minor1, patch1] = normalize(v1);
+      const [major2, minor2, patch2] = normalize(v2);
+      if (major1 !== major2) return major1 - major2;
+      if (minor1 !== minor2) return minor1 - minor2;
+      return patch1 - patch2;
+    };
+
+    const updateAvailable = latestVersionData && agentVersion !== 'unknown' &&
+      compareVersions(agentVersion, latestVersionData.version) < 0;
+
+    await supabaseClient
+      .from('clusters')
+      .update({
+        agent_version: agentVersion,
+        agent_last_seen_at: new Date().toISOString(),
+        agent_update_available: updateAvailable || false,
+        agent_update_message: updateAvailable ? latestVersionData?.release_notes : null,
+      })
+      .eq('id', cluster_id);
 
     // Parse and validate request body
     const body = await req.json();
