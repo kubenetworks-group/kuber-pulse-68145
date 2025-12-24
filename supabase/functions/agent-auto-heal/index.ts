@@ -72,13 +72,24 @@ serve(async (req) => {
 
     console.log('Creating auto-heal command');
 
+    // Valid command types that the agent understands
+    const validCommandTypes = ['restart_pod', 'delete_pod', 'scale_deployment', 'update_deployment_image', 'update_deployment_resources'];
+
+    // Validate and normalize the command type
+    let commandType = auto_heal_action || '';
+    if (!commandType || commandType === 'null' || !validCommandTypes.includes(commandType)) {
+      // Default to restart_pod if invalid or missing
+      commandType = 'restart_pod';
+      console.log(`⚠️ Invalid or missing auto_heal_action: "${auto_heal_action}", using restart_pod`);
+    }
+
     // Create command for agent to execute
     const { data: command, error: commandError } = await supabaseClient
       .from('agent_commands')
       .insert({
         cluster_id,
         user_id: user.id,
-        command_type: auto_heal_action || 'auto_heal',
+        command_type: commandType,
         command_params: auto_heal_params || {},
         status: 'pending',
       })

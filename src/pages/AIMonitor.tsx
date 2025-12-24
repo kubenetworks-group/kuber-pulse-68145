@@ -468,36 +468,34 @@ export default function AIMonitor() {
         {/* Tabs para diferentes visualizações */}
         <Tabs defaultValue="autoheal" className="space-y-4">
           <TabsList className="flex flex-nowrap overflow-x-auto w-full max-w-full h-auto p-1">
-            <TabsTrigger value="security" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">
-              <ShieldAlert className="h-3 w-3 sm:h-4 sm:w-4" />
-              <span className="hidden xs:inline">Seguranca</span> ({threatStats.active})
+            <TabsTrigger value="security" className="flex items-center gap-2 text-sm whitespace-nowrap px-3 py-2">
+              <ShieldAlert className="h-4 w-4" />
+              <span>Seguranca ({threatStats.active})</span>
               {threatStats.critical > 0 && (
-                <Badge variant="destructive" className="ml-1 h-4 w-4 sm:h-5 sm:w-5 p-0 flex items-center justify-center text-[10px] sm:text-xs animate-pulse">
+                <Badge variant="destructive" className="ml-1 h-5 w-5 p-0 flex items-center justify-center text-xs animate-pulse">
                   {threatStats.critical}
                 </Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="anomalies" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">
-              <AlertCircle className="h-3 w-3 sm:h-4 sm:w-4" />
-              <span className="hidden xs:inline">Anomalias</span> ({recentAnomalies.length})
+            <TabsTrigger value="anomalies" className="flex items-center gap-2 text-sm whitespace-nowrap px-3 py-2">
+              <AlertCircle className="h-4 w-4" />
+              <span>Anomalias ({recentAnomalies.length})</span>
             </TabsTrigger>
-            <TabsTrigger value="commands" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">
-              <Zap className="h-3 w-3 sm:h-4 sm:w-4" />
-              <span className="hidden xs:inline">Comandos</span> ({agentCommands.length})
+            <TabsTrigger value="commands" className="flex items-center gap-2 text-sm whitespace-nowrap px-3 py-2">
+              <Zap className="h-4 w-4" />
+              <span>Comandos ({agentCommands.length})</span>
             </TabsTrigger>
-            <TabsTrigger value="incidents" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">
-              <Activity className="h-3 w-3 sm:h-4 sm:w-4" />
-              <span className="hidden xs:inline">{t('aiMonitor.incidents')}</span>
-              <span className="xs:hidden">Inc.</span>
+            <TabsTrigger value="incidents" className="flex items-center gap-2 text-sm whitespace-nowrap px-3 py-2">
+              <Activity className="h-4 w-4" />
+              <span>{t('aiMonitor.incidents')}</span>
             </TabsTrigger>
-            <TabsTrigger value="history" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">
-              <History className="h-3 w-3 sm:h-4 sm:w-4" />
-              <span className="hidden xs:inline">Histórico</span>
-              <span className="xs:hidden">Hist.</span>
+            <TabsTrigger value="history" className="flex items-center gap-2 text-sm whitespace-nowrap px-3 py-2">
+              <History className="h-4 w-4" />
+              <span>Histórico</span>
             </TabsTrigger>
-            <TabsTrigger value="autoheal" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm whitespace-nowrap px-2 sm:px-3">
-              <Settings className="h-3 w-3 sm:h-4 sm:w-4" />
-              Auto-Heal
+            <TabsTrigger value="autoheal" className="flex items-center gap-2 text-sm whitespace-nowrap px-3 py-2">
+              <Settings className="h-4 w-4" />
+              <span>Auto-Heal</span>
             </TabsTrigger>
           </TabsList>
 

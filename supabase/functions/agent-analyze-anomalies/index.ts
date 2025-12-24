@@ -310,7 +310,7 @@ Return JSON (no markdown):
       "recommendation": "Specific action in Portuguese based on the actual error found in events",
       "affected_pods": ["namespace/pod-name"],
       "event_messages": ["actual error messages from Kubernetes events"],
-      "auto_heal": "restart_pod|delete_pod|scale_up|scale_down|update_deployment_resources|update_deployment_image|null",
+      "auto_heal": "restart_pod|delete_pod|scale_up|scale_down|update_deployment_resources|update_deployment_image",
       "auto_heal_params": {
         "pod_name": "pod-name",
         "namespace": "namespace",

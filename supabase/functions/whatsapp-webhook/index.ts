@@ -164,12 +164,20 @@ serve(async (req) => {
     
     // If approved, create the agent command
     if (isApproval) {
+      // Valid command types that the agent understands
+      const validCommandTypes = ['restart_pod', 'delete_pod', 'scale_deployment', 'update_deployment_image', 'update_deployment_resources'];
+
+      // Validate the command type
+      const commandType = (targetApproval.action_type && validCommandTypes.includes(targetApproval.action_type))
+        ? targetApproval.action_type
+        : 'restart_pod';
+
       const { error: commandError } = await supabase
         .from('agent_commands')
         .insert({
           cluster_id: targetApproval.cluster_id,
           user_id: targetApproval.user_id,
-          command_type: targetApproval.action_type,
+          command_type: commandType,
           command_params: targetApproval.action_params,
           status: 'pending',
         });

@@ -147,9 +147,14 @@ serve(async (req) => {
 
           console.log(`Processing anomaly ${anomaly.id}: type=${anomaly.anomaly_type}, pod=${namespace}/${podName}`);
 
-          switch (anomaly.anomaly_type) {
+          // Valid command types that the agent understands
+        const validCommandTypes = ['restart_pod', 'delete_pod', 'scale_deployment', 'update_deployment_image', 'update_deployment_resources'];
+
+        switch (anomaly.anomaly_type) {
             case 'pod_restart_loop':
             case 'crash_loop_backoff':
+            case 'pod_restart':
+            case 'pod_crash':
               healAction = 'restart_pod';
               healParams = {
                 pod_name: podName,
@@ -227,7 +232,17 @@ serve(async (req) => {
               }
               break;
             default:
-              healAction = anomaly.ai_analysis?.auto_heal || 'restart_pod';
+              // Get action from AI analysis, ensuring it's a valid command type
+              const aiSuggestedHeal = anomaly.ai_analysis?.auto_heal;
+              // Validate that the action is a valid command type (not null, "null", empty, etc.)
+              if (aiSuggestedHeal && typeof aiSuggestedHeal === 'string' &&
+                  aiSuggestedHeal !== 'null' && validCommandTypes.includes(aiSuggestedHeal)) {
+                healAction = aiSuggestedHeal;
+              } else {
+                // Fallback to restart_pod if invalid or missing
+                healAction = 'restart_pod';
+                console.log(`⚠️ Invalid or missing auto_heal action: "${aiSuggestedHeal}", using restart_pod`);
+              }
               healParams = {
                 pod_name: podName,
                 namespace: namespace,
@@ -239,6 +254,12 @@ serve(async (req) => {
           // Skip if we don't have pod name
           if (!healParams.pod_name && !healParams.deployment_name) {
             console.log(`Skipping anomaly ${anomaly.id} - no pod/deployment name found`);
+            continue;
+          }
+
+          // Final validation of healAction
+          if (!validCommandTypes.includes(healAction)) {
+            console.log(`⚠️ Skipping anomaly ${anomaly.id} - invalid heal action: ${healAction}`);
             continue;
           }
 
@@ -300,21 +321,21 @@ serve(async (req) => {
       }
     }
 
-    // 2. Check and fix resource-related issues (CPU/Memory limits)
-    // NOTE: We only auto-apply resource adjustments, NOT RBAC or network policies
-    if (settings?.auto_apply_security || force) {
-      // Get latest metrics to check for pods with issues
-      const { data: latestMetrics } = await supabase
-        .from('agent_metrics')
-        .select('metric_data')
-        .eq('cluster_id', cluster_id)
-        .eq('metric_type', 'pod_details')
-        .order('collected_at', { ascending: false })
-        .limit(1)
-        .single();
+    // 2. Get latest pod metrics (used by both anomalies and security checks)
+    const { data: latestMetrics } = await supabase
+      .from('agent_metrics')
+      .select('metric_data')
+      .eq('cluster_id', cluster_id)
+      .eq('metric_type', 'pod_details')
+      .order('collected_at', { ascending: false })
+      .limit(1)
+      .single();
 
-      const podDetails = latestMetrics?.metric_data?.pods || [];
+    const podDetails = latestMetrics?.metric_data?.pods || [];
 
+    // 3. Check and fix pods with issues (controlled by auto_apply_anomalies)
+    // This includes: CrashLoopBackOff, ImagePullBackOff, high restarts, stuck pods
+    if (settings?.auto_apply_anomalies || force) {
       // Find pods that are NOT Ready, in CrashLoopBackOff, or have restart issues
       const podsWithIssues = podDetails.filter((pod: any) => {
         // Skip system namespaces
@@ -451,7 +472,11 @@ serve(async (req) => {
           });
         }
       }
+    }
 
+    // 4. Check and fix resource-related issues (CPU/Memory limits)
+    // NOTE: This is controlled by auto_apply_security - only applies resource adjustments
+    if (settings?.auto_apply_security || force) {
       // Check security metrics for pods without resource limits
       const { data: securityMetrics } = await supabase
         .from('agent_metrics')

@@ -176,13 +176,21 @@ export function useWhatsAppApprovals() {
 
       if (updateError) throw updateError;
 
+      // Valid command types that the agent understands
+      const validCommandTypes = ['restart_pod', 'delete_pod', 'scale_deployment', 'update_deployment_image', 'update_deployment_resources'];
+
+      // Validate the command type
+      const commandType = (approval.action_type && validCommandTypes.includes(approval.action_type))
+        ? approval.action_type
+        : 'restart_pod';
+
       // Create agent command
       const { error: commandError } = await supabase
         .from('agent_commands')
         .insert({
           cluster_id: approval.cluster_id,
           user_id: approval.user_id,
-          command_type: approval.action_type,
+          command_type: commandType,
           command_params: approval.action_params,
           status: 'pending',
         });
