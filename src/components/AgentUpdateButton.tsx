@@ -17,26 +17,26 @@ import {
 } from "@/components/ui/tooltip";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ArrowUpCircle, RefreshCw, CheckCircle, AlertTriangle, Loader2 } from "lucide-react";
+import { ArrowUpCircle, CheckCircle, AlertTriangle, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCluster } from "@/contexts/ClusterContext";
 import { toast } from "sonner";
 
-interface AgentVersion {
-  version: string;
-  release_notes: string;
-  release_type: 'major' | 'minor' | 'patch' | 'hotfix';
+interface UpdateInfo {
+  current_version: string;
+  latest_version: string;
+  update_available: boolean;
   is_required: boolean;
+  release_notes: string | null;
+  release_type: 'major' | 'minor' | 'patch' | 'hotfix' | null;
 }
 
 export function AgentUpdateButton() {
   const { selectedClusterId } = useCluster();
-  const [updateAvailable, setUpdateAvailable] = useState(false);
-  const [currentVersion, setCurrentVersion] = useState<string | null>(null);
-  const [latestVersion, setLatestVersion] = useState<AgentVersion | null>(null);
-  const [releaseNotes, setReleaseNotes] = useState<string | null>(null);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
   const [showDialog, setShowDialog] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (selectedClusterId) {
@@ -47,35 +47,41 @@ export function AgentUpdateButton() {
   const checkForUpdates = async () => {
     if (!selectedClusterId) return;
 
+    setLoading(true);
     try {
-      const { data: cluster, error: clusterError } = await supabase
-        .from('clusters')
-        .select('agent_version, agent_update_available, agent_update_message')
-        .eq('id', selectedClusterId)
+      // Get API key for this cluster to check update
+      const { data: apiKey } = await supabase
+        .from('agent_api_keys')
+        .select('api_key')
+        .eq('cluster_id', selectedClusterId)
+        .eq('is_active', true)
         .single();
 
-      if (clusterError) throw clusterError;
-
-      setCurrentVersion(cluster.agent_version);
-      setUpdateAvailable(cluster.agent_update_available || false);
-      setReleaseNotes(cluster.agent_update_message);
-
-      const { data: latestVersionData } = await supabase
-        .from('agent_versions')
-        .select('*')
-        .eq('is_latest', true)
-        .single();
-
-      if (latestVersionData) {
-        setLatestVersion(latestVersionData as AgentVersion);
+      if (!apiKey) {
+        setLoading(false);
+        return;
       }
+
+      // Call edge function to check update
+      const { data, error } = await supabase.functions.invoke('agent-check-update', {
+        headers: {
+          'x-agent-key': apiKey.api_key,
+          'x-agent-version': 'v0.0.1', // This would come from actual agent
+        }
+      });
+
+      if (error) throw error;
+
+      setUpdateInfo(data);
     } catch (error) {
       console.error('Error checking for agent updates:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
   const triggerUpdate = async () => {
-    if (!selectedClusterId) return;
+    if (!selectedClusterId || !updateInfo) return;
 
     setIsUpdating(true);
     try {
@@ -94,7 +100,7 @@ export function AgentUpdateButton() {
           user_id: cluster.user_id,
           command_type: 'self_update',
           command_params: {
-            new_image: latestVersion ? `ghcr.io/kubenetworks-group/kodo-agent:${latestVersion.version}` : null,
+            new_image: `ghcr.io/kubenetworks-group/kodo-agent:${updateInfo.latest_version}`,
             namespace: 'kodo',
             deployment_name: 'kodo-agent',
           },
@@ -109,11 +115,11 @@ export function AgentUpdateButton() {
           cluster_id: selectedClusterId,
           user_id: cluster.user_id,
           action_type: 'agent_update',
-          trigger_reason: `Updating agent from ${currentVersion} to ${latestVersion?.version}`,
+          trigger_reason: `Updating agent from ${updateInfo.current_version} to ${updateInfo.latest_version}`,
           action_details: {
-            current_version: currentVersion,
-            target_version: latestVersion?.version,
-            release_type: latestVersion?.release_type,
+            current_version: updateInfo.current_version,
+            target_version: updateInfo.latest_version,
+            release_type: updateInfo.release_type,
           },
           status: 'pending',
         });
@@ -123,19 +129,10 @@ export function AgentUpdateButton() {
       });
 
       setShowDialog(false);
-
-      await supabase
-        .from('clusters')
-        .update({
-          agent_update_available: false,
-          agent_update_message: null,
-        })
-        .eq('id', selectedClusterId);
-
-      setUpdateAvailable(false);
+      setUpdateInfo(null);
 
       setTimeout(() => {
-        window.location.reload();
+        checkForUpdates();
       }, 10000);
 
     } catch (error: any) {
@@ -148,16 +145,16 @@ export function AgentUpdateButton() {
     }
   };
 
-  if (!updateAvailable || !currentVersion) return null;
+  if (loading || !updateInfo?.update_available) return null;
 
-  const releaseTypeColors = {
+  const releaseTypeColors: Record<string, string> = {
     major: 'bg-red-500',
     minor: 'bg-blue-500',
     patch: 'bg-green-500',
     hotfix: 'bg-orange-500',
   };
 
-  const releaseTypeLabels = {
+  const releaseTypeLabels: Record<string, string> = {
     major: 'Major',
     minor: 'Minor',
     patch: 'Patch',
@@ -183,7 +180,7 @@ export function AgentUpdateButton() {
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            <p>Atualização do agente disponível: {latestVersion?.version}</p>
+            <p>Atualização do agente disponível: {updateInfo.latest_version}</p>
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -205,9 +202,9 @@ export function AgentUpdateButton() {
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center justify-between">
                   <span>Informações da Versão</span>
-                  {latestVersion && (
-                    <Badge className={releaseTypeColors[latestVersion.release_type]}>
-                      {releaseTypeLabels[latestVersion.release_type]}
+                  {updateInfo.release_type && (
+                    <Badge className={releaseTypeColors[updateInfo.release_type]}>
+                      {releaseTypeLabels[updateInfo.release_type]}
                     </Badge>
                   )}
                 </CardTitle>
@@ -215,23 +212,23 @@ export function AgentUpdateButton() {
               <CardContent className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Versão Atual:</span>
-                  <span className="font-mono">{currentVersion}</span>
+                  <span className="font-mono">{updateInfo.current_version}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Nova Versão:</span>
-                  <span className="font-mono text-blue-400">{latestVersion?.version}</span>
+                  <span className="font-mono text-blue-400">{updateInfo.latest_version}</span>
                 </div>
               </CardContent>
             </Card>
 
-            {releaseNotes && (
+            {updateInfo.release_notes && (
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm">Notas de Lançamento</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <pre className="text-xs text-muted-foreground whitespace-pre-wrap font-sans">
-                    {releaseNotes}
+                    {updateInfo.release_notes}
                   </pre>
                 </CardContent>
               </Card>
