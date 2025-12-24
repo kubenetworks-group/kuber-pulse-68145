@@ -9,7 +9,6 @@ import { CronJobsStatus } from "@/components/CronJobsStatus";
 import { ScanHistoryTab } from "@/components/ScanHistoryTab";
 import { SecurityThreatCard } from "@/components/SecurityThreatCard";
 import { ContainerTerminalAlert } from "@/components/ContainerTerminalAlert";
-import { AgentUpdateBanner } from "@/components/AgentUpdateBanner";
 import { useSecurityThreats } from "@/hooks/useSecurityThreats";
 import { Bot, Activity, CheckCircle, Sparkles, Shield, Zap, AlertCircle, History, ShieldAlert, Settings } from "lucide-react";
 import { AutoHealConfig } from "@/components/AutoHealConfig";
@@ -398,9 +397,6 @@ export default function AIMonitor() {
 
         {/* Cron Jobs Status */}
         <CronJobsStatus />
-
-        {/* Agent Update Banner */}
-        <AgentUpdateBanner />
 
         {/* Stats Grid com visualizações melhoradas */}
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">

@@ -4,6 +4,7 @@ import { ClusterSelector } from "./ClusterSelector";
 import { Footer } from "./Footer";
 import { DocsAssistantChat } from "./DocsAssistantChat";
 import { TrialBanner } from "./TrialBanner";
+import { AgentUpdateButton } from "./AgentUpdateButton";
 import { useState, useEffect, useRef } from "react";
 import { useLocation } from "react-router-dom";
 import { Menu, X } from "lucide-react";
@@ -114,7 +115,10 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
               </Button>
               {!hideClusterSelector && <ClusterSelector />}
             </div>
-            <NotificationBell />
+            <div className="flex items-center gap-2">
+              <AgentUpdateButton />
+              <NotificationBell />
+            </div>
           </div>
         </div>
         <div className="flex-1 p-3 sm:p-4 lg:p-6">
