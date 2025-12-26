@@ -90,14 +90,42 @@ serve(async (req) => {
     
     console.log(`Received message from ${from}: ${messageText}`);
     
-    // Find user by phone number
-    const { data: profile, error: profileError } = await supabase
+    // Validate and sanitize phone number to prevent SQL injection
+    // Phone numbers should only contain digits and optionally a leading +
+    const phoneRegex = /^\+?[1-9]\d{1,14}$/;
+    if (!from || !phoneRegex.test(from)) {
+      console.error('Invalid phone number format:', from);
+      return new Response('OK', { status: 200, headers: corsHeaders });
+    }
+    
+    // Sanitize: keep only digits for safe comparison
+    const sanitizedPhone = from.replace(/[^0-9]/g, '');
+    const last10Digits = sanitizedPhone.slice(-10);
+    
+    // Find user by phone number using safe query methods
+    // First, get all profiles with verified WhatsApp and filter in code
+    const { data: profiles, error: profileError } = await supabase
       .from('profiles')
       .select('id, whatsapp_phone')
-      .or(`whatsapp_phone.ilike.%${from.slice(-10)}%,whatsapp_phone.ilike.%${from}%`)
-      .single();
+      .eq('whatsapp_verified', true)
+      .not('whatsapp_phone', 'is', null);
     
-    if (profileError || !profile) {
+    if (profileError) {
+      console.error('Error fetching profiles:', profileError);
+      return new Response('OK', { status: 200, headers: corsHeaders });
+    }
+    
+    // Find matching profile by comparing sanitized phone numbers
+    const profile = profiles?.find(p => {
+      if (!p.whatsapp_phone) return false;
+      const profilePhone = p.whatsapp_phone.replace(/[^0-9]/g, '');
+      // Match if last 10 digits are the same or full number matches
+      return profilePhone.endsWith(last10Digits) || 
+             sanitizedPhone.endsWith(profilePhone.slice(-10)) ||
+             profilePhone === sanitizedPhone;
+    });
+    
+    if (!profile) {
       console.log('User not found for phone:', from);
       return new Response('OK', { status: 200, headers: corsHeaders });
     }
