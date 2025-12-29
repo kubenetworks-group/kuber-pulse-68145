@@ -214,7 +214,7 @@ serve(async (req) => {
       console.log(`Validating metric type '${metric.type}' (size: ${metricSize} bytes)`);
 
       // Type-specific validation
-      const isLargeMetricType = ['pod_details', 'events', 'nodes', 'pvcs'].includes(metric.type);
+      const isLargeMetricType = ['pod_details', 'events', 'nodes', 'pvcs', 'security_threats', 'security'].includes(metric.type);
       const maxSize = isLargeMetricType ? 500000 : 10000; // 500KB for large types, 10KB for basic
       
       if (metricSize > maxSize) {
