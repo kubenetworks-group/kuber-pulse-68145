@@ -1008,6 +1008,57 @@ export type Database = {
         }
         Relationships: []
       }
+      pvc_usage_history: {
+        Row: {
+          cluster_id: string
+          created_at: string
+          id: string
+          pvc_id: string
+          recorded_at: string
+          requested_bytes: number
+          usage_percentage: number
+          used_bytes: number
+          user_id: string
+        }
+        Insert: {
+          cluster_id: string
+          created_at?: string
+          id?: string
+          pvc_id: string
+          recorded_at?: string
+          requested_bytes?: number
+          usage_percentage?: number
+          used_bytes?: number
+          user_id: string
+        }
+        Update: {
+          cluster_id?: string
+          created_at?: string
+          id?: string
+          pvc_id?: string
+          recorded_at?: string
+          requested_bytes?: number
+          usage_percentage?: number
+          used_bytes?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pvc_usage_history_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pvc_usage_history_pvc_id_fkey"
+            columns: ["pvc_id"]
+            isOneToOne: false
+            referencedRelation: "pvcs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pvcs: {
         Row: {
           cluster_id: string
@@ -1403,6 +1454,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      cleanup_old_pvc_usage_history: { Args: never; Returns: undefined }
       create_security_alert: {
         Args: {
           p_alert_type: string
