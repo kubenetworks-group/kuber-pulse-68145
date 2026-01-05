@@ -11,7 +11,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Database, Loader2, Sparkles, GraduationCap, Crown, Clock, Brain, Server, User, CreditCard, Check, Shield, MessageSquare, BarChart3 } from "lucide-react";
+import { Database, Loader2, Sparkles, GraduationCap, Crown, Clock, Brain, Server, User, CreditCard, Check, Shield, MessageSquare } from "lucide-react";
 import { AIUsageWidget } from "@/components/AIUsageWidget";
 import { useNavigate } from "react-router-dom";
 import { AvatarUpload } from "@/components/AvatarUpload";
@@ -187,10 +187,6 @@ const Settings = () => {
                 <Badge variant="secondary" className="ml-1 text-xs">PRO</Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="ai-usage" className="gap-2">
-              <BarChart3 className="w-4 h-4" />
-              Uso de IA
-            </TabsTrigger>
             <TabsTrigger value="upgrade" className="gap-2">
               <Crown className="w-4 h-4" />
               Planos
@@ -311,11 +307,6 @@ const Settings = () => {
             <WhatsAppApprovals />
           </TabsContent>
 
-          {/* AI Usage Tab */}
-          <TabsContent value="ai-usage" className="space-y-6">
-            <AIUsageWidget />
-          </TabsContent>
-
           {/* Upgrade Tab */}
           <TabsContent value="upgrade" className="space-y-6">
             {/* Current Plan Status */}
@@ -417,6 +408,9 @@ const Settings = () => {
 
           {/* Data Tab */}
           <TabsContent value="data" className="space-y-6">
+            {/* AI Usage Widget */}
+            <AIUsageWidget />
+
             {/* Demo Data Card */}
             <Card className="p-6 bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
               <div className="flex items-start gap-4">
