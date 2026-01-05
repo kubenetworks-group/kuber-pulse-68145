@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { callGemini } from "../_shared/gemini.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -16,42 +17,6 @@ const STORAGE_PRICES: Record<string, number> = {
   'on-premises': 0.02,
   'other': 0.06,
 };
-
-// Helper function for retry with exponential backoff
-async function retryWithBackoff<T>(
-  fn: () => Promise<T>,
-  maxRetries: number = 3,
-  initialDelay: number = 1000
-): Promise<T> {
-  let lastError: Error;
-
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    try {
-      return await fn();
-    } catch (error) {
-      lastError = error as Error;
-
-      // Don't retry on authentication errors
-      if (error instanceof Error && (
-        error.message.includes('Unauthorized') ||
-        error.message.includes('402') ||
-        error.message.includes('429')
-      )) {
-        throw error;
-      }
-
-      if (attempt === maxRetries - 1) {
-        break;
-      }
-
-      const delay = initialDelay * Math.pow(2, attempt);
-      console.log(`Attempt ${attempt + 1} failed. Retrying in ${delay}ms...`);
-      await new Promise(resolve => setTimeout(resolve, delay));
-    }
-  }
-
-  throw lastError!;
-}
 
 // Calculate percentile
 function percentile(arr: number[], p: number): number {
@@ -144,8 +109,8 @@ serve(async (req) => {
       .from('pvc_usage_history')
       .select('*')
       .eq('cluster_id', cluster_id)
-      .gte('collected_at', sevenDaysAgo)
-      .order('collected_at', { ascending: true });
+      .gte('recorded_at', sevenDaysAgo)
+      .order('recorded_at', { ascending: true });
 
     if (historyError) {
       console.error('Error fetching history:', historyError);
@@ -183,13 +148,14 @@ serve(async (req) => {
     // Add historical data
     if (history && history.length > 0) {
       for (const record of history) {
-        const key = `${record.namespace}/${record.pvc_name}`;
-        if (pvcStats[key]) {
-          const usagePercent = record.requested_bytes > 0
-            ? (record.used_bytes / record.requested_bytes) * 100
-            : 0;
-          pvcStats[key].usagePoints.push(usagePercent);
-          pvcStats[key].dataPoints++;
+        // Find the matching PVC
+        const matchingPVC = currentPVCs.find(p => p.id === record.pvc_id);
+        if (matchingPVC) {
+          const key = `${matchingPVC.namespace}/${matchingPVC.name}`;
+          if (pvcStats[key]) {
+            pvcStats[key].usagePoints.push(record.usage_percentage);
+            pvcStats[key].dataPoints++;
+          }
         }
       }
 
@@ -217,12 +183,6 @@ serve(async (req) => {
     }));
 
     console.log(`📈 Prepared analysis data for ${analysisData.length} PVCs`);
-
-    // Call AI for contextual recommendations
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY not configured');
-    }
 
     const pricePerGB = STORAGE_PRICES[cluster.provider?.toLowerCase()] || STORAGE_PRICES['other'];
 
@@ -270,32 +230,16 @@ Retorne JSON puro (sem markdown):
   "summary": "Resumo em portugues das economias totais e recomendacoes principais"
 }`;
 
-    const aiResult = await retryWithBackoff(async () => {
-      const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: `Analise estes PVCs e recomende otimizacoes:\n\n${JSON.stringify(analysisData, null, 2)}` }
-          ],
-          temperature: 0.3,
-        }),
-      });
+    const geminiMessages = [
+      { role: "system" as const, content: systemPrompt },
+      { role: "user" as const, content: `Analise estes PVCs e recomende otimizacoes:\n\n${JSON.stringify(analysisData, null, 2)}` }
+    ];
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`AI API error ${response.status}: ${errorText}`);
-      }
+    console.log('🤖 Calling Google Gemini for storage analysis...');
 
-      return await response.json();
-    });
+    const aiResult = await callGemini(geminiMessages, user.id, "analyze-storage-recommendations");
 
-    let aiContent = aiResult.choices?.[0]?.message?.content || '{"recommendations":[],"summary":"Falha na analise"}';
+    let aiContent = aiResult.content;
 
     // Clean markdown formatting if present
     aiContent = aiContent.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
@@ -310,7 +254,7 @@ Retorne JSON puro (sem markdown):
 
     const recommendations = analysisResult.recommendations || [];
 
-    console.log(`🤖 AI generated ${recommendations.length} recommendations`);
+    console.log(`🤖 AI generated ${recommendations.length} recommendations (tokens: ${aiResult.inputTokens}/${aiResult.outputTokens}, free tier: ${aiResult.isFreeTier})`);
 
     // Store recommendations
     if (recommendations.length > 0) {
@@ -377,6 +321,12 @@ Retorne JSON puro (sem markdown):
         pvcs_analyzed: analysisData.length,
         total_potential_savings: totalSavings,
         history_data_points: history?.length || 0,
+        ai_usage: {
+          input_tokens: aiResult.inputTokens,
+          output_tokens: aiResult.outputTokens,
+          is_free_tier: aiResult.isFreeTier,
+          estimated_cost: aiResult.estimatedCost
+        }
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

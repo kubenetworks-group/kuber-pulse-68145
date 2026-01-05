@@ -325,6 +325,45 @@ export type Database = {
           },
         ]
       }
+      ai_usage_logs: {
+        Row: {
+          created_at: string
+          estimated_cost_usd: number | null
+          function_name: string
+          id: string
+          input_tokens: number
+          is_free_tier: boolean
+          model: string
+          output_tokens: number
+          provider: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          estimated_cost_usd?: number | null
+          function_name: string
+          id?: string
+          input_tokens?: number
+          is_free_tier?: boolean
+          model: string
+          output_tokens?: number
+          provider: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          estimated_cost_usd?: number | null
+          function_name?: string
+          id?: string
+          input_tokens?: number
+          is_free_tier?: boolean
+          model?: string
+          output_tokens?: number
+          provider?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       audit_logs: {
         Row: {
           action: string
@@ -1478,6 +1517,11 @@ export type Database = {
           schedule: string
         }[]
       }
+      get_user_daily_ai_requests: {
+        Args: { p_user_id: string }
+        Returns: number
+      }
+      get_user_monthly_ai_cost: { Args: { p_user_id: string }; Returns: number }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

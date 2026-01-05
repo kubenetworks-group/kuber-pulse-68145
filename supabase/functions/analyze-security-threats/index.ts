@@ -1,45 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { callGemini } from "../_shared/gemini.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
-
-// Helper function for retry with exponential backoff
-async function retryWithBackoff<T>(
-  fn: () => Promise<T>,
-  maxRetries: number = 3,
-  initialDelay: number = 1000
-): Promise<T> {
-  let lastError: Error;
-
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    try {
-      return await fn();
-    } catch (error) {
-      lastError = error as Error;
-
-      if (error instanceof Error && (
-        error.message.includes('Unauthorized') ||
-        error.message.includes('402') ||
-        error.message.includes('429')
-      )) {
-        throw error;
-      }
-
-      if (attempt === maxRetries - 1) {
-        break;
-      }
-
-      const delay = initialDelay * Math.pow(2, attempt);
-      console.log(`Attempt ${attempt + 1} failed. Retrying in ${delay}ms...`);
-      await new Promise(resolve => setTimeout(resolve, delay));
-    }
-  }
-
-  throw lastError!;
-}
 
 // Map threat data to severity
 function determineSeverity(threatLevel: string, threatType: string): string {
@@ -50,7 +16,6 @@ function determineSeverity(threatLevel: string, threatType: string): string {
     'low': 'low',
   };
 
-  // Upgrade severity for certain threat types
   if (['crypto_mining', 'backdoor', 'shell_injection', 'data_exfiltration'].includes(threatType)) {
     return threatLevel === 'medium' ? 'high' : (threatLevel === 'low' ? 'medium' : threatLevel);
   }
@@ -166,60 +131,26 @@ serve(async (req) => {
     // Collect all potential threats
     const allThreats: any[] = [];
 
-    // Process suspicious pods
     for (const pod of securityData.suspicious_pods || []) {
-      allThreats.push({
-        source: 'suspicious_pod',
-        ...pod,
-      });
+      allThreats.push({ source: 'suspicious_pod', ...pod });
     }
-
-    // Process privileged containers
     for (const container of securityData.privileged_containers || []) {
-      allThreats.push({
-        source: 'privileged_container',
-        ...container,
-      });
+      allThreats.push({ source: 'privileged_container', ...container });
     }
-
-    // Process host network pods
     for (const pod of securityData.host_network_pods || []) {
-      allThreats.push({
-        source: 'host_network',
-        ...pod,
-      });
+      allThreats.push({ source: 'host_network', ...pod });
     }
-
-    // Process host PID pods
     for (const pod of securityData.host_pid_pods || []) {
-      allThreats.push({
-        source: 'host_pid',
-        ...pod,
-      });
+      allThreats.push({ source: 'host_pid', ...pod });
     }
-
-    // Process resource anomalies
     for (const anomaly of securityData.resource_anomalies || []) {
-      allThreats.push({
-        source: 'resource_anomaly',
-        ...anomaly,
-      });
+      allThreats.push({ source: 'resource_anomaly', ...anomaly });
     }
-
-    // Process network anomalies
     for (const anomaly of securityData.network_anomalies || []) {
-      allThreats.push({
-        source: 'network_anomaly',
-        ...anomaly,
-      });
+      allThreats.push({ source: 'network_anomaly', ...anomaly });
     }
-
-    // Process suspicious events
     for (const event of securityData.suspicious_events || []) {
-      allThreats.push({
-        source: 'suspicious_event',
-        ...event,
-      });
+      allThreats.push({ source: 'suspicious_event', ...event });
     }
 
     if (allThreats.length === 0) {
@@ -235,49 +166,7 @@ serve(async (req) => {
       );
     }
 
-    // Call Lovable AI for threat analysis
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      // If no AI key, still process threats but without AI analysis
-      console.warn('LOVABLE_API_KEY not configured, processing threats without AI analysis');
-
-      const threatsToInsert = allThreats.slice(0, 50).map(threat => ({
-        cluster_id,
-        user_id: user.id,
-        threat_type: getThreatType(threat.reason || threat.source),
-        severity: determineSeverity(threat.threat_level || 'medium', getThreatType(threat.reason || threat.source)),
-        title: `${threat.source.replace(/_/g, ' ').toUpperCase()}: ${threat.pod_name || threat.service_name || threat.object || 'Unknown'}`,
-        description: threat.reason || `Ameaca detectada: ${threat.source}`,
-        container_name: threat.container_name,
-        pod_name: threat.pod_name,
-        namespace: threat.namespace,
-        node_name: threat.node,
-        suspicious_command: null,
-        source_ip: null,
-        raw_data: threat,
-      }));
-
-      const { error: insertError } = await supabaseClient
-        .from('security_threats')
-        .insert(threatsToInsert);
-
-      if (insertError) {
-        console.error('Error storing threats:', insertError);
-      }
-
-      return new Response(
-        JSON.stringify({
-          threats: threatsToInsert,
-          summary: `Detectadas ${allThreats.length} ameacas de seguranca no cluster.`,
-          ai_analysis: null,
-        }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
-    }
-
-    console.log('🤖 Calling Lovable AI for security threat analysis...');
+    console.log('🤖 Calling Google Gemini for security threat analysis...');
 
     const systemPrompt = `Voce e um especialista em seguranca de Kubernetes e deteccao de ameacas.
 
@@ -285,20 +174,20 @@ ANALISE AS AMEACAS DE SEGURANCA ABAIXO E CLASSIFIQUE:
 
 **TIPOS DE AMEACAS:**
 1. **ddos** - Ataque DDoS, muitas conexoes, alto trafego
-2. **brute_force** - Tentativas de acesso forcado, eventos de autorizacao falhos
-3. **port_scan** - Varredura de portas, portas perigosas expostas
-4. **suspicious_process** - Processos suspeitos, imagens maliciosas
-5. **crypto_mining** - Mineracao de criptomoedas, uso alto de CPU com pouca memoria
-6. **privilege_escalation** - Escalacao de privilegios, containers privilegiados, capabilities perigosas
-7. **data_exfiltration** - Exfiltracao de dados, trafego de saida suspeito
-8. **shell_injection** - Injecao de shell, reverse shell, backdoor
-9. **unauthorized_access** - Acesso nao autorizado, host network, host PID
+2. **brute_force** - Tentativas de acesso forcado
+3. **port_scan** - Varredura de portas
+4. **suspicious_process** - Processos suspeitos
+5. **crypto_mining** - Mineracao de criptomoedas
+6. **privilege_escalation** - Escalacao de privilegios
+7. **data_exfiltration** - Exfiltracao de dados
+8. **shell_injection** - Injecao de shell, backdoor
+9. **unauthorized_access** - Acesso nao autorizado
 
 **SEVERIDADE:**
-- critical: Ameaca ativa, risco imediato de comprometimento
-- high: Ameaca seria, requer atencao imediata
-- medium: Potencial ameaca, deve ser investigada
-- low: Risco baixo, mas deve ser monitorado
+- critical: Ameaca ativa, risco imediato
+- high: Ameaca seria, atencao imediata
+- medium: Potencial ameaca, investigar
+- low: Risco baixo, monitorar
 
 Retorne JSON (sem markdown):
 {
@@ -307,64 +196,38 @@ Retorne JSON (sem markdown):
       "threat_type": "tipo da ameaca",
       "severity": "critical|high|medium|low",
       "title": "Titulo curto em portugues",
-      "description": "Descricao detalhada em portugues da ameaca",
-      "container_name": "nome do container se aplicavel",
+      "description": "Descricao detalhada em portugues",
+      "container_name": "nome do container",
       "pod_name": "nome do pod",
       "namespace": "namespace",
       "node_name": "nome do node",
-      "suspicious_command": "comando suspeito se houver",
+      "suspicious_command": "comando suspeito",
       "ai_analysis": {
         "threat_score": 0.0-1.0,
         "confidence": 0.0-1.0,
         "indicators": ["indicador1", "indicador2"],
-        "recommendation": "Recomendacao em portugues de como mitigar",
-        "mitigation_steps": ["passo1", "passo2", "passo3"]
+        "recommendation": "Recomendacao em portugues",
+        "mitigation_steps": ["passo1", "passo2"]
       },
       "evidence": {
-        "source": "origem da deteccao",
+        "source": "origem",
         "raw_reason": "motivo original"
       }
     }
   ],
-  "summary": "Resumo em portugues das ameacas encontradas com contagem por severidade",
+  "summary": "Resumo em portugues",
   "overall_risk_level": "critical|high|medium|low",
   "immediate_actions": ["acao1", "acao2"]
 }`;
 
-    const aiData = await retryWithBackoff(async () => {
-      const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: `Analise estas ameacas de seguranca do Kubernetes:\n\n${JSON.stringify(allThreats.slice(0, 100), null, 2)}` }
-          ],
-        }),
-      });
+    const geminiMessages = [
+      { role: "system" as const, content: systemPrompt },
+      { role: "user" as const, content: `Analise estas ameacas de seguranca do Kubernetes:\n\n${JSON.stringify(allThreats.slice(0, 100), null, 2)}` }
+    ];
 
-      if (!aiResponse.ok) {
-        const errorText = await aiResponse.text();
-        console.error('Lovable AI error:', aiResponse.status, errorText);
+    const aiResult = await callGemini(geminiMessages, user.id, "analyze-security-threats");
 
-        if (aiResponse.status === 429) {
-          throw new Error('Rate limit exceeded. Please try again later.');
-        }
-        if (aiResponse.status === 402) {
-          throw new Error('Payment required. Please add funds to your Lovable AI workspace.');
-        }
-
-        throw new Error(`Lovable AI returned ${aiResponse.status}: ${errorText}`);
-      }
-
-      return await aiResponse.json();
-    }, 3, 2000);
-
-    let aiContent = aiData.choices[0]?.message?.content || '{"threats":[]}';
+    let aiContent = aiResult.content;
 
     // Remove markdown code fences if present
     aiContent = aiContent.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
@@ -379,7 +242,9 @@ Retorne JSON (sem markdown):
 
     const threats = analysisResult.threats || [];
 
-    // Store threats in database (check for duplicates first)
+    console.log(`🤖 AI found ${threats.length} threats (tokens: ${aiResult.inputTokens}/${aiResult.outputTokens}, free tier: ${aiResult.isFreeTier})`);
+
+    // Store threats in database
     if (threats.length > 0) {
       // Get existing active threats to avoid duplicates
       const { data: existingThreats } = await supabaseClient
@@ -387,7 +252,7 @@ Retorne JSON (sem markdown):
         .select('pod_name, namespace, threat_type')
         .eq('cluster_id', cluster_id)
         .eq('status', 'active')
-        .gte('created_at', new Date(Date.now() - 30 * 60 * 1000).toISOString()); // Last 30 minutes
+        .gte('created_at', new Date(Date.now() - 30 * 60 * 1000).toISOString());
 
       const existingThreatKeys = new Set(
         (existingThreats || []).map((t: any) => `${t.pod_name}-${t.namespace}-${t.threat_type}`)
@@ -427,7 +292,7 @@ Retorne JSON (sem markdown):
           console.error('Error storing threats:', insertError);
         }
 
-        // Create critical/high severity notifications only for NEW threats and not in silent mode
+        // Create notifications for critical/high severity threats
         if (!silent) {
           const criticalHighThreats = newThreats.filter((t: any) =>
             t.severity === 'critical' || t.severity === 'high'
@@ -441,7 +306,7 @@ Retorne JSON (sem markdown):
                 title: criticalHighThreats.some((t: any) => t.severity === 'critical')
                   ? '🚨 ALERTA CRITICO DE SEGURANCA'
                   : '⚠️ Alerta de Seguranca',
-                message: `Detectadas ${criticalHighThreats.length} nova(s) ameaca(s) de alta severidade no cluster. Verifique imediatamente!`,
+                message: `Detectadas ${criticalHighThreats.length} nova(s) ameaca(s) de alta severidade no cluster.`,
                 type: 'error',
                 related_entity_type: 'security_threat',
                 related_entity_id: cluster_id,
@@ -449,7 +314,7 @@ Retorne JSON (sem markdown):
           }
         }
 
-        console.log(`✅ Security analysis complete: ${newThreats.length} NEW threats detected (${threats.length - newThreats.length} duplicates skipped)`);
+        console.log(`✅ Security analysis complete: ${newThreats.length} NEW threats detected`);
       } else {
         console.log(`✅ Security analysis complete: No new threats (${threats.length} duplicates skipped)`);
       }
@@ -463,6 +328,12 @@ Retorne JSON (sem markdown):
         summary: analysisResult.summary || `Detectadas ${threats.length} ameacas de seguranca`,
         overall_risk_level: analysisResult.overall_risk_level || 'medium',
         immediate_actions: analysisResult.immediate_actions || [],
+        ai_usage: {
+          input_tokens: aiResult.inputTokens,
+          output_tokens: aiResult.outputTokens,
+          is_free_tier: aiResult.isFreeTier,
+          estimated_cost: aiResult.estimatedCost
+        }
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
