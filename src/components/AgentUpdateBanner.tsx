@@ -62,51 +62,51 @@ export function AgentUpdateBanner() {
   if (!updateInfo?.update_available || dismissed) return null;
 
   return (
-    <Alert className="mb-4 border-blue-500/50 bg-blue-500/10 relative">
-      <ArrowUpCircle className="h-4 w-4 text-blue-500" />
-      <AlertTitle className="text-blue-400 flex items-center gap-2">
-        Atualização do Agente Disponível
-        <span className="text-xs font-mono bg-blue-500/20 px-2 py-0.5 rounded">
+    <Alert className="mb-4 border-blue-500/50 bg-blue-500/10 relative pr-10">
+      <ArrowUpCircle className="h-4 w-4 text-blue-500 hidden sm:block" />
+      <AlertTitle className="text-blue-400 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-sm sm:text-base">
+        <span className="flex items-center gap-2">
+          <ArrowUpCircle className="h-4 w-4 text-blue-500 sm:hidden" />
+          Atualização Disponível
+        </span>
+        <span className="text-xs font-mono bg-blue-500/20 px-2 py-0.5 rounded w-fit">
           {updateInfo.current_version} → {updateInfo.latest_version}
         </span>
       </AlertTitle>
       <AlertDescription className="mt-2 space-y-3">
-        <p className="text-sm text-muted-foreground">
-          Uma nova versão do agente Kodo está disponível. Atualize para obter as últimas melhorias e correções.
+        <p className="text-xs sm:text-sm text-muted-foreground">
+          Uma nova versão do agente Kodo está disponível.
         </p>
         
         {showCommand ? (
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Terminal className="h-3 w-3" />
-              Execute o comando abaixo no seu cluster:
+              <Terminal className="h-3 w-3 flex-shrink-0" />
+              <span>Execute no seu cluster:</span>
             </div>
             <div className="relative bg-muted/50 rounded-md">
-              <pre className="text-xs p-3 font-mono overflow-x-auto pr-12">
+              <pre className="text-[10px] sm:text-xs p-2 sm:p-3 font-mono overflow-x-auto pr-10 whitespace-pre-wrap break-all sm:whitespace-pre sm:break-normal">
                 {updateCommand}
               </pre>
               <Button
                 variant="ghost"
                 size="icon"
-                className="absolute top-1 right-1 h-7 w-7 hover:bg-blue-500/20"
+                className="absolute top-1 right-1 h-6 w-6 sm:h-7 sm:w-7 hover:bg-blue-500/20"
                 onClick={copyCommand}
               >
                 <Copy className="h-3 w-3" />
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Isso irá reiniciar o deployment do agente e baixar a imagem mais recente automaticamente.
-            </p>
           </div>
         ) : (
           <Button
             variant="outline"
             size="sm"
-            className="border-blue-500/50 hover:bg-blue-500/20"
+            className="border-blue-500/50 hover:bg-blue-500/20 text-xs sm:text-sm h-8 sm:h-9"
             onClick={() => setShowCommand(true)}
           >
             <Terminal className="h-3 w-3 mr-2" />
-            Ver Comando de Atualização
+            Ver Comando
           </Button>
         )}
       </AlertDescription>
