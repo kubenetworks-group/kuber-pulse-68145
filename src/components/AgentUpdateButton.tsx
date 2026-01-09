@@ -186,7 +186,7 @@ export function AgentUpdateButton() {
       </TooltipProvider>
 
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="w-[min(92vw,32rem)] max-h-[85vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <ArrowUpCircle className="h-5 w-5 text-blue-500" />
@@ -246,13 +246,13 @@ export function AgentUpdateButton() {
                   Você também pode atualizar manualmente executando o seguinte comando no seu cluster:
                 </p>
                 <div className="relative">
-                  <pre className="text-xs bg-muted/50 p-3 rounded-md font-mono overflow-x-auto">
+                  <pre className="text-[10px] sm:text-xs bg-muted/50 p-2 sm:p-3 rounded-md font-mono overflow-x-auto pr-10 whitespace-pre-wrap break-all sm:whitespace-pre sm:break-normal">
                     kubectl set image deployment/kodo-agent agent=ghcr.io/kubenetworks-group/kodo-agent:latest -n kodo
                   </pre>
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="absolute top-1 right-1 h-7 w-7"
+                    className="absolute top-1 right-1 h-6 w-6 sm:h-7 sm:w-7"
                     onClick={() => {
                       navigator.clipboard.writeText(
                         'kubectl set image deployment/kodo-agent agent=ghcr.io/kubenetworks-group/kodo-agent:latest -n kodo'
