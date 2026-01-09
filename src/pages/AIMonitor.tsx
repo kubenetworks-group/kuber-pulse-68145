@@ -9,6 +9,7 @@ import { CronJobsStatus } from "@/components/CronJobsStatus";
 import { ScanHistoryTab } from "@/components/ScanHistoryTab";
 import { SecurityThreatCard } from "@/components/SecurityThreatCard";
 import { ContainerTerminalAlert } from "@/components/ContainerTerminalAlert";
+import { AgentUpdateBanner } from "@/components/AgentUpdateBanner";
 import { useSecurityThreats } from "@/hooks/useSecurityThreats";
 import { Bot, Activity, CheckCircle, Sparkles, Shield, Zap, AlertCircle, History, ShieldAlert, Settings } from "lucide-react";
 import { AutoHealConfig } from "@/components/AutoHealConfig";
@@ -385,6 +386,9 @@ export default function AIMonitor() {
   return (
     <DashboardLayout>
       <div className="p-4 sm:p-6 lg:p-8 space-y-6">
+        {/* Agent Update Banner */}
+        <AgentUpdateBanner />
+
         {/* Header */}
         <div>
           <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-2 bg-gradient-primary bg-clip-text text-transparent">

@@ -16,8 +16,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ArrowUpCircle, CheckCircle, AlertTriangle, Loader2 } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { ArrowUpCircle, CheckCircle, AlertTriangle, Loader2, Copy, Terminal } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCluster } from "@/contexts/ClusterContext";
 import { toast } from "sonner";
@@ -233,6 +233,41 @@ export function AgentUpdateButton() {
                 </CardContent>
               </Card>
             )}
+
+            <Card className="border-blue-500/30 bg-blue-500/5">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Terminal className="h-4 w-4" />
+                  Comando de Atualização Manual
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  Você também pode atualizar manualmente executando o seguinte comando no seu cluster:
+                </p>
+                <div className="relative">
+                  <pre className="text-xs bg-muted/50 p-3 rounded-md font-mono overflow-x-auto">
+                    kubectl set image deployment/kodo-agent agent=ghcr.io/kubenetworks-group/kodo-agent:latest -n kodo
+                  </pre>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute top-1 right-1 h-7 w-7"
+                    onClick={() => {
+                      navigator.clipboard.writeText(
+                        'kubectl set image deployment/kodo-agent agent=ghcr.io/kubenetworks-group/kodo-agent:latest -n kodo'
+                      );
+                      toast.success('Comando copiado!');
+                    }}
+                  >
+                    <Copy className="h-3 w-3" />
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Isso irá reiniciar o deployment e baixar a imagem mais recente.
+                </p>
+              </CardContent>
+            </Card>
 
             <Alert>
               <AlertTriangle className="h-4 w-4" />
