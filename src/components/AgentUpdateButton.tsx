@@ -186,7 +186,7 @@ export function AgentUpdateButton() {
       </TooltipProvider>
 
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="w-[min(92vw,32rem)] max-h-[85vh] overflow-y-auto p-4 sm:p-6">
+        <DialogContent className="w-[min(95vw,42rem)] max-h-[85vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <ArrowUpCircle className="h-5 w-5 text-blue-500" />
