@@ -49,26 +49,34 @@ export const useClusterAnalysis = (clusterId: string | null) => {
 
       try {
         // Fetch nodes metrics
-        const { data: nodesMetric } = await supabase
+        const { data: nodesMetric, error: nodesError } = await supabase
           .from("agent_metrics")
           .select("metric_data")
           .eq("cluster_id", clusterId)
           .eq("metric_type", "nodes")
           .order("collected_at", { ascending: false })
           .limit(1)
-          .single();
+          .maybeSingle();
+
+        if (nodesError) {
+          console.error("Error fetching nodes metric:", nodesError);
+        }
 
         setProgress(30);
 
         // Fetch pods metrics
-        const { data: podsMetric } = await supabase
+        const { data: podsMetric, error: podsError } = await supabase
           .from("agent_metrics")
           .select("metric_data")
           .eq("cluster_id", clusterId)
           .eq("metric_type", "pods")
           .order("collected_at", { ascending: false })
           .limit(1)
-          .single();
+          .maybeSingle();
+
+        if (podsError) {
+          console.error("Error fetching pods metric:", podsError);
+        }
 
         setProgress(50);
 
@@ -98,9 +106,17 @@ export const useClusterAnalysis = (clusterId: string | null) => {
 
         if (nodesData?.nodes && Array.isArray(nodesData.nodes)) {
           nodesData.nodes.forEach((node: any) => {
-            const cpuCapacity = parseInt(node.capacity?.cpu || "0");
-            const memoryStr = node.capacity?.memory || "0";
-            const memoryBytes = parseMemory(memoryStr);
+            // Handle cpu as number (millicores) or string
+            const cpuRaw = node.capacity?.cpu;
+            const cpuCapacity = typeof cpuRaw === 'number' 
+              ? Math.round(cpuRaw / 1000) // Convert millicores to cores
+              : parseInt(String(cpuRaw) || "0");
+            
+            // Handle memory as number (bytes) or string with suffix
+            const memoryRaw = node.capacity?.memory;
+            const memoryBytes = typeof memoryRaw === 'number'
+              ? memoryRaw
+              : parseMemory(String(memoryRaw) || "0");
 
             totalCpu += cpuCapacity;
             totalMemoryBytes += memoryBytes;
@@ -116,8 +132,8 @@ export const useClusterAnalysis = (clusterId: string | null) => {
 
             nodes.push({
               name: node.name || "Unknown",
-              os: node.nodeInfo?.osImage || "Unknown",
-              kernel: node.nodeInfo?.kernelVersion || "Unknown",
+              os: node.osImage || node.nodeInfo?.osImage || "Unknown",
+              kernel: node.kernelVersion || node.nodeInfo?.kernelVersion || "Unknown",
               cpuCapacity,
               memoryCapacity: Math.round(memoryBytes / (1024 * 1024 * 1024)),
               pool: node.labels?.["node.kubernetes.io/instance-type"] || 
@@ -127,7 +143,9 @@ export const useClusterAnalysis = (clusterId: string | null) => {
           });
         }
 
-        // Process pods data
+        // Process pods data - handle both formats:
+        // Format 1 (simple): { running: 101, total: 106 }
+        // Format 2 (detailed): { pods: [...] }
         const podsData = podsMetric?.metric_data as any;
         let totalPods = 0;
         let runningPods = 0;
@@ -135,17 +153,48 @@ export const useClusterAnalysis = (clusterId: string | null) => {
         let failedPods = 0;
         const namespaceMap: Record<string, number> = {};
 
-        if (podsData?.pods && Array.isArray(podsData.pods)) {
-          podsData.pods.forEach((pod: any) => {
-            totalPods++;
-            const phase = pod.status?.phase?.toLowerCase();
-            if (phase === "running") runningPods++;
-            else if (phase === "pending") pendingPods++;
-            else if (phase === "failed") failedPods++;
+        if (podsData) {
+          if (podsData.total !== undefined && podsData.running !== undefined) {
+            // Simple format from agent
+            totalPods = podsData.total || 0;
+            runningPods = podsData.running || 0;
+            pendingPods = podsData.pending || 0;
+            failedPods = podsData.failed || (totalPods - runningPods - pendingPods);
+          } else if (podsData.pods && Array.isArray(podsData.pods)) {
+            // Detailed format with pod array
+            podsData.pods.forEach((pod: any) => {
+              totalPods++;
+              const phase = (pod.status?.phase || pod.phase || "").toLowerCase();
+              if (phase === "running") runningPods++;
+              else if (phase === "pending") pendingPods++;
+              else if (phase === "failed") failedPods++;
 
-            const ns = pod.namespace || "default";
-            namespaceMap[ns] = (namespaceMap[ns] || 0) + 1;
-          });
+              const ns = pod.namespace || "default";
+              namespaceMap[ns] = (namespaceMap[ns] || 0) + 1;
+            });
+          }
+        }
+
+        // If no namespace data, try to get from pod_details metric
+        if (Object.keys(namespaceMap).length === 0) {
+          const { data: podDetailsMetric } = await supabase
+            .from("agent_metrics")
+            .select("metric_data")
+            .eq("cluster_id", clusterId)
+            .eq("metric_type", "pod_details")
+            .order("collected_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (podDetailsMetric?.metric_data) {
+            const podDetailsData = podDetailsMetric.metric_data as any;
+            if (podDetailsData.pods && Array.isArray(podDetailsData.pods)) {
+              podDetailsData.pods.forEach((pod: any) => {
+                const ns = pod.namespace || "default";
+                namespaceMap[ns] = (namespaceMap[ns] || 0) + 1;
+              });
+            }
+          }
         }
 
         const namespaces: NamespaceInfo[] = Object.entries(namespaceMap)
