@@ -630,7 +630,7 @@ const Clusters = () => {
         ) : (
           <div className="space-y-6">
             <ClusterDeletionProgress deletingClusters={deletingClusters} />
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
               {clusters.map((cluster) => (
                 <div key={cluster.id} className="relative group">
                   <div onClick={() => setSelectedClusterId(cluster.id)} className="cursor-pointer">
@@ -647,10 +647,11 @@ const Clusters = () => {
                       onRefresh={() => handleRefreshConnection(cluster)}
                     />
                   </div>
-                  <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="absolute top-2 right-2 flex gap-1 sm:gap-2 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
                     <Button
                       variant="secondary"
                       size="icon"
+                      className="h-8 w-8 sm:h-9 sm:w-9"
                       disabled={refreshingCluster === cluster.id || cluster.status === 'connecting'}
                       onClick={(e) => {
                         e.stopPropagation();
@@ -658,22 +659,24 @@ const Clusters = () => {
                       }}
                       title="Refresh connection"
                     >
-                      <RefreshCw className={`w-4 h-4 ${refreshingCluster === cluster.id || cluster.status === 'connecting' ? 'animate-spin' : ''}`} />
+                      <RefreshCw className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${refreshingCluster === cluster.id || cluster.status === 'connecting' ? 'animate-spin' : ''}`} />
                     </Button>
                     <Button
                       variant="secondary"
                       size="icon"
+                      className="h-8 w-8 sm:h-9 sm:w-9"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleEditCluster(cluster);
                       }}
                       title="Edit configuration"
                     >
-                      <Edit className="w-4 h-4" />
+                      <Edit className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                     </Button>
                     <Button
                       variant="destructive"
                       size="icon"
+                      className="h-8 w-8 sm:h-9 sm:w-9"
                       onClick={(e) => {
                         e.stopPropagation();
                         setClusterToDelete(cluster.id);
@@ -683,7 +686,7 @@ const Clusters = () => {
                       }}
                       title="Delete cluster"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                     </Button>
                   </div>
                 </div>
