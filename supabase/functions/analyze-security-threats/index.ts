@@ -166,7 +166,7 @@ serve(async (req) => {
       );
     }
 
-    console.log('🤖 Calling Google Gemini for security threat analysis...');
+    console.log('🤖 Starting security threat analysis...');
 
     const systemPrompt = `Voce e um especialista em seguranca de Kubernetes e deteccao de ameacas.
 
@@ -225,24 +225,111 @@ Retorne JSON (sem markdown):
       { role: "user" as const, content: `Analise estas ameacas de seguranca do Kubernetes:\n\n${JSON.stringify(allThreats.slice(0, 100), null, 2)}` }
     ];
 
-    const aiResult = await callGemini(geminiMessages, user.id, "analyze-security-threats");
+    let aiResult: { content: string; inputTokens: number; outputTokens: number; isFreeTier: boolean; estimatedCost: number } | null = null;
+    let usedFallback = false;
 
-    let aiContent = aiResult.content;
-
-    // Remove markdown code fences if present
-    aiContent = aiContent.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-
-    let analysisResult;
+    // Try Gemini first
     try {
-      analysisResult = JSON.parse(aiContent);
-    } catch (e) {
-      console.error('Failed to parse AI response:', aiContent);
-      analysisResult = { threats: [], summary: 'Erro ao processar analise de IA' };
+      aiResult = await callGemini(geminiMessages, user.id, "analyze-security-threats");
+    } catch (geminiError: any) {
+      console.log('Gemini failed:', geminiError.message);
+      
+      // Try Lovable AI Gateway as fallback
+      const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+      if (LOVABLE_API_KEY) {
+        try {
+          const lovableResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: "google/gemini-2.5-flash",
+              messages: geminiMessages.map(m => ({ role: m.role, content: m.content })),
+            }),
+          });
+          
+          if (lovableResponse.ok) {
+            const lovableData = await lovableResponse.json();
+            aiResult = {
+              content: lovableData.choices?.[0]?.message?.content || "",
+              inputTokens: lovableData.usage?.prompt_tokens || 0,
+              outputTokens: lovableData.usage?.completion_tokens || 0,
+              isFreeTier: true,
+              estimatedCost: 0,
+            };
+            console.log('🤖 Lovable AI Gateway response received');
+          } else {
+            console.log('Lovable AI Gateway failed:', lovableResponse.status);
+          }
+        } catch (lovableError) {
+          console.log('Lovable AI Gateway error:', lovableError);
+        }
+      }
+    }
+
+    let analysisResult: any;
+
+    // Parse AI response if available
+    if (aiResult && aiResult.content) {
+      let aiContent = aiResult.content;
+      aiContent = aiContent.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+
+      try {
+        analysisResult = JSON.parse(aiContent);
+        console.log(`🤖 AI analysis parsed (tokens: ${aiResult.inputTokens}/${aiResult.outputTokens})`);
+      } catch (e) {
+        console.error('Failed to parse AI response:', aiContent);
+        analysisResult = null;
+      }
+    }
+
+    // Use deterministic fallback if AI failed
+    if (!analysisResult) {
+      usedFallback = true;
+      console.log('🔧 Using deterministic analysis (AI unavailable or rate limited)');
+      
+      const deterministicThreats = allThreats.slice(0, 20).map((threat: any) => {
+        const threatType = getThreatType(threat.reason || threat.source || '');
+        const severity = determineSeverity(threat.threat_level || 'medium', threatType);
+        
+        return {
+          threat_type: threatType,
+          severity,
+          title: `${threatType.replace('_', ' ').toUpperCase()} detectado`,
+          description: threat.reason || `Ameaça detectada em ${threat.pod_name || threat.container_name || 'recurso desconhecido'}`,
+          container_name: threat.container_name || null,
+          pod_name: threat.pod_name || null,
+          namespace: threat.namespace || 'default',
+          node_name: threat.node_name || null,
+          suspicious_command: threat.command || null,
+          ai_analysis: {
+            threat_score: severity === 'critical' ? 0.95 : severity === 'high' ? 0.75 : severity === 'medium' ? 0.5 : 0.25,
+            confidence: 0.7,
+            indicators: [threat.source || 'metric-based detection'],
+            recommendation: `Investigar ${threatType} no recurso afetado`,
+            mitigation_steps: ['Isolar recurso suspeito', 'Analisar logs', 'Aplicar políticas de segurança']
+          },
+          evidence: {
+            source: threat.source,
+            raw_reason: threat.reason || 'Detectado via métricas'
+          }
+        };
+      });
+
+      analysisResult = {
+        threats: deterministicThreats,
+        summary: `Análise baseada em métricas: ${deterministicThreats.length} ameaça(s) detectada(s). (Serviço de IA temporariamente indisponível)`,
+        overall_risk_level: deterministicThreats.some((t: any) => t.severity === 'critical') ? 'critical' :
+                           deterministicThreats.some((t: any) => t.severity === 'high') ? 'high' : 'medium',
+        immediate_actions: ['Revisar ameaças detectadas', 'Verificar pods suspeitos', 'Monitorar recursos']
+      };
     }
 
     const threats = analysisResult.threats || [];
 
-    console.log(`🤖 AI found ${threats.length} threats (tokens: ${aiResult.inputTokens}/${aiResult.outputTokens}, free tier: ${aiResult.isFreeTier})`);
+    console.log(`🤖 Analysis found ${threats.length} threats${usedFallback ? ' (deterministic fallback)' : ` (tokens: ${aiResult?.inputTokens || 0}/${aiResult?.outputTokens || 0})`}`);
 
     // Store threats in database
     if (threats.length > 0) {
@@ -328,11 +415,17 @@ Retorne JSON (sem markdown):
         summary: analysisResult.summary || `Detectadas ${threats.length} ameacas de seguranca`,
         overall_risk_level: analysisResult.overall_risk_level || 'medium',
         immediate_actions: analysisResult.immediate_actions || [],
-        ai_usage: {
+        ai_usage: aiResult ? {
           input_tokens: aiResult.inputTokens,
           output_tokens: aiResult.outputTokens,
           is_free_tier: aiResult.isFreeTier,
           estimated_cost: aiResult.estimatedCost
+        } : {
+          input_tokens: 0,
+          output_tokens: 0,
+          is_free_tier: true,
+          estimated_cost: 0,
+          fallback_used: true
         }
       }),
       {
