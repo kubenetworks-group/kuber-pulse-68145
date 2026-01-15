@@ -208,6 +208,33 @@ export type Database = {
           },
         ]
       }
+      agent_versions: {
+        Row: {
+          created_at: string
+          id: string
+          is_latest: boolean | null
+          is_required: boolean | null
+          release_notes: string | null
+          version: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_latest?: boolean | null
+          is_required?: boolean | null
+          release_notes?: string | null
+          version: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_latest?: boolean | null
+          is_required?: boolean | null
+          release_notes?: string | null
+          version?: string
+        }
+        Relationships: []
+      }
       ai_cost_savings: {
         Row: {
           calculation_details: Json | null
@@ -670,6 +697,10 @@ export type Database = {
       }
       clusters: {
         Row: {
+          agent_last_seen_at: string | null
+          agent_update_available: boolean | null
+          agent_update_message: string | null
+          agent_version: string | null
           api_endpoint: string
           cluster_type: string
           config_file: string | null
@@ -698,6 +729,10 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          agent_last_seen_at?: string | null
+          agent_update_available?: boolean | null
+          agent_update_message?: string | null
+          agent_version?: string | null
           api_endpoint: string
           cluster_type: string
           config_file?: string | null
@@ -726,6 +761,10 @@ export type Database = {
           user_id: string
         }
         Update: {
+          agent_last_seen_at?: string | null
+          agent_update_available?: boolean | null
+          agent_update_message?: string | null
+          agent_version?: string | null
           api_endpoint?: string
           cluster_type?: string
           config_file?: string | null
