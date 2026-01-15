@@ -77,6 +77,22 @@ serve(async (req) => {
     const severityOrder = ['low', 'medium', 'high', 'critical'];
     const thresholdIndex = severityOrder.indexOf(settings?.severity_threshold || 'high');
 
+    // System namespaces that should be skipped (infrastructure components, CNI, etc.)
+    // Define early so it can be used in both anomalies and pod issues sections
+    const systemNamespaces = [
+      'kube-system', 'kube-public', 'kube-node-lease',
+      'calico-system', 'calico-apiserver', 'tigera-operator',
+      'cilium', 'cilium-system',
+      'istio-system', 'istio-operator',
+      'linkerd', 'linkerd-viz',
+      'metallb-system', 'ingress-nginx', 'cert-manager',
+      'monitoring', 'prometheus', 'grafana',
+      'flux-system', 'argocd', 'argo',
+      'velero', 'external-secrets', 'sealed-secrets',
+      'gatekeeper-system', 'kyverno',
+      'kodo-agent', 'local-path-storage', 'default',
+    ];
+
     // 1. Check and fix anomalies
     if (settings?.auto_apply_anomalies || force) {
       const { data: anomalies } = await supabase
@@ -92,6 +108,34 @@ serve(async (req) => {
         
         // Skip if below threshold
         if (anomalySeverityIndex < thresholdIndex && !force) continue;
+
+        // Extract namespace early to check if it's a system namespace
+        const autoHealParams = anomaly.ai_analysis?.auto_heal_params || {};
+        const affectedPods = anomaly.ai_analysis?.affected_pods || [];
+        let namespace = autoHealParams.namespace || 'default';
+
+        // Try to get namespace from affected_pods if not in params
+        if (affectedPods.length > 0) {
+          const firstPod = affectedPods[0];
+          if (typeof firstPod === 'string' && firstPod.includes('/')) {
+            namespace = firstPod.split('/')[0];
+          }
+        }
+
+        // Skip system namespaces to avoid breaking infrastructure
+        if (systemNamespaces.includes(namespace)) {
+          console.log(`Skipping anomaly ${anomaly.id} - system namespace: ${namespace}`);
+          // Mark as resolved with note
+          await supabase
+            .from('agent_anomalies')
+            .update({
+              resolved: true,
+              resolved_at: new Date().toISOString(),
+              recommendation: `Skipped auto-heal: ${namespace} is a protected system namespace`,
+            })
+            .eq('id', anomaly.id);
+          continue;
+        }
 
         // Log the action
         const { data: actionLog } = await supabase
@@ -332,20 +376,6 @@ serve(async (req) => {
       .single();
 
     const podDetails = latestMetrics?.metric_data?.pods || [];
-
-    // System namespaces that should be skipped (infrastructure components, CNI, etc.)
-    const systemNamespaces = [
-      'kube-system', 'kube-public', 'kube-node-lease',
-      'calico-system', 'calico-apiserver', 'tigera-operator',
-      'cilium', 'cilium-system',
-      'istio-system', 'istio-operator',
-      'linkerd', 'linkerd-viz',
-      'metallb-system', 'ingress-nginx', 'cert-manager',
-      'monitoring', 'prometheus', 'grafana',
-      'flux-system', 'argocd', 'argo',
-      'velero', 'external-secrets', 'sealed-secrets',
-      'gatekeeper-system', 'kyverno',
-    ];
 
     // 3. Check and fix pods with issues (controlled by auto_apply_anomalies)
     // This includes: CrashLoopBackOff, ImagePullBackOff, high restarts, stuck pods
