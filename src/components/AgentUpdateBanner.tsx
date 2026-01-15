@@ -29,24 +29,52 @@ export function AgentUpdateBanner() {
     if (!selectedClusterId) return;
 
     try {
-      const { data: apiKey } = await supabase
-        .from('agent_api_keys')
-        .select('api_key')
-        .eq('cluster_id', selectedClusterId)
-        .eq('is_active', true)
+      // Get cluster's current agent version
+      const { data: clusterData, error: clusterError } = await supabase
+        .from('clusters')
+        .select('agent_version, agent_update_available, agent_update_message')
+        .eq('id', selectedClusterId)
         .single();
 
-      if (!apiKey) return;
+      if (clusterError || !clusterData) {
+        console.log('Could not get cluster agent version');
+        return;
+      }
 
-      const { data, error } = await supabase.functions.invoke('agent-check-update', {
-        headers: {
-          'x-agent-key': apiKey.api_key,
-          'x-agent-version': 'v0.0.1',
-        }
+      // Get latest available version
+      const { data: latestVersion } = await supabase
+        .from('agent_versions')
+        .select('version, release_notes')
+        .eq('is_latest', true)
+        .single();
+
+      if (!latestVersion) {
+        console.log('No latest version found');
+        return;
+      }
+
+      const currentVersion = clusterData.agent_version || 'unknown';
+      
+      // Compare versions
+      const compareVersions = (v1: string, v2: string): number => {
+        if (!v1 || !v2 || v1 === 'unknown' || v2 === 'unknown') return -1;
+        const normalize = (v: string) => v.replace(/^v/, '').split('.').map(Number);
+        const [major1, minor1, patch1] = normalize(v1);
+        const [major2, minor2, patch2] = normalize(v2);
+        if (major1 !== major2) return major1 - major2;
+        if (minor1 !== minor2) return minor1 - minor2;
+        return patch1 - patch2;
+      };
+
+      const needsUpdate = currentVersion !== 'unknown' && 
+        compareVersions(currentVersion, latestVersion.version) < 0;
+
+      setUpdateInfo({
+        current_version: currentVersion,
+        latest_version: latestVersion.version,
+        update_available: needsUpdate,
+        release_notes: needsUpdate ? latestVersion.release_notes : null
       });
-
-      if (error) throw error;
-      setUpdateInfo(data);
     } catch (error) {
       console.error('Error checking for agent updates:', error);
     }
