@@ -61,6 +61,9 @@ export const StorageChart = ({ total, allocated, used, available, pvcs }: Storag
   const totalPVCUsed = filteredPVCs.reduce((sum, pvc) => sum + (pvc.used_bytes || 0), 0) / (1024 ** 3);
   const totalPVCAllocated = filteredPVCs.reduce((sum, pvc) => sum + (pvc.requested_bytes || 0), 0) / (1024 ** 3);
 
+  // Check if real usage data is available (CSI driver supports metrics)
+  const hasRealUsageData = filteredPVCs.some(pvc => pvc.used_bytes > 0);
+
   // Data for the pie chart showing actual usage vs available
   const data = [
     { 
@@ -114,27 +117,31 @@ export const StorageChart = ({ total, allocated, used, available, pvcs }: Storag
     doc.setFontSize(10);
     doc.text(`Total de PVCs: ${filteredPVCs.length}`, 14, 56);
     doc.text(`Alocado Total: ${totalPVCAllocated.toFixed(2)} GB`, 14, 62);
-    doc.text(`Uso Real Total: ${totalPVCUsed.toFixed(2)} GB`, 14, 68);
-    doc.text(`Desperdício: ${Math.max(0, totalPVCAllocated - totalPVCUsed).toFixed(2)} GB`, 14, 74);
-    doc.text(`Eficiência: ${totalPVCAllocated > 0 ? ((totalPVCUsed / totalPVCAllocated) * 100).toFixed(1) : 0}%`, 14, 80);
+    if (hasRealUsageData) {
+      doc.text(`Uso Real Total: ${totalPVCUsed.toFixed(2)} GB`, 14, 68);
+      doc.text(`Desperdício: ${Math.max(0, totalPVCAllocated - totalPVCUsed).toFixed(2)} GB`, 14, 74);
+      doc.text(`Eficiência: ${totalPVCAllocated > 0 ? ((totalPVCUsed / totalPVCAllocated) * 100).toFixed(1) : 0}%`, 14, 80);
+    } else {
+      doc.text(`Uso Real Total: N/A (métricas não disponíveis)`, 14, 68);
+    }
     
     // Table
     const tableData = filteredPVCs
       .sort((a, b) => b.requested_bytes - a.requested_bytes)
       .map(pvc => {
         const allocatedGB = (pvc.requested_bytes / (1024 ** 3)).toFixed(2);
-        const usedGB = (pvc.used_bytes / (1024 ** 3)).toFixed(2);
-        const efficiency = pvc.requested_bytes > 0 
-          ? ((pvc.used_bytes / pvc.requested_bytes) * 100).toFixed(1) 
-          : "0";
+        const usedGB = hasRealUsageData ? (pvc.used_bytes / (1024 ** 3)).toFixed(2) : "N/A";
+        const efficiency = hasRealUsageData && pvc.requested_bytes > 0 
+          ? ((pvc.used_bytes / pvc.requested_bytes) * 100).toFixed(1) + "%"
+          : "N/A";
         return [
           pvc.name,
           pvc.namespace,
           pvc.status,
           pvc.storage_class || '-',
           `${allocatedGB} GB`,
-          `${usedGB} GB`,
-          `${efficiency}%`
+          hasRealUsageData ? `${usedGB} GB` : usedGB,
+          efficiency
         ];
       });
 
@@ -335,15 +342,27 @@ export const StorageChart = ({ total, allocated, used, available, pvcs }: Storag
                   </p>
                 )}
               </div>
-              <div className="p-3 rounded-lg bg-gradient-to-br from-success/10 to-success/5 border border-success/20 hover:border-success/40 transition-all duration-300 hover:scale-105">
-                <p className="text-[10px] sm:text-xs text-muted-foreground mb-1 truncate">{t('dashboard.actuallyUsed')}</p>
-                <p className="text-xl sm:text-2xl font-bold text-success">
-                  {totalPVCUsed.toFixed(1)} <span className="text-xs sm:text-sm">GB</span>
-                </p>
-                <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 truncate">
-                  {totalPVCAllocated > 0 ? ((totalPVCUsed / totalPVCAllocated) * 100).toFixed(1) : 0}%
-                </p>
-              </div>
+              {hasRealUsageData ? (
+                <div className="p-3 rounded-lg bg-gradient-to-br from-success/10 to-success/5 border border-success/20 hover:border-success/40 transition-all duration-300 hover:scale-105">
+                  <p className="text-[10px] sm:text-xs text-muted-foreground mb-1 truncate">{t('dashboard.actuallyUsed')}</p>
+                  <p className="text-xl sm:text-2xl font-bold text-success">
+                    {totalPVCUsed.toFixed(1)} <span className="text-xs sm:text-sm">GB</span>
+                  </p>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 truncate">
+                    {totalPVCAllocated > 0 ? ((totalPVCUsed / totalPVCAllocated) * 100).toFixed(1) : 0}%
+                  </p>
+                </div>
+              ) : (
+                <div className="p-3 rounded-lg bg-gradient-to-br from-muted/20 to-muted/10 border border-border/30 hover:border-border/50 transition-all duration-300 hover:scale-105">
+                  <p className="text-[10px] sm:text-xs text-muted-foreground mb-1 truncate">{t('dashboard.actuallyUsed')}</p>
+                  <p className="text-sm sm:text-base font-medium text-muted-foreground">
+                    N/A
+                  </p>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 truncate">
+                    Métricas não disponíveis
+                  </p>
+                </div>
+              )}
               <div className="p-3 rounded-lg bg-gradient-to-br from-accent/20 to-accent/10 border border-border/30 hover:border-border/50 transition-all duration-300 hover:scale-105">
                 <p className="text-[10px] sm:text-xs text-muted-foreground mb-1 truncate">Total PVCs</p>
                 <p className="text-xl sm:text-2xl font-bold text-foreground flex items-center gap-2">
@@ -357,8 +376,8 @@ export const StorageChart = ({ total, allocated, used, available, pvcs }: Storag
             </div>
           </div>
 
-          {/* PVC Usage Vertical Bar Chart */}
-          {boundPVCs.length > 0 && pvcBarData.length > 0 && (
+          {/* PVC Usage Vertical Bar Chart - Only show if real usage data is available */}
+          {boundPVCs.length > 0 && pvcBarData.length > 0 && hasRealUsageData && (
             <div className="pt-4 border-t border-border/50">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
@@ -399,6 +418,20 @@ export const StorageChart = ({ total, allocated, used, available, pvcs }: Storag
                   <Bar dataKey="used" name="Real Usage" fill="hsl(var(--success))" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
+            </div>
+          )}
+
+          {/* Info message when real usage data is not available */}
+          {boundPVCs.length > 0 && !hasRealUsageData && (
+            <div className="pt-4 border-t border-border/50">
+              <Alert className="bg-muted/30 border-muted">
+                <HardDrive className="h-4 w-4" />
+                <AlertTitle className="text-sm">Métricas de uso não disponíveis</AlertTitle>
+                <AlertDescription className="text-xs text-muted-foreground">
+                  O storage provider deste cluster (CSI driver) não expõe métricas de uso de volume. 
+                  Apenas os valores alocados são exibidos.
+                </AlertDescription>
+              </Alert>
             </div>
           )}
 
@@ -452,33 +485,35 @@ export const StorageChart = ({ total, allocated, used, available, pvcs }: Storag
                           </div>
                         </div>
                         
-                        {/* Usage Progress Bar */}
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between text-[10px] sm:text-xs">
-                            <span className="text-muted-foreground">Real Usage</span>
-                            <span className={`font-medium ${getUsageColor(usagePercent)}`}>
-                              {usedGB.toFixed(2)} GB / {allocatedGB.toFixed(2)} GB ({usagePercent.toFixed(0)}%)
-                            </span>
+                        {/* Usage Progress Bar - Only show if real usage data is available */}
+                        {hasRealUsageData && (
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between text-[10px] sm:text-xs">
+                              <span className="text-muted-foreground">Real Usage</span>
+                              <span className={`font-medium ${getUsageColor(usagePercent)}`}>
+                                {usedGB.toFixed(2)} GB / {allocatedGB.toFixed(2)} GB ({usagePercent.toFixed(0)}%)
+                              </span>
+                            </div>
+                            <div className="relative h-2 bg-muted/50 rounded-full overflow-hidden">
+                              <div 
+                                className={`absolute left-0 top-0 h-full rounded-full transition-all duration-500 ${getProgressColor(usagePercent)}`}
+                                style={{ width: `${Math.min(usagePercent, 100)}%` }}
+                              />
+                            </div>
+                            {usagePercent < 20 && usedGB > 0 && (
+                              <p className="text-[10px] text-warning flex items-center gap-1">
+                                <AlertTriangle className="w-3 h-3" />
+                                Low usage - consider resizing
+                              </p>
+                            )}
+                            {usagePercent >= 90 && (
+                              <p className="text-[10px] text-destructive flex items-center gap-1">
+                                <AlertTriangle className="w-3 h-3" />
+                                Near capacity - consider expanding
+                              </p>
+                            )}
                           </div>
-                          <div className="relative h-2 bg-muted/50 rounded-full overflow-hidden">
-                            <div 
-                              className={`absolute left-0 top-0 h-full rounded-full transition-all duration-500 ${getProgressColor(usagePercent)}`}
-                              style={{ width: `${Math.min(usagePercent, 100)}%` }}
-                            />
-                          </div>
-                          {usagePercent < 20 && usedGB > 0 && (
-                            <p className="text-[10px] text-warning flex items-center gap-1">
-                              <AlertTriangle className="w-3 h-3" />
-                              Low usage - consider resizing
-                            </p>
-                          )}
-                          {usagePercent >= 90 && (
-                            <p className="text-[10px] text-destructive flex items-center gap-1">
-                              <AlertTriangle className="w-3 h-3" />
-                              Near capacity - consider expanding
-                            </p>
-                          )}
-                        </div>
+                        )}
                       </div>
                     );
                   })
