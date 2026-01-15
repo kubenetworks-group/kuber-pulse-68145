@@ -243,13 +243,29 @@ export async function callGemini(
     const error = await response.text();
     console.error("Gemini API error:", response.status, error);
     
+    // Handle specific error codes with clear messages
+    if (response.status === 429) {
+      throw new Error("Limite de requisições da IA excedido. Por favor, aguarde alguns minutos e tente novamente.");
+    }
+    
+    if (response.status === 403) {
+      throw new Error("Acesso à API de IA negado. Verifique a configuração da chave de API.");
+    }
+    
+    if (response.status === 503 || response.status === 500) {
+      throw new Error("Serviço de IA temporariamente indisponível. Tente novamente em alguns instantes.");
+    }
+    
     // Parse error for better messages
     try {
       const errorData = JSON.parse(error);
       const errorMessage = errorData.error?.message || error;
-      throw new Error(`Gemini API error (${response.status}): ${errorMessage}`);
-    } catch {
-      throw new Error(`Gemini API error: ${response.status}`);
+      throw new Error(`Erro na API de IA: ${errorMessage}`);
+    } catch (parseError) {
+      if (parseError instanceof Error && parseError.message.includes("Limite")) {
+        throw parseError;
+      }
+      throw new Error(`Erro na API de IA (código ${response.status})`);
     }
   }
   

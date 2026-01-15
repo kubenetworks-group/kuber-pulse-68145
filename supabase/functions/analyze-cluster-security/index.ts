@@ -169,56 +169,132 @@ Retorne JSON (sem markdown):
   "summary": "Resumo executivo em portugues"
 }`;
 
-    console.log('🤖 Calling Google Gemini for security analysis...');
+    console.log('🤖 Calling AI for security analysis...');
 
     const geminiMessages = [
       { role: "system" as const, content: 'Você é um especialista em segurança Kubernetes. Analise clusters e retorne avaliações estruturadas em português.' },
       { role: "user" as const, content: prompt }
     ];
 
-    const aiResult = await callGemini(geminiMessages, userId, "analyze-cluster-security");
+    let aiResult: { content: string; inputTokens: number; outputTokens: number; isFreeTier: boolean; estimatedCost: number } | null = null;
+    let aiAnalysis: any = null;
+    let usedFallback = false;
 
-    let aiContent = aiResult.content;
-    aiContent = aiContent.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-
-    let aiAnalysis;
+    // Try Gemini first
     try {
-      aiAnalysis = JSON.parse(aiContent);
-    } catch (e) {
-      console.error('Failed to parse AI response:', aiContent);
-      // Fallback with basic analysis
+      aiResult = await callGemini(geminiMessages, userId, "analyze-cluster-security");
+    } catch (geminiError: any) {
+      console.log('Gemini failed:', geminiError.message);
+      
+      // Try Lovable AI Gateway as fallback
+      const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+      if (LOVABLE_API_KEY) {
+        try {
+          const lovableResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: "google/gemini-2.5-flash",
+              messages: geminiMessages.map(m => ({ role: m.role, content: m.content })),
+            }),
+          });
+          
+          if (lovableResponse.ok) {
+            const lovableData = await lovableResponse.json();
+            aiResult = {
+              content: lovableData.choices?.[0]?.message?.content || "",
+              inputTokens: lovableData.usage?.prompt_tokens || 0,
+              outputTokens: lovableData.usage?.completion_tokens || 0,
+              isFreeTier: true,
+              estimatedCost: 0,
+            };
+            console.log('🤖 Lovable AI Gateway response received');
+          } else {
+            console.log('Lovable AI Gateway failed:', lovableResponse.status);
+          }
+        } catch (lovableError) {
+          console.log('Lovable AI Gateway error:', lovableError);
+        }
+      }
+    }
+
+    // Parse AI response if available
+    if (aiResult && aiResult.content) {
+      let aiContent = aiResult.content;
+      aiContent = aiContent.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+
+      try {
+        aiAnalysis = JSON.parse(aiContent);
+        console.log(`🤖 AI analysis parsed (tokens: ${aiResult.inputTokens}/${aiResult.outputTokens})`);
+      } catch (e) {
+        console.log('Failed to parse AI response, using deterministic fallback');
+      }
+    }
+
+    // Use deterministic fallback if AI failed
+    if (!aiAnalysis) {
+      usedFallback = true;
+      console.log('🔧 Using deterministic analysis (AI unavailable or rate limited)');
+      
       aiAnalysis = {
         rbac_details: {
           status: deterministicFlags.has_rbac ? 'configured' : 'missing',
-          issues: deterministicFlags.has_rbac ? ['RBAC configurado'] : ['RBAC não detectado'],
-          recommendations: ['Revisar permissões regularmente']
+          issues: deterministicFlags.has_rbac 
+            ? ['RBAC configurado corretamente com roles e bindings'] 
+            : ['RBAC não está configurado adequadamente'],
+          recommendations: deterministicFlags.has_rbac 
+            ? ['Revisar permissões regularmente', 'Implementar princípio do menor privilégio']
+            : ['Configurar ClusterRoles e ClusterRoleBindings', 'Implementar RBAC por namespace']
         },
         network_policy_details: {
           status: deterministicFlags.has_network_policies ? 'configured' : 'missing',
-          issues: deterministicFlags.has_network_policies ? ['NetworkPolicies ativas'] : ['Sem NetworkPolicies'],
-          recommendations: ['Implementar políticas de isolamento']
+          issues: deterministicFlags.has_network_policies 
+            ? ['NetworkPolicies detectadas no cluster']
+            : ['Nenhuma NetworkPolicy configurada - tráfego aberto entre pods'],
+          recommendations: deterministicFlags.has_network_policies
+            ? ['Revisar regras de ingress/egress', 'Garantir isolamento entre namespaces']
+            : ['Implementar política default-deny', 'Criar NetworkPolicies por workload']
         },
         pod_security_details: {
           status: deterministicFlags.has_pod_security ? 'configured' : 'partial',
-          issues: ['Verificar security context dos pods'],
-          recommendations: ['Implementar Pod Security Standards']
+          issues: deterministicFlags.has_pod_security
+            ? ['Pods com security context configurado']
+            : ['Alguns pods sem security context definido'],
+          recommendations: ['Implementar Pod Security Standards', 'Evitar containers privilegiados']
         },
         secrets_details: {
           status: deterministicFlags.has_secrets_encryption ? 'configured' : 'missing',
-          issues: ['Verificar criptografia de secrets'],
-          recommendations: ['Usar external secrets']
+          issues: deterministicFlags.has_secrets_encryption
+            ? ['Secrets presentes no cluster']
+            : ['Verificar configuração de secrets'],
+          recommendations: ['Usar external-secrets ou sealed-secrets', 'Rotacionar secrets regularmente']
         },
         resource_limits_details: {
           status: deterministicFlags.has_resource_limits ? 'configured' : 'partial',
-          issues: ['Verificar limites de recursos'],
-          recommendations: ['Definir LimitRange por namespace']
+          issues: deterministicFlags.has_resource_limits
+            ? ['Limites de recursos configurados na maioria dos pods']
+            : ['Pods sem limites de CPU/memória definidos'],
+          recommendations: ['Definir LimitRange por namespace', 'Configurar ResourceQuota']
         },
-        recommendations: ['Revisar configurações de segurança periodicamente'],
-        summary: `Cluster com score de segurança ${securityScore}/100.`
+        recommendations: [
+          deterministicFlags.has_rbac ? 'Manter RBAC atualizado' : 'Priorizar configuração de RBAC',
+          deterministicFlags.has_network_policies ? 'Revisar NetworkPolicies' : 'Implementar NetworkPolicies urgentemente',
+          'Configurar Pod Security Admission',
+          'Implementar monitoramento de segurança contínuo',
+          'Realizar auditorias de segurança periódicas'
+        ],
+        summary: `Análise de segurança concluída. Score: ${securityScore}/100. ${
+          securityScore >= 80 ? 'Cluster bem configurado.' : 
+          securityScore >= 50 ? 'Algumas melhorias recomendadas.' : 
+          'Ações urgentes necessárias para melhorar segurança.'
+        }${usedFallback ? ' (Análise baseada em métricas - serviço de IA temporariamente indisponível)' : ''}`
       };
     }
 
-    console.log(`🤖 Security analysis complete (tokens: ${aiResult.inputTokens}/${aiResult.outputTokens}, free tier: ${aiResult.isFreeTier})`);
+    console.log('🤖 Security analysis complete');
 
     // Build final analysis
     const analysis = {
@@ -272,11 +348,17 @@ Retorne JSON (sem markdown):
     return new Response(JSON.stringify({
       ...analysis,
       scan_id: scanResult.id,
-      ai_usage: {
+      ai_usage: aiResult ? {
         input_tokens: aiResult.inputTokens,
         output_tokens: aiResult.outputTokens,
         is_free_tier: aiResult.isFreeTier,
         estimated_cost: aiResult.estimatedCost
+      } : {
+        input_tokens: 0,
+        output_tokens: 0,
+        is_free_tier: true,
+        estimated_cost: 0,
+        fallback_used: true
       }
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
