@@ -20,6 +20,7 @@ serve(async (req) => {
     );
 
     // Get all active clusters with their auto-heal settings
+    // Include clusters that are healthy, warning, or connected (active clusters)
     const { data: clusters, error: clustersError } = await supabaseClient
       .from('clusters')
       .select(`
@@ -32,7 +33,7 @@ serve(async (req) => {
           scan_interval_minutes
         )
       `)
-      .eq('status', 'healthy')
+      .in('status', ['healthy', 'warning', 'connected', 'connecting'])
       .not('user_id', 'is', null);
 
     if (clustersError) {
