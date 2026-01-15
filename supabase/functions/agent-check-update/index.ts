@@ -38,25 +38,44 @@ serve(async (req) => {
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     const hashedKey = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 
-    // Find API key by hash
-    const { data: apiKeyData, error: apiKeyError } = await supabase
+    // Find API key by hash (new format: key is hashed before lookup)
+    let { data: apiKeyData, error: apiKeyError } = await supabase
       .from('agent_api_keys')
-      .select('cluster_id, is_active')
+      .select('cluster_id, is_active, api_key_hash')
       .eq('api_key_hash', hashedKey)
+      .eq('is_active', true)
       .single();
 
+    // Fallback for legacy keys: the agent might be sending the hash directly
+    // (old data where api_key_hash equals the stored api_key value)
+    if (apiKeyError || !apiKeyData) {
+      const { data: legacyData, error: legacyError } = await supabase
+        .from('agent_api_keys')
+        .select('cluster_id, is_active, api_key_hash')
+        .eq('api_key_hash', agentKey)
+        .eq('is_active', true)
+        .single();
+      
+      if (!legacyError && legacyData) {
+        apiKeyData = legacyData;
+        apiKeyError = null;
+        console.log('Matched legacy key format');
+      }
+    }
+
     if (apiKeyError || !apiKeyData || !apiKeyData.is_active) {
+      console.error('Invalid agent key. Tried hash:', hashedKey, 'and direct:', agentKey);
       return new Response(
         JSON.stringify({ error: 'Invalid agent key' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Update last_seen on api key
+    // Update last_seen on api key (use the actual hash stored)
     await supabase
       .from('agent_api_keys')
       .update({ last_seen: new Date().toISOString() })
-      .eq('api_key_hash', hashedKey);
+      .eq('api_key_hash', apiKeyData.api_key_hash);
 
     // Compare versions
     const compareVersions = (v1: string, v2: string): number => {
