@@ -1,8 +1,9 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // Google Gemini API configuration
+// Using gemini-2.0-flash as gemini-1.5-flash is deprecated in v1beta
 const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models";
-const GEMINI_MODEL = "gemini-1.5-flash";
+const GEMINI_MODEL = "gemini-2.0-flash";
 
 // Free tier limits for Gemini 1.5 Flash
 const FREE_TIER_RPD = 1500; // Requests per day (free tier)
