@@ -14,6 +14,10 @@ interface Subscription {
   trial_ends_at: string;
   ai_analyses_used: number;
   ai_analyses_reset_at: string;
+  storage_analyses_used: number;
+  storage_analyses_reset_at: string;
+  chat_messages_used: number;
+  chat_messages_reset_at: string;
   stripe_customer_id?: string;
   stripe_subscription_id?: string;
   stripe_price_id?: string;
@@ -24,6 +28,8 @@ interface Subscription {
 interface PlanLimits {
   clusters: number;
   aiAnalysesPerMonth: number;
+  storageAnalysesPerMonth: number;
+  chatMessagesPerMonth: number;
   historyRetentionDays: number;
   autoHealing: boolean;
 }
@@ -32,16 +38,25 @@ const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
   free: {
     clusters: 1,
     aiAnalysesPerMonth: 10,
+    storageAnalysesPerMonth: 1,
+    chatMessagesPerMonth: 10,
     historyRetentionDays: 7,
     autoHealing: false,
   },
   pro: {
     clusters: 10,
     aiAnalysesPerMonth: Infinity,
+    storageAnalysesPerMonth: 3,
+    chatMessagesPerMonth: Infinity,
     historyRetentionDays: 90,
     autoHealing: true,
   },
 };
+
+interface AIUsageLimits {
+  storageAnalyses: { used: number; limit: number; resetAt: Date | null };
+  chatMessages: { used: number; limit: number; resetAt: Date | null };
+}
 
 interface SubscriptionContextType {
   subscription: Subscription | null;
@@ -51,10 +66,15 @@ interface SubscriptionContextType {
   daysLeftInTrial: number;
   currentPlan: PlanType;
   planLimits: PlanLimits;
+  aiUsageLimits: AIUsageLimits;
   canCreateCluster: (currentCount: number) => boolean;
   canUseAI: () => boolean;
+  canUseStorageAnalysis: () => boolean;
+  canUseChatMessage: () => boolean;
   canUseAutoHealing: () => boolean;
   incrementAIUsage: () => Promise<void>;
+  incrementStorageAnalysis: () => Promise<void>;
+  incrementChatMessage: () => Promise<void>;
   changePlan: (plan: PlanType) => Promise<boolean>;
   refetch: () => Promise<void>;
 }
@@ -141,26 +161,88 @@ export const SubscriptionProvider = ({ children }: { children: React.ReactNode }
   // Admin or during trial = full access (pro-like)
   const effectiveLimits = isAdmin || isTrialActive ? PLAN_LIMITS.pro : planLimits;
 
+  // Check if storage analyses reset is needed
+  const checkAndResetUsage = useCallback(async () => {
+    if (!subscription) return;
+
+    const now = new Date();
+    const updates: Record<string, unknown> = {};
+
+    if (subscription.storage_analyses_reset_at && new Date(subscription.storage_analyses_reset_at) <= now) {
+      updates.storage_analyses_used = 0;
+      updates.storage_analyses_reset_at = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
+    }
+
+    if (subscription.chat_messages_reset_at && new Date(subscription.chat_messages_reset_at) <= now) {
+      updates.chat_messages_used = 0;
+      updates.chat_messages_reset_at = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
+    }
+
+    if (Object.keys(updates).length > 0) {
+      const { error } = await supabase
+        .from('subscriptions')
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq('id', subscription.id);
+
+      if (!error) {
+        setSubscription(prev => prev ? { ...prev, ...updates } as Subscription : null);
+      }
+    }
+  }, [subscription]);
+
+  useEffect(() => {
+    checkAndResetUsage();
+  }, [checkAndResetUsage]);
+
+  // AI Usage Limits
+  const aiUsageLimits: AIUsageLimits = {
+    storageAnalyses: {
+      used: subscription?.storage_analyses_used || 0,
+      limit: effectiveLimits.storageAnalysesPerMonth,
+      resetAt: subscription?.storage_analyses_reset_at ? new Date(subscription.storage_analyses_reset_at) : null,
+    },
+    chatMessages: {
+      used: subscription?.chat_messages_used || 0,
+      limit: effectiveLimits.chatMessagesPerMonth,
+      resetAt: subscription?.chat_messages_reset_at ? new Date(subscription.chat_messages_reset_at) : null,
+    },
+  };
+
   const canCreateCluster = (currentCount: number): boolean => {
-    if (isAdmin) return true; // Admin has unlimited access
+    if (isAdmin) return true;
     if (isReadOnly) return false;
     if (isTrialActive) return true;
     
-    // Use custom limit if set, otherwise use plan default
     const clusterLimit = subscription?.custom_cluster_limit ?? effectiveLimits.clusters;
     return currentCount < clusterLimit;
   };
 
   const canUseAI = (): boolean => {
-    if (isAdmin) return true; // Admin has unlimited access
+    if (isAdmin) return true;
     if (isReadOnly) return false;
     if (isTrialActive) return true;
     if (effectiveLimits.aiAnalysesPerMonth === Infinity) return true;
     return (subscription?.ai_analyses_used || 0) < effectiveLimits.aiAnalysesPerMonth;
   };
 
+  const canUseStorageAnalysis = (): boolean => {
+    if (isAdmin) return true;
+    if (isReadOnly) return false;
+    if (isTrialActive) return true;
+    if (effectiveLimits.storageAnalysesPerMonth === Infinity) return true;
+    return (subscription?.storage_analyses_used || 0) < effectiveLimits.storageAnalysesPerMonth;
+  };
+
+  const canUseChatMessage = (): boolean => {
+    if (isAdmin) return true;
+    if (isReadOnly) return false;
+    if (isTrialActive) return true;
+    if (effectiveLimits.chatMessagesPerMonth === Infinity) return true;
+    return (subscription?.chat_messages_used || 0) < effectiveLimits.chatMessagesPerMonth;
+  };
+
   const canUseAutoHealing = (): boolean => {
-    if (isAdmin) return true; // Admin has unlimited access
+    if (isAdmin) return true;
     if (isReadOnly) return false;
     if (isTrialActive) return true;
     return effectiveLimits.autoHealing;
@@ -179,6 +261,38 @@ export const SubscriptionProvider = ({ children }: { children: React.ReactNode }
 
     if (!error) {
       setSubscription(prev => prev ? { ...prev, ai_analyses_used: (prev.ai_analyses_used || 0) + 1 } : null);
+    }
+  };
+
+  const incrementStorageAnalysis = async () => {
+    if (!subscription) return;
+    
+    const { error } = await supabase
+      .from('subscriptions')
+      .update({ 
+        storage_analyses_used: (subscription.storage_analyses_used || 0) + 1,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', subscription.id);
+
+    if (!error) {
+      setSubscription(prev => prev ? { ...prev, storage_analyses_used: (prev.storage_analyses_used || 0) + 1 } : null);
+    }
+  };
+
+  const incrementChatMessage = async () => {
+    if (!subscription) return;
+    
+    const { error } = await supabase
+      .from('subscriptions')
+      .update({ 
+        chat_messages_used: (subscription.chat_messages_used || 0) + 1,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', subscription.id);
+
+    if (!error) {
+      setSubscription(prev => prev ? { ...prev, chat_messages_used: (prev.chat_messages_used || 0) + 1 } : null);
     }
   };
 
@@ -210,10 +324,15 @@ export const SubscriptionProvider = ({ children }: { children: React.ReactNode }
       daysLeftInTrial,
       currentPlan,
       planLimits: effectiveLimits,
+      aiUsageLimits,
       canCreateCluster,
       canUseAI,
+      canUseStorageAnalysis,
+      canUseChatMessage,
       canUseAutoHealing,
       incrementAIUsage,
+      incrementStorageAnalysis,
+      incrementChatMessage,
       changePlan,
       refetch: fetchSubscription,
     }}>
