@@ -127,21 +127,23 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       // Log logout event before signing out
       if (user) {
-        await logAuditEvent(user.id, 'logout', 'user', user.id, { email: user.email });
+        await logAuditEvent(user.id, 'logout', 'user', user.id, { email: user.email }).catch(() => {});
       }
 
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.error("Sign out error:", error);
-        toast.error("Erro ao sair. Tente novamente.");
-        return;
-      }
+      await supabase.auth.signOut({ scope: 'local' });
       
-      toast.success("Signed out successfully!");
+      // Force clear local state even if signOut fails
+      setUser(null);
+      setSession(null);
+      
+      toast.success("Saiu com sucesso!");
       navigate("/");
     } catch (error) {
       console.error("Sign out error:", error);
-      toast.error("Erro ao sair. Tente novamente.");
+      // Even on error, clear local state and redirect
+      setUser(null);
+      setSession(null);
+      navigate("/");
     }
   };
 
