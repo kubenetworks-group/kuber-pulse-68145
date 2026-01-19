@@ -130,16 +130,6 @@ const FloatingTechIcons = () => {
   );
 };
 
-// Scan line effect
-const ScanLine = () => (
-  <div className="absolute inset-0 overflow-hidden pointer-events-none">
-    <div 
-      className="absolute left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary to-transparent animate-scan-line"
-      style={{ boxShadow: '0 0 20px 5px hsl(var(--primary) / 0.3)' }}
-    />
-  </div>
-);
-
 // Typing effect component
 const TypingText = ({ texts }: { texts: string[] }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -316,7 +306,6 @@ export default function LandingPage() {
       <div className="absolute inset-0 code-bg" />
       <MatrixRain />
       <FloatingTechIcons />
-      <ScanLine />
       
       {/* Animated gradient orbs */}
       <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/20 rounded-full blur-[100px] animate-pulse" style={{ animationDuration: '4s' }} />
