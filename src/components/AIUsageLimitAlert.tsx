@@ -7,28 +7,32 @@ import { ptBR } from "date-fns/locale";
 
 interface AIUsageLimitAlertProps {
   title?: string;
-  used: number;
-  limit: number;
+  message?: string;
+  used?: number;
+  limit?: number;
   resetAt: Date | null;
-  featureName: string;
+  featureName?: string;
   onClose?: () => void;
   onRetry?: () => void;
   isLoading?: boolean;
   variant?: 'compact' | 'full';
+  isApiRateLimit?: boolean;
 }
 
 export function AIUsageLimitAlert({
   title,
-  used,
-  limit,
+  message,
+  used = 0,
+  limit = 0,
   resetAt,
-  featureName,
+  featureName = 'recursos de IA',
   onClose,
   onRetry,
   isLoading = false,
   variant = 'full',
+  isApiRateLimit = false,
 }: AIUsageLimitAlertProps) {
-  const isAtLimit = used >= limit;
+  const isAtLimit = isApiRateLimit || used >= limit;
   const usagePercentage = limit === Infinity ? 0 : (used / limit) * 100;
   
   const getTimeUntilReset = () => {
@@ -93,6 +97,68 @@ export function AIUsageLimitAlert({
     );
   }
 
+  // API Rate Limit Alert (Gemini/OpenAI rate limit)
+  if (isApiRateLimit) {
+    return (
+      <Alert className="border-amber-500/30 bg-amber-500/5 mb-4">
+        <Zap className="h-5 w-5 text-amber-500" />
+        <AlertTitle className="text-amber-600 dark:text-amber-400 font-semibold">
+          {title || "Limite temporário de IA atingido"}
+        </AlertTitle>
+        <AlertDescription className="mt-3 space-y-3">
+          <p className="text-muted-foreground">
+            {message || "O serviço de IA está temporariamente indisponível devido a alta demanda."}
+          </p>
+
+          {resetAt && (
+            <div className="bg-background/60 rounded-lg p-3 border border-border/50">
+              <p className="text-sm font-medium mb-1 flex items-center gap-2">
+                <Clock className="w-4 h-4 text-primary" />
+                Próxima tentativa disponível
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Você poderá tentar novamente {getTimeUntilReset()} ({getResetDateFormatted()})
+              </p>
+            </div>
+          )}
+
+          <div className="bg-background/60 rounded-lg p-3 border border-border/50">
+            <p className="text-sm font-medium mb-1">💡 Por que isso acontece?</p>
+            <p className="text-xs text-muted-foreground">
+              Este é um limite temporário do provedor de IA (não do seu plano). 
+              Aguarde alguns minutos e tente novamente. Se o problema persistir, 
+              o sistema usará uma análise determinística como fallback.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2 pt-1">
+            {onClose && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={onClose}
+                className="gap-1"
+              >
+                <X className="w-3 h-3" />
+                Fechar
+              </Button>
+            )}
+            {onRetry && (
+              <Button 
+                variant="secondary" 
+                size="sm" 
+                onClick={onRetry}
+                disabled={isLoading}
+              >
+                Tentar novamente
+              </Button>
+            )}
+          </div>
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
   return (
     <Alert className="border-amber-500/30 bg-amber-500/5 mb-4">
       <Zap className="h-5 w-5 text-amber-500" />
@@ -113,7 +179,7 @@ export function AIUsageLimitAlert({
         <div className="bg-background/60 rounded-lg p-3 border border-border/50">
           <p className="text-sm font-medium mb-1">💡 Dica</p>
           <p className="text-xs text-muted-foreground">
-            Faça upgrade para o plano Pro e tenha acesso ilimitado a recursos de IA, 
+            Faça upgrade para o plano Pro e tenha acesso a mais recursos de IA, 
             incluindo análises de storage, chat com assistente e muito mais.
           </p>
         </div>
