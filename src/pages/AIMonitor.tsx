@@ -11,7 +11,7 @@ import { SecurityThreatCard } from "@/components/SecurityThreatCard";
 import { ContainerTerminalAlert } from "@/components/ContainerTerminalAlert";
 import { AgentUpdateBanner } from "@/components/AgentUpdateBanner";
 import { useSecurityThreats } from "@/hooks/useSecurityThreats";
-import { Bot, Activity, CheckCircle, Sparkles, Shield, Zap, AlertCircle, History, ShieldAlert, Settings } from "lucide-react";
+import { Bot, Activity, CheckCircle, Shield, Zap, AlertCircle, History, ShieldAlert, Settings } from "lucide-react";
 import { AutoHealConfig } from "@/components/AutoHealConfig";
 import { AutoHealActionsLog } from "@/components/AutoHealActionsLog";
 import { ClusterSecurityAnalysis } from "@/components/ClusterSecurityAnalysis";
@@ -22,7 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTranslation } from "react-i18next";
-import { useCurrency } from "@/hooks/useCurrency";
+
 import { format } from "date-fns";
 import { ptBR, enUS, es } from "date-fns/locale";
 
@@ -55,9 +55,7 @@ export default function AIMonitor() {
   const { user } = useAuth();
   const { selectedClusterId, clusters } = useCluster();
   const { t, i18n } = useTranslation();
-  const { formatCurrency } = useCurrency();
   const [incidents, setIncidents] = useState<Incident[]>([]);
-  const [savings, setSavings] = useState<Map<string, any>>(new Map());
   const [loading, setLoading] = useState(true);
   const [severityFilter, setSeverityFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -245,15 +243,6 @@ export default function AIMonitor() {
       if (incidentsError) throw incidentsError;
       setIncidents((incidentsData || []) as any);
 
-      // Fetch AI savings
-      const { data: savingsData, error: savingsError } = await supabase
-        .from('ai_cost_savings')
-        .select('*');
-
-      if (!savingsError && savingsData) {
-        const savingsMap = new Map(savingsData.map(s => [s.incident_id, s]));
-        setSavings(savingsMap);
-      }
     } catch (error) {
       console.error('Error fetching data:', error);
       toast({
@@ -353,9 +342,6 @@ export default function AIMonitor() {
     total: clusterIncidents.length,
     actionsExecuted: clusterIncidents.filter(i => i.action_taken).length,
     resolved: clusterIncidents.filter(i => i.resolved_at).length,
-    totalSavings: Array.from(savings.values())
-      .filter(s => clusterIncidents.some(i => i.id === s.incident_id))
-      .reduce((sum, s) => sum + Number(s.estimated_savings), 0),
     avgResolutionTime: clusterIncidents.filter(i => i.resolved_at).length > 0
       ? Math.round(
           clusterIncidents
@@ -438,16 +424,16 @@ export default function AIMonitor() {
           <Card className="bg-gradient-to-br from-accent/10 to-accent/5 border-accent/20">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-accent" />
-                {t('aiMonitor.totalSavings')}
+                <Activity className="h-4 w-4 text-accent" />
+                {t('aiMonitor.avgResolutionTime')}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-accent">
-                {formatCurrency(stats.totalSavings, { sourceCurrency: 'USD' }).value}
+                {stats.avgResolutionTime}m
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                {t('aiMonitor.savedSoFar')}
+                {t('aiMonitor.avgTime')}
               </p>
             </CardContent>
           </Card>
@@ -827,7 +813,6 @@ export default function AIMonitor() {
                     key={incident.id}
                     incident={incident}
                     clusterName={clusters.find(c => c.id === incident.cluster_id)?.name}
-                    savings={savings.get(incident.id)}
                     onExecuteAction={handleExecuteAction}
                   />
                 ))
