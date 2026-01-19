@@ -124,14 +124,25 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const signOut = async () => {
-    // Log logout event before signing out
-    if (user) {
-      await logAuditEvent(user.id, 'logout', 'user', user.id, { email: user.email });
-    }
+    try {
+      // Log logout event before signing out
+      if (user) {
+        await logAuditEvent(user.id, 'logout', 'user', user.id, { email: user.email });
+      }
 
-    await supabase.auth.signOut();
-    toast.success("Signed out successfully!");
-    navigate("/auth");
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error("Sign out error:", error);
+        toast.error("Erro ao sair. Tente novamente.");
+        return;
+      }
+      
+      toast.success("Signed out successfully!");
+      navigate("/");
+    } catch (error) {
+      console.error("Sign out error:", error);
+      toast.error("Erro ao sair. Tente novamente.");
+    }
   };
 
   return (
