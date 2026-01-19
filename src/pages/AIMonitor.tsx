@@ -11,7 +11,7 @@ import { SecurityThreatCard } from "@/components/SecurityThreatCard";
 import { ContainerTerminalAlert } from "@/components/ContainerTerminalAlert";
 import { AgentUpdateBanner } from "@/components/AgentUpdateBanner";
 import { useSecurityThreats } from "@/hooks/useSecurityThreats";
-import { Bot, Activity, CheckCircle, Shield, Zap, AlertCircle, History, ShieldAlert, Settings, Clock } from "lucide-react";
+import { Bot, Activity, CheckCircle, Shield, Zap, AlertCircle, History, ShieldAlert, Settings, Clock, Server, AlertTriangle } from "lucide-react";
 import { AutoHealConfig } from "@/components/AutoHealConfig";
 import { AutoHealActionsLog } from "@/components/AutoHealActionsLog";
 import { ClusterSecurityAnalysis } from "@/components/ClusterSecurityAnalysis";
@@ -715,60 +715,158 @@ export default function AIMonitor() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {agentCommands.map((cmd) => (
-                      <div 
-                        key={cmd.id}
-                        className={`p-4 border rounded-lg ${
-                          cmd.status === 'completed' ? 'bg-success/5 border-success/20' :
-                          cmd.status === 'failed' ? 'bg-destructive/5 border-destructive/20' :
-                          cmd.status === 'executing' ? 'bg-primary/5 border-primary/20' :
-                          'bg-muted/50 border-border'
-                        }`}
-                      >
-                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 sm:gap-4">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap mb-2">
-                              <Badge variant={
-                                cmd.status === 'completed' ? 'default' :
-                                cmd.status === 'failed' ? 'destructive' :
-                                'secondary'
-                              } className="text-xs">
-                                {cmd.status === 'completed' ? '✅ Completado' :
-                                 cmd.status === 'failed' ? '❌ Falhou' :
-                                 cmd.status === 'executing' ? '⚡ Executando' :
-                                 cmd.status === 'pending' ? '⏳ Pendente' : cmd.status}
-                              </Badge>
-                              <Badge variant="outline" className="gap-1 text-xs">
-                                <Zap className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                                {cmd.command_type.replace(/_/g, ' ')}
-                              </Badge>
+                    {agentCommands.map((cmd) => {
+                      // Encontrar o cluster para verificar status do agente
+                      const cmdCluster = clusters.find(c => c.id === cmd.cluster_id);
+                      const agentLastSeen = cmdCluster?.agent_last_seen_at 
+                        ? new Date(cmdCluster.agent_last_seen_at) 
+                        : null;
+                      const isAgentOnline = agentLastSeen && 
+                        (new Date().getTime() - agentLastSeen.getTime()) < 5 * 60 * 1000; // 5 min
+                      
+                      // Diagnóstico do comando
+                      const getDiagnostic = () => {
+                        if (cmd.status === 'completed') return null;
+                        if (cmd.status === 'failed') {
+                          return {
+                            type: 'error',
+                            message: cmd.result?.error || cmd.result?.message || 'Erro desconhecido ao executar comando',
+                            details: cmd.result?.details || null
+                          };
+                        }
+                        if (cmd.status === 'pending' || cmd.status === 'sent') {
+                          if (!cmdCluster?.agent_version) {
+                            return {
+                              type: 'warning',
+                              message: 'Agente Kodo não instalado no cluster',
+                              details: 'O comando está aguardando, mas o agente nunca se conectou. Instale o agente no cluster para que os comandos sejam executados.'
+                            };
+                          }
+                          if (!isAgentOnline) {
+                            return {
+                              type: 'warning',
+                              message: 'Agente Kodo offline',
+                              details: `O agente foi visto pela última vez em ${agentLastSeen ? format(agentLastSeen, 'dd/MM/yyyy HH:mm', { locale: getDateLocale() }) : 'nunca'}. Verifique se o pod do agente está rodando no cluster.`
+                            };
+                          }
+                          // Comando pendente há muito tempo
+                          const createdAt = new Date(cmd.created_at);
+                          const waitingMinutes = Math.floor((new Date().getTime() - createdAt.getTime()) / (60 * 1000));
+                          if (waitingMinutes > 10) {
+                            return {
+                              type: 'warning',
+                              message: `Aguardando execução há ${waitingMinutes} minutos`,
+                              details: 'O agente pode estar ocupado processando outros comandos ou enfrentando problemas de conectividade.'
+                            };
+                          }
+                        }
+                        return null;
+                      };
+                      
+                      const diagnostic = getDiagnostic();
+                      
+                      return (
+                        <div 
+                          key={cmd.id}
+                          className={`p-4 border rounded-lg ${
+                            cmd.status === 'completed' ? 'bg-success/5 border-success/20' :
+                            cmd.status === 'failed' ? 'bg-destructive/5 border-destructive/20' :
+                            cmd.status === 'executing' ? 'bg-primary/5 border-primary/20' :
+                            'bg-muted/50 border-border'
+                          }`}
+                        >
+                          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 sm:gap-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap mb-2">
+                                <Badge variant={
+                                  cmd.status === 'completed' ? 'default' :
+                                  cmd.status === 'failed' ? 'destructive' :
+                                  'secondary'
+                                } className="text-xs">
+                                  {cmd.status === 'completed' ? '✅ Completado' :
+                                   cmd.status === 'failed' ? '❌ Falhou' :
+                                   cmd.status === 'executing' ? '⚡ Executando' :
+                                   cmd.status === 'pending' ? '⏳ Pendente' : 
+                                   cmd.status === 'sent' ? '📤 Enviado' : cmd.status}
+                                </Badge>
+                                <Badge variant="outline" className="gap-1 text-xs">
+                                  <Zap className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                                  {cmd.command_type.replace(/_/g, ' ')}
+                                </Badge>
+                                {cmdCluster && (
+                                  <Badge variant="outline" className="gap-1 text-xs">
+                                    <Server className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                                    {cmdCluster.name}
+                                  </Badge>
+                                )}
+                              </div>
+                              <div className="text-xs sm:text-sm space-y-1">
+                                <p className="font-medium">Tipo: {cmd.command_type}</p>
+                                {cmd.command_params && (
+                                  <div className="bg-background/50 p-1.5 sm:p-2 rounded text-[10px] sm:text-xs font-mono overflow-x-auto">
+                                    {JSON.stringify(cmd.command_params, null, 2)}
+                                  </div>
+                                )}
+                                
+                                {/* Diagnóstico do Agente */}
+                                {diagnostic && (
+                                  <div className={`mt-2 p-2 sm:p-3 rounded-lg border ${
+                                    diagnostic.type === 'error' 
+                                      ? 'bg-destructive/10 border-destructive/30' 
+                                      : 'bg-warning/10 border-warning/30'
+                                  }`}>
+                                    <div className="flex items-start gap-2">
+                                      <AlertTriangle className={`w-4 h-4 mt-0.5 flex-shrink-0 ${
+                                        diagnostic.type === 'error' ? 'text-destructive' : 'text-warning'
+                                      }`} />
+                                      <div>
+                                        <p className={`text-xs sm:text-sm font-semibold ${
+                                          diagnostic.type === 'error' ? 'text-destructive' : 'text-warning'
+                                        }`}>
+                                          {diagnostic.message}
+                                        </p>
+                                        {diagnostic.details && (
+                                          <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
+                                            {diagnostic.details}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                                
+                                {cmd.result && (
+                                  <div className={`mt-2 p-1.5 sm:p-2 rounded ${
+                                    cmd.status === 'failed' ? 'bg-destructive/10' : 'bg-success/10'
+                                  }`}>
+                                    <p className={`text-[10px] sm:text-xs font-semibold mb-1 ${
+                                      cmd.status === 'failed' ? 'text-destructive' : 'text-success'
+                                    }`}>
+                                      {cmd.status === 'failed' ? 'Erro:' : 'Resultado:'}
+                                    </p>
+                                    <pre className="text-[10px] sm:text-xs overflow-auto whitespace-pre-wrap">
+                                      {JSON.stringify(cmd.result, null, 2)}
+                                    </pre>
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                            <div className="text-xs sm:text-sm space-y-1">
-                              <p className="font-medium">Tipo: {cmd.command_type}</p>
-                              {cmd.command_params && (
-                                <div className="bg-background/50 p-1.5 sm:p-2 rounded text-[10px] sm:text-xs font-mono overflow-x-auto">
-                                  {JSON.stringify(cmd.command_params, null, 2)}
-                                </div>
+                            <div className="text-left sm:text-right text-[10px] sm:text-xs text-muted-foreground space-y-1">
+                              <div>Criado: {format(new Date(cmd.created_at), 'dd/MM HH:mm', { locale: getDateLocale() })}</div>
+                              {cmd.executed_at && (
+                                <div>Executado: {format(new Date(cmd.executed_at), 'dd/MM HH:mm', { locale: getDateLocale() })}</div>
                               )}
-                              {cmd.result && (
-                                <div className="mt-2 p-1.5 sm:p-2 bg-success/10 rounded">
-                                  <p className="text-[10px] sm:text-xs font-semibold text-success mb-1">Resultado:</p>
-                                  <pre className="text-[10px] sm:text-xs overflow-auto">
-                                    {JSON.stringify(cmd.result, null, 2)}
-                                  </pre>
-                                </div>
+                              {cmd.completed_at && (
+                                <div>Finalizado: {format(new Date(cmd.completed_at), 'dd/MM HH:mm', { locale: getDateLocale() })}</div>
+                              )}
+                              {cmd.retry_count > 0 && (
+                                <div className="text-warning">Tentativas: {cmd.retry_count}/{cmd.max_retries || 3}</div>
                               )}
                             </div>
-                          </div>
-                          <div className="text-left sm:text-right text-[10px] sm:text-xs text-muted-foreground">
-                            <div>Criado: {format(new Date(cmd.created_at), 'dd/MM HH:mm', { locale: getDateLocale() })}</div>
-                            {cmd.executed_at && (
-                              <div>Executado: {format(new Date(cmd.executed_at), 'dd/MM HH:mm', { locale: getDateLocale() })}</div>
-                            )}
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>
