@@ -9,12 +9,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, Server, Bot, AlertTriangle, Search, RefreshCw, Shield, Settings2, Clock, Database, FileText, ShieldAlert } from "lucide-react";
+import { Users, Server, Bot, AlertTriangle, Search, RefreshCw, Shield, Settings2, Clock, Database, FileText, ShieldAlert, Bell } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { formatDistanceToNow, format, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { AuditLogsTab } from "@/components/AuditLogsTab";
+import { AdminClusterAlertsTab } from "@/components/AdminClusterAlertsTab";
 
 interface UserData {
   id: string;
@@ -217,6 +218,10 @@ const AdminDashboard = () => {
             <TabsTrigger value="users" className="gap-2">
               <Users className="h-4 w-4" />
               Usuários
+            </TabsTrigger>
+            <TabsTrigger value="alerts" className="gap-2">
+              <Bell className="h-4 w-4" />
+              Alertas
             </TabsTrigger>
             <TabsTrigger value="audit" className="gap-2">
               <FileText className="h-4 w-4" />
@@ -426,6 +431,11 @@ const AdminDashboard = () => {
             )}
           </CardContent>
         </Card>
+          </TabsContent>
+
+          {/* Cluster Alerts Tab */}
+          <TabsContent value="alerts">
+            <AdminClusterAlertsTab />
           </TabsContent>
 
           {/* Audit Logs Tab */}

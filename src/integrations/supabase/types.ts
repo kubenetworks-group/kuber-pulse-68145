@@ -14,6 +14,62 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_cluster_alerts: {
+        Row: {
+          action_params: Json | null
+          action_type: string | null
+          alert_type: string
+          cluster_id: string
+          created_at: string | null
+          created_by: string
+          dismissed: boolean | null
+          dismissed_at: string | null
+          expires_at: string | null
+          id: string
+          message: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          action_params?: Json | null
+          action_type?: string | null
+          alert_type?: string
+          cluster_id: string
+          created_at?: string | null
+          created_by: string
+          dismissed?: boolean | null
+          dismissed_at?: string | null
+          expires_at?: string | null
+          id?: string
+          message: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          action_params?: Json | null
+          action_type?: string | null
+          alert_type?: string
+          cluster_id?: string
+          created_at?: string | null
+          created_by?: string
+          dismissed?: boolean | null
+          dismissed_at?: string | null
+          expires_at?: string | null
+          id?: string
+          message?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_cluster_alerts_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       agent_anomalies: {
         Row: {
           ai_analysis: Json
