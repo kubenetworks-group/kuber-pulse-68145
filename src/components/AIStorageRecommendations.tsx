@@ -2,7 +2,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AIUsageLimitAlert } from "@/components/AIUsageLimitAlert";
+import { useSubscription } from "@/contexts/SubscriptionContext";
 import {
   Sparkles,
   TrendingDown,
@@ -17,15 +18,11 @@ import {
   DollarSign,
   Database,
   AlertTriangle,
-  Zap,
-  RefreshCw,
-  ArrowUpRight,
 } from "lucide-react";
 import { useStorageRecommendations, StorageRecommendation } from "@/hooks/useStorageRecommendations";
 import { useCurrency } from "@/hooks/useCurrency";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
 import {
   Tooltip,
   TooltipContent,
@@ -219,7 +216,6 @@ const RecommendationCard = ({ recommendation, onAccept, onReject, formatCurrency
 
 export const AIStorageRecommendations = () => {
   const { t } = useTranslation();
-  const navigate = useNavigate();
   const {
     recommendations,
     loading,
@@ -232,9 +228,22 @@ export const AIStorageRecommendations = () => {
     updateRecommendationStatus,
   } = useStorageRecommendations();
   const { formatCurrency } = useCurrency();
+  const { aiUsageLimits, canUseStorageAnalysis, incrementStorageAnalysis, currentPlan } = useSubscription();
 
   const pendingRecommendations = recommendations.filter(r => r.status === 'pending');
   const hasRecommendations = pendingRecommendations.length > 0;
+
+  const handleAnalyzeStorage = async () => {
+    if (!canUseStorageAnalysis()) {
+      return; // UI will show the limit alert
+    }
+    const result = await analyzeStorage();
+    if (result) {
+      await incrementStorageAnalysis();
+    }
+  };
+
+  const isAtLimit = !canUseStorageAnalysis();
 
   return (
     <Card className="backdrop-blur-xl bg-card/80 border-border/50 hover:shadow-lg transition-all duration-300">
@@ -245,9 +254,9 @@ export const AIStorageRecommendations = () => {
               <Sparkles className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <CardTitle className="text-lg">Recomendacoes de IA para Storage</CardTitle>
+              <CardTitle className="text-lg">Recomendações de IA para Storage</CardTitle>
               <CardDescription className="text-xs">
-                Analise inteligente de uso de PVCs para otimizacao de custos
+                Análise inteligente de uso de PVCs para otimização de custos
               </CardDescription>
             </div>
           </div>
@@ -260,8 +269,8 @@ export const AIStorageRecommendations = () => {
               </span>
             )}
             <Button
-              onClick={analyzeStorage}
-              disabled={analyzing}
+              onClick={handleAnalyzeStorage}
+              disabled={analyzing || isAtLimit}
               className="gap-2"
               size="sm"
             >
@@ -282,70 +291,31 @@ export const AIStorageRecommendations = () => {
       </CardHeader>
 
       <CardContent className="space-y-4">
-        {/* Rate Limit Alert */}
-        {rateLimitError && (
-          <Alert className="border-amber-500/50 bg-amber-500/10">
-            <Zap className="h-5 w-5 text-amber-500" />
-            <AlertTitle className="text-amber-600 dark:text-amber-400 font-semibold">
-              Limite de uso de IA atingido
-            </AlertTitle>
-            <AlertDescription className="mt-2 space-y-3">
-              <p className="text-sm text-muted-foreground">
-                {rateLimitError.message}
-              </p>
-              
-              <div className="flex flex-col sm:flex-row gap-2 pt-2">
-                {rateLimitError.retryAfter && (
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 px-3 py-2 rounded-md">
-                    <Clock className="w-4 h-4" />
-                    <span>
-                      Tente novamente após {rateLimitError.retryAfter.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  </div>
-                )}
-                
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={clearRateLimitError}
-                    className="gap-1"
-                  >
-                    <X className="w-3 h-3" />
-                    Fechar
-                  </Button>
-                  
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => navigate('/pricing')}
-                    className="gap-1 border-primary/50 text-primary hover:bg-primary/10"
-                  >
-                    <ArrowUpRight className="w-3 h-3" />
-                    Ver planos
-                  </Button>
-                  
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      clearRateLimitError();
-                      analyzeStorage();
-                    }}
-                    className="gap-1"
-                  >
-                    <RefreshCw className="w-3 h-3" />
-                    Tentar novamente
-                  </Button>
-                </div>
-              </div>
-            </AlertDescription>
-          </Alert>
+        {/* Usage Limit Display */}
+        {isAtLimit ? (
+          <AIUsageLimitAlert
+            title="Limite de análises de storage atingido"
+            used={aiUsageLimits.storageAnalyses.used}
+            limit={aiUsageLimits.storageAnalyses.limit}
+            resetAt={aiUsageLimits.storageAnalyses.resetAt}
+            featureName={currentPlan === 'free' ? 'análise gratuita' : 'análises'}
+            onClose={clearRateLimitError}
+            onRetry={handleAnalyzeStorage}
+            isLoading={analyzing}
+          />
+        ) : (
+          <AIUsageLimitAlert
+            used={aiUsageLimits.storageAnalyses.used}
+            limit={aiUsageLimits.storageAnalyses.limit}
+            resetAt={aiUsageLimits.storageAnalyses.resetAt}
+            featureName={currentPlan === 'free' ? 'análise gratuita' : 'análises'}
+          />
         )}
 
         {/* Stats Summary */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="p-3 rounded-lg bg-muted/50 border border-border/50">
-            <p className="text-xs text-muted-foreground mb-1">Recomendacoes</p>
+            <p className="text-xs text-muted-foreground mb-1">Recomendações</p>
             <p className="text-2xl font-bold">{stats.pending}</p>
             <p className="text-xs text-muted-foreground">
               {stats.downsizeCount} reduzir, {stats.deleteCount} deletar
@@ -360,24 +330,24 @@ export const AIStorageRecommendations = () => {
             <p className="text-2xl font-bold text-green-500">
               {formatCurrency(stats.totalSavings).value}
             </p>
-            <p className="text-xs text-muted-foreground">por mes</p>
+            <p className="text-xs text-muted-foreground">por mês</p>
           </div>
 
           <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
             <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
               <HardDrive className="w-3 h-3" />
-              Storage Recuperavel
+              Storage Recuperável
             </p>
             <p className="text-2xl font-bold text-blue-500">
               {stats.totalStorageRecoverable.toFixed(1)} GB
             </p>
-            <p className="text-xs text-muted-foreground">liberavel</p>
+            <p className="text-xs text-muted-foreground">liberável</p>
           </div>
 
           <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
             <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
               <TrendingDown className="w-3 h-3" />
-              PVCs Otimizaveis
+              PVCs Otimizáveis
             </p>
             <p className="text-2xl font-bold text-orange-500">{stats.downsizeCount}</p>
             <p className="text-xs text-muted-foreground">para reduzir</p>
@@ -388,16 +358,16 @@ export const AIStorageRecommendations = () => {
         {loading ? (
           <div className="flex flex-col items-center justify-center py-12 gap-3">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">Carregando recomendacoes...</p>
+            <p className="text-sm text-muted-foreground">Carregando recomendações...</p>
           </div>
         ) : !hasRecommendations ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <div className="p-4 rounded-full bg-muted/50 mb-4">
               <HardDrive className="w-10 h-10 text-muted-foreground" />
             </div>
-            <p className="text-muted-foreground font-medium mb-1">Nenhuma recomendacao pendente</p>
+            <p className="text-muted-foreground font-medium mb-1">Nenhuma recomendação pendente</p>
             <p className="text-xs text-muted-foreground max-w-sm">
-              Clique em "Analisar Storage" para gerar recomendacoes baseadas no historico de uso dos ultimos 7 dias
+              Clique em "Analisar Storage" para gerar recomendações baseadas no histórico de uso dos últimos 7 dias
             </p>
           </div>
         ) : (
@@ -417,8 +387,8 @@ export const AIStorageRecommendations = () => {
         {/* Help text */}
         {hasRecommendations && (
           <p className="text-xs text-muted-foreground text-center pt-2 border-t border-border/50">
-            Recomendacoes baseadas em analise de {recommendations[0]?.days_analyzed || 7} dias de historico de uso.
-            Aceitar uma recomendacao nao aplica mudancas automaticamente.
+            Recomendações baseadas em análise de {recommendations[0]?.days_analyzed || 7} dias de histórico de uso.
+            Aceitar uma recomendação não aplica mudanças automaticamente.
           </p>
         )}
       </CardContent>

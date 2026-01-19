@@ -1413,12 +1413,16 @@ export type Database = {
         Row: {
           ai_analyses_reset_at: string
           ai_analyses_used: number
+          chat_messages_reset_at: string | null
+          chat_messages_used: number | null
           created_at: string
           current_period_end: string | null
           custom_cluster_limit: number | null
           id: string
           plan: string
           status: string
+          storage_analyses_reset_at: string | null
+          storage_analyses_used: number | null
           stripe_customer_id: string | null
           stripe_price_id: string | null
           stripe_subscription_id: string | null
@@ -1430,12 +1434,16 @@ export type Database = {
         Insert: {
           ai_analyses_reset_at?: string
           ai_analyses_used?: number
+          chat_messages_reset_at?: string | null
+          chat_messages_used?: number | null
           created_at?: string
           current_period_end?: string | null
           custom_cluster_limit?: number | null
           id?: string
           plan?: string
           status?: string
+          storage_analyses_reset_at?: string | null
+          storage_analyses_used?: number | null
           stripe_customer_id?: string | null
           stripe_price_id?: string | null
           stripe_subscription_id?: string | null
@@ -1447,12 +1455,16 @@ export type Database = {
         Update: {
           ai_analyses_reset_at?: string
           ai_analyses_used?: number
+          chat_messages_reset_at?: string | null
+          chat_messages_used?: number | null
           created_at?: string
           current_period_end?: string | null
           custom_cluster_limit?: number | null
           id?: string
           plan?: string
           status?: string
+          storage_analyses_reset_at?: string | null
+          storage_analyses_used?: number | null
           stripe_customer_id?: string | null
           stripe_price_id?: string | null
           stripe_subscription_id?: string | null

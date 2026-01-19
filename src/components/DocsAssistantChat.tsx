@@ -3,10 +3,13 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Bot, Send, X, MessageCircle, Loader2 } from "lucide-react";
+import { Bot, Send, X, MessageCircle, Loader2, Clock, Zap, ArrowUpRight } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useSubscription } from "@/contexts/SubscriptionContext";
+import { Link } from "react-router-dom";
+import { formatDistanceToNow, format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 type Message = {
   role: "user" | "assistant";
@@ -24,9 +27,8 @@ export const DocsAssistantChat = () => {
   ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [usageInfo, setUsageInfo] = useState<{ used: number; limit: number } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const { subscription } = useSubscription();
+  const { aiUsageLimits, canUseChatMessage, incrementChatMessage, currentPlan } = useSubscription();
   const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/docs-assistant`;
 
   // Hint visibility cycle: show after 3s, hide after 8s, repeat
@@ -61,20 +63,26 @@ export const DocsAssistantChat = () => {
     }
   }, [messages]);
 
-  useEffect(() => {
-    // Calculate usage based on subscription
-    if (subscription) {
-      let limit = 50; // free
-      if (subscription.plan === "pro") limit = Infinity;
-      
-      setUsageInfo({
-        used: subscription.ai_analyses_used || 0,
-        limit
-      });
-    }
-  }, [subscription]);
+  const isAtLimit = !canUseChatMessage();
+  const { used, limit, resetAt } = aiUsageLimits.chatMessages;
+  const usagePercentage = limit === Infinity ? 0 : (used / limit) * 100;
+
+  const getTimeUntilReset = () => {
+    if (!resetAt) return null;
+    return formatDistanceToNow(resetAt, { addSuffix: true, locale: ptBR });
+  };
+
+  const getResetDateFormatted = () => {
+    if (!resetAt) return null;
+    return format(resetAt, "dd 'de' MMMM 'às' HH:mm", { locale: ptBR });
+  };
 
   const streamChat = async (userMessage: string) => {
+    if (!canUseChatMessage()) {
+      toast.error("Limite de mensagens atingido. Faça upgrade para continuar.");
+      return;
+    }
+
     const newMessages = [...messages, { role: "user" as const, content: userMessage }];
     setMessages(newMessages);
     setInput("");
@@ -96,12 +104,7 @@ export const DocsAssistantChat = () => {
         const errorData = await resp.json().catch(() => null);
         
         if (resp.status === 429) {
-          if (errorData?.limit) {
-            toast.error(`Limite mensal atingido (${errorData.usage}/${errorData.limit} mensagens)`);
-            setUsageInfo({ used: errorData.usage, limit: errorData.limit });
-          } else {
-            toast.error("Rate limit excedido. Aguarde um momento.");
-          }
+          toast.error("Limite de mensagens atingido. Tente novamente no próximo mês.");
         } else if (resp.status === 402) {
           toast.error("Créditos insuficientes.");
         } else if (resp.status === 401) {
@@ -125,10 +128,8 @@ export const DocsAssistantChat = () => {
 
       setMessages(prev => [...prev, { role: "assistant", content: "" }]);
 
-      // Update usage after successful request
-      if (usageInfo) {
-        setUsageInfo(prev => prev ? { ...prev, used: prev.used + 1 } : null);
-      }
+      // Increment usage after successful request start
+      await incrementChatMessage();
 
       while (!streamDone) {
         const { done, value } = await reader.read();
@@ -183,15 +184,13 @@ export const DocsAssistantChat = () => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
     
-    if (usageInfo && usageInfo.used >= usageInfo.limit) {
+    if (!canUseChatMessage()) {
       toast.error("Limite mensal de mensagens atingido. Faça upgrade para continuar.");
       return;
     }
     
     streamChat(input);
   };
-
-  const usagePercentage = usageInfo ? (usageInfo.used / usageInfo.limit) * 100 : 0;
 
   return (
     <>
@@ -237,12 +236,15 @@ export const DocsAssistantChat = () => {
           </div>
 
           {/* Usage indicator */}
-          {usageInfo && (
-            <div className="px-4 pt-2">
-              <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                <span>Uso mensal</span>
-                <span>{usageInfo.used}/{usageInfo.limit} mensagens</span>
-              </div>
+          <div className="px-4 pt-2">
+            <div className="flex justify-between text-xs text-muted-foreground mb-1">
+              <span className="flex items-center gap-1">
+                <Zap className="w-3 h-3" />
+                Uso mensal
+              </span>
+              <span>{used}/{limit === Infinity ? '∞' : limit} mensagens</span>
+            </div>
+            {limit !== Infinity && (
               <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                 <div 
                   className={`h-full transition-all ${
@@ -253,6 +255,30 @@ export const DocsAssistantChat = () => {
                   style={{ width: `${Math.min(usagePercentage, 100)}%` }}
                 />
               </div>
+            )}
+            {resetAt && limit !== Infinity && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Renova {getTimeUntilReset()}
+              </p>
+            )}
+          </div>
+
+          {/* Limit reached message */}
+          {isAtLimit && (
+            <div className="mx-4 mt-2 p-3 rounded-lg border border-amber-500/30 bg-amber-500/5">
+              <p className="text-sm font-medium text-amber-600 dark:text-amber-400 mb-1">
+                Limite de mensagens atingido
+              </p>
+              <p className="text-xs text-muted-foreground mb-2">
+                Você usou todas as {limit} mensagens disponíveis no plano {currentPlan === 'free' ? 'gratuito' : 'atual'}.
+                {resetAt && ` Seu limite será renovado ${getResetDateFormatted()}.`}
+              </p>
+              <Link to="/pricing">
+                <Button size="sm" className="gap-1 w-full bg-gradient-primary hover:opacity-90">
+                  <ArrowUpRight className="w-3 h-3" />
+                  Ver planos
+                </Button>
+              </Link>
             </div>
           )}
 
@@ -299,24 +325,19 @@ export const DocsAssistantChat = () => {
               <Input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Pergunte sobre Kodo ou K8s..."
-                disabled={isLoading || (usageInfo && usageInfo.used >= usageInfo.limit)}
+                placeholder={isAtLimit ? "Limite atingido..." : "Pergunte sobre Kodo ou K8s..."}
+                disabled={isLoading || isAtLimit}
                 className="flex-1 bg-background/50"
               />
               <Button
                 type="submit"
                 size="icon"
-                disabled={!input.trim() || isLoading || (usageInfo && usageInfo.used >= usageInfo.limit)}
+                disabled={!input.trim() || isLoading || isAtLimit}
                 className="bg-gradient-primary hover:opacity-90"
               >
                 <Send className="w-4 h-4" />
               </Button>
             </div>
-            {usageInfo && usageInfo.used >= usageInfo.limit && (
-              <p className="text-xs text-destructive mt-2 text-center">
-                Limite atingido. Faça upgrade para mais mensagens.
-              </p>
-            )}
           </form>
         </Card>
       )}
