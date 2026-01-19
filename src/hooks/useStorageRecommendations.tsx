@@ -78,15 +78,24 @@ export function useStorageRecommendations() {
       setLastAnalysis(new Date());
 
       return data;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error analyzing storage:', error);
 
-      const errorMessage = error instanceof Error ? error.message : "Falha ao analisar storage";
+      // Extract error message from various formats
+      const errorMessage = error?.context?.body?.error || 
+                           error?.message || 
+                           (typeof error === 'string' ? error : "Falha ao analisar storage");
 
-      if (errorMessage.includes('402') || errorMessage.includes('429')) {
+      const isRateLimitError = errorMessage.includes('Limite de requisições') ||
+                               errorMessage.includes('429') ||
+                               errorMessage.includes('rate limit') ||
+                               errorMessage.includes('402') ||
+                               errorMessage.includes('Payment required');
+
+      if (isRateLimitError) {
         toast({
-          title: "Limite de API atingido",
-          description: "Aguarde alguns minutos antes de tentar novamente",
+          title: "Limite de IA atingido",
+          description: "Aguarde alguns minutos e tente novamente. O limite é renovado periodicamente.",
           variant: "destructive",
         });
       } else {
