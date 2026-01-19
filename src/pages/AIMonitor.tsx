@@ -421,22 +421,6 @@ export default function AIMonitor() {
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-accent/10 to-accent/5 border-accent/20">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Activity className="h-4 w-4 text-accent" />
-                {t('aiMonitor.avgResolutionTime')}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-accent">
-                {stats.avgResolutionTime}m
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {t('aiMonitor.avgTime')}
-              </p>
-            </CardContent>
-          </Card>
 
           <Card className="bg-gradient-to-br from-warning/10 to-warning/5 border-warning/20">
             <CardHeader className="pb-3">
