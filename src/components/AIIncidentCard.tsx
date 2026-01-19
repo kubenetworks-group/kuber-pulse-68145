@@ -1,7 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, Flame, AlertCircle, Info, Bot, CheckCircle, Clock, Play, Sparkles } from "lucide-react";
+import { AlertTriangle, Flame, AlertCircle, Info, Bot, CheckCircle, Clock, Play } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
@@ -32,11 +32,6 @@ type Incident = {
 interface AIIncidentCardProps {
   incident: Incident;
   clusterName?: string;
-  savings?: {
-    estimated_savings: number;
-    saving_type: string;
-    downtime_avoided_minutes: number;
-  } | null;
   onExecuteAction?: (incidentId: string) => void;
 }
 
@@ -81,7 +76,7 @@ const actionTypeLabels: Record<string, string> = {
   optimize_resources: "Optimize Resources"
 };
 
-export const AIIncidentCard = ({ incident, clusterName, savings, onExecuteAction }: AIIncidentCardProps) => {
+export const AIIncidentCard = ({ incident, clusterName, onExecuteAction }: AIIncidentCardProps) => {
   const [expanded, setExpanded] = useState(false);
   const config = severityConfig[incident.severity];
   const Icon = config.icon;
@@ -204,24 +199,6 @@ export const AIIncidentCard = ({ incident, clusterName, savings, onExecuteAction
               </div>
             )}
 
-            {/* AI Savings */}
-            {savings && incident.resolved_at && (
-              <div className="mt-3 p-3 rounded-lg bg-success/10 border border-success/20">
-                <div className="flex items-center gap-2 mb-1">
-                  <Sparkles className="h-4 w-4 text-success" />
-                  <span className="text-sm font-medium text-success">AI Cost Savings</span>
-                </div>
-                <p className="text-2xl font-bold text-success">
-                  ${savings.estimated_savings.toFixed(2)}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {savings.downtime_avoided_minutes > 0 
-                    ? `${savings.downtime_avoided_minutes} minutes of downtime avoided`
-                    : `Optimized via ${savings.saving_type.replace(/_/g, ' ')}`
-                  }
-                </p>
-              </div>
-            )}
           </div>
         )}
 
