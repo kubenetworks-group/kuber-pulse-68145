@@ -49,7 +49,7 @@ const ALERT_TYPES = [
 ];
 
 const ACTION_TYPES = [
-  { value: '', label: 'Nenhuma ação' },
+  { value: 'none', label: 'Nenhuma ação' },
   { value: 'update_agent', label: 'Solicitar atualização do agente' },
   { value: 'restart_agent', label: 'Solicitar reinício do agente' },
   { value: 'view_docs', label: 'Ver documentação' },
@@ -68,7 +68,7 @@ export const AdminClusterAlertsTab = () => {
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
   const [alertType, setAlertType] = useState("info");
-  const [actionType, setActionType] = useState("");
+  const [actionType, setActionType] = useState("none");
 
   const fetchData = async () => {
     setLoading(true);
@@ -131,8 +131,8 @@ export const AdminClusterAlertsTab = () => {
           title,
           message,
           alert_type: alertType,
-          action_type: actionType || null,
-          action_params: actionType ? { type: actionType } : null,
+          action_type: actionType !== 'none' ? actionType : null,
+          action_params: actionType !== 'none' ? { type: actionType } : null,
           created_by: user?.id,
         });
 
@@ -172,7 +172,7 @@ export const AdminClusterAlertsTab = () => {
     setTitle("");
     setMessage("");
     setAlertType("info");
-    setActionType("");
+    setActionType("none");
   };
 
   const getAlertTypeConfig = (type: string) => {
