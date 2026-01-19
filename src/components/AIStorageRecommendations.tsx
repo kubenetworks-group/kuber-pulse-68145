@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Sparkles,
   TrendingDown,
@@ -16,11 +17,15 @@ import {
   DollarSign,
   Database,
   AlertTriangle,
+  Zap,
+  RefreshCw,
+  ArrowUpRight,
 } from "lucide-react";
 import { useStorageRecommendations, StorageRecommendation } from "@/hooks/useStorageRecommendations";
 import { useCurrency } from "@/hooks/useCurrency";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 import {
   Tooltip,
   TooltipContent,
@@ -214,12 +219,15 @@ const RecommendationCard = ({ recommendation, onAccept, onReject, formatCurrency
 
 export const AIStorageRecommendations = () => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const {
     recommendations,
     loading,
     analyzing,
     stats,
     lastAnalysis,
+    rateLimitError,
+    clearRateLimitError,
     analyzeStorage,
     updateRecommendationStatus,
   } = useStorageRecommendations();
@@ -274,6 +282,66 @@ export const AIStorageRecommendations = () => {
       </CardHeader>
 
       <CardContent className="space-y-4">
+        {/* Rate Limit Alert */}
+        {rateLimitError && (
+          <Alert className="border-amber-500/50 bg-amber-500/10">
+            <Zap className="h-5 w-5 text-amber-500" />
+            <AlertTitle className="text-amber-600 dark:text-amber-400 font-semibold">
+              Limite de uso de IA atingido
+            </AlertTitle>
+            <AlertDescription className="mt-2 space-y-3">
+              <p className="text-sm text-muted-foreground">
+                {rateLimitError.message}
+              </p>
+              
+              <div className="flex flex-col sm:flex-row gap-2 pt-2">
+                {rateLimitError.retryAfter && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 px-3 py-2 rounded-md">
+                    <Clock className="w-4 h-4" />
+                    <span>
+                      Tente novamente após {rateLimitError.retryAfter.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                )}
+                
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={clearRateLimitError}
+                    className="gap-1"
+                  >
+                    <X className="w-3 h-3" />
+                    Fechar
+                  </Button>
+                  
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate('/pricing')}
+                    className="gap-1 border-primary/50 text-primary hover:bg-primary/10"
+                  >
+                    <ArrowUpRight className="w-3 h-3" />
+                    Ver planos
+                  </Button>
+                  
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      clearRateLimitError();
+                      analyzeStorage();
+                    }}
+                    className="gap-1"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    Tentar novamente
+                  </Button>
+                </div>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Stats Summary */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="p-3 rounded-lg bg-muted/50 border border-border/50">

@@ -38,6 +38,13 @@ export interface StorageRecommendationStats {
   totalStorageRecoverable: number;
 }
 
+// Rate limit error state type
+export interface RateLimitError {
+  isRateLimited: boolean;
+  message: string;
+  retryAfter?: Date;
+}
+
 // This hook is a placeholder for future storage recommendations functionality
 // The storage_recommendations table does not exist yet in the database
 export function useStorageRecommendations() {
@@ -46,6 +53,11 @@ export function useStorageRecommendations() {
   const [loading, setLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [lastAnalysis, setLastAnalysis] = useState<Date | null>(null);
+  const [rateLimitError, setRateLimitError] = useState<RateLimitError | null>(null);
+
+  const clearRateLimitError = useCallback(() => {
+    setRateLimitError(null);
+  }, []);
 
   const fetchRecommendations = useCallback(async () => {
     if (!selectedClusterId) return;
@@ -58,6 +70,8 @@ export function useStorageRecommendations() {
     if (!selectedClusterId) return null;
 
     setAnalyzing(true);
+    setRateLimitError(null);
+    
     try {
       const { data, error } = await supabase.functions.invoke('analyze-storage-recommendations', {
         body: { cluster_id: selectedClusterId }
@@ -86,17 +100,26 @@ export function useStorageRecommendations() {
                            error?.message || 
                            (typeof error === 'string' ? error : "Falha ao analisar storage");
 
-      const isRateLimitError = errorMessage.includes('Limite de requisições') ||
-                               errorMessage.includes('429') ||
-                               errorMessage.includes('rate limit') ||
-                               errorMessage.includes('402') ||
-                               errorMessage.includes('Payment required');
+      const isRateLimited = errorMessage.includes('Limite de requisições') ||
+                            errorMessage.includes('429') ||
+                            errorMessage.includes('rate limit') ||
+                            errorMessage.includes('Too Many Requests');
+      
+      const isPaymentRequired = errorMessage.includes('402') ||
+                                errorMessage.includes('Payment required') ||
+                                errorMessage.includes('credits');
 
-      if (isRateLimitError) {
-        toast({
-          title: "Limite de IA atingido",
-          description: "Aguarde alguns minutos e tente novamente. O limite é renovado periodicamente.",
-          variant: "destructive",
+      if (isRateLimited || isPaymentRequired) {
+        // Set the rate limit state for UI display
+        const retryTime = new Date();
+        retryTime.setMinutes(retryTime.getMinutes() + 5);
+        
+        setRateLimitError({
+          isRateLimited: true,
+          message: isPaymentRequired 
+            ? "Você atingiu o limite de uso gratuito de IA. Para continuar usando recursos de IA, considere fazer upgrade do seu plano."
+            : "O limite de requisições de IA foi atingido temporariamente. Isso acontece para proteger o sistema e garantir qualidade para todos os usuários.",
+          retryAfter: retryTime,
         });
       } else {
         toast({
@@ -159,6 +182,8 @@ export function useStorageRecommendations() {
     analyzing,
     stats,
     lastAnalysis,
+    rateLimitError,
+    clearRateLimitError,
     analyzeStorage,
     updateRecommendationStatus,
     dismissRecommendation,
