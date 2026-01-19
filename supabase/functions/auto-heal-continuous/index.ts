@@ -73,6 +73,89 @@ serve(async (req) => {
       );
     }
 
+    // ======= CHECK FOR FAILING COMMANDS - PAUSE AUTO-HEAL IF AGENT IS NOT WORKING =======
+    // Count failed commands in the last 24 hours for this cluster
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    
+    const { data: recentCommands, error: commandsError } = await supabase
+      .from('agent_commands')
+      .select('id, status, command_type, created_at, completed_at, result')
+      .eq('cluster_id', cluster_id)
+      .gte('created_at', twentyFourHoursAgo)
+      .order('created_at', { ascending: false });
+    
+    if (!commandsError && recentCommands && recentCommands.length > 0) {
+      const failedCommands = recentCommands.filter(cmd => cmd.status === 'failed');
+      const pendingCommands = recentCommands.filter(cmd => cmd.status === 'pending' || cmd.status === 'sent');
+      const completedCommands = recentCommands.filter(cmd => cmd.status === 'completed');
+      
+      const failureRate = recentCommands.length > 0 
+        ? (failedCommands.length / recentCommands.length) * 100 
+        : 0;
+      
+      // If more than 50% of commands are failing, or there are 5+ consecutive failures
+      // AND there are pending commands stuck - pause auto-heal
+      const consecutiveFailures = failedCommands.slice(0, 5).length;
+      const hasStuckCommands = pendingCommands.filter(cmd => {
+        const createdAt = new Date(cmd.created_at);
+        const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+        return createdAt < thirtyMinutesAgo;
+      }).length > 0;
+      
+      const shouldPause = (failureRate >= 50 && failedCommands.length >= 3) || 
+                          (consecutiveFailures >= 5) ||
+                          (hasStuckCommands && pendingCommands.length >= 3);
+      
+      if (shouldPause && !force) {
+        console.log(`⚠️ Auto-heal paused for cluster ${cluster_id}: ${failedCommands.length} failed, ${pendingCommands.length} pending, failure rate: ${failureRate.toFixed(1)}%`);
+        
+        // Check if agent needs update
+        const needsUpdate = cluster.agent_update_available === true;
+        
+        // Update cluster to indicate auto-heal is paused
+        await supabase
+          .from('clusters')
+          .update({
+            agent_update_message: needsUpdate 
+              ? 'Auto-heal pausado: comandos falhando. Atualize o agente para continuar.'
+              : 'Auto-heal pausado: comandos não estão sendo executados. Verifique a conectividade do agente.',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', cluster_id);
+        
+        // Create notification for user
+        await supabase
+          .from('notifications')
+          .insert({
+            user_id: userId,
+            title: 'Auto-heal pausado',
+            message: needsUpdate 
+              ? `O auto-heal do cluster ${cluster.name} foi pausado porque os comandos estão falhando. Atualize o agente para continuar.`
+              : `O auto-heal do cluster ${cluster.name} foi pausado porque ${failedCommands.length} comandos falharam nas últimas 24h. Verifique o agente.`,
+            type: 'warning',
+            related_entity_type: 'cluster',
+            related_entity_id: cluster_id,
+          });
+        
+        return new Response(
+          JSON.stringify({ 
+            message: 'Auto-heal paused due to high command failure rate',
+            skipped: true,
+            reason: 'agent_commands_failing',
+            stats: {
+              failed: failedCommands.length,
+              pending: pendingCommands.length,
+              completed: completedCommands.length,
+              failure_rate: failureRate.toFixed(1) + '%',
+              needs_agent_update: needsUpdate,
+            }
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+    // ======= END FAILING COMMANDS CHECK =======
+
     const actionsExecuted: any[] = [];
     const severityOrder = ['low', 'medium', 'high', 'critical'];
     const thresholdIndex = severityOrder.indexOf(settings?.severity_threshold || 'high');
