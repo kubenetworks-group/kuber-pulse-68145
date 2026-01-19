@@ -329,19 +329,42 @@ export default function AIMonitor() {
     return true;
   });
 
-  // Stats baseadas no cluster selecionado
+  // Stats baseadas no cluster selecionado e nos comandos do agente
   const clusterIncidents = selectedClusterId
     ? incidents.filter(i => i.cluster_id === selectedClusterId)
     : incidents;
 
-  const activeAIAgents = clusterIncidents.filter(i => 
-    !i.resolved_at && i.action_taken
-  ).length;
+  // Calcular stats baseados nos comandos do agente
+  const commandStats = {
+    total: agentCommands.length,
+    completed: agentCommands.filter(c => c.status === 'completed').length,
+    failed: agentCommands.filter(c => c.status === 'failed').length,
+    pending: agentCommands.filter(c => c.status === 'pending' || c.status === 'executing').length,
+  };
+
+  // Agentes ativos = comandos pendentes/executando
+  const activeAIAgents = commandStats.pending > 0 ? commandStats.pending : 
+    (clusterIncidents.filter(i => !i.resolved_at && i.action_taken).length || 
+    (agentCommands.length > 0 ? 1 : 0));
+
+  // Taxa de sucesso baseada nos comandos
+  const commandSuccessRate = commandStats.total > 0 
+    ? Math.round((commandStats.completed / commandStats.total) * 100)
+    : 0;
+
+  // Calcular tempo de downtime evitado baseado nos comandos completados
+  // Cada comando bem-sucedido evita em média 15 minutos de downtime
+  const preventedDowntimeFromCommands = commandStats.completed * 15;
+  
+  // Adicionar downtime evitado de incidentes resolvidos
+  const preventedDowntimeFromIncidents = clusterIncidents.filter(i => i.resolved_at).length * 15;
+  
+  const totalPreventedDowntime = preventedDowntimeFromCommands + preventedDowntimeFromIncidents;
 
   const stats = {
-    total: clusterIncidents.length,
-    actionsExecuted: clusterIncidents.filter(i => i.action_taken).length,
-    resolved: clusterIncidents.filter(i => i.resolved_at).length,
+    total: clusterIncidents.length + commandStats.total,
+    actionsExecuted: clusterIncidents.filter(i => i.action_taken).length + commandStats.completed,
+    resolved: clusterIncidents.filter(i => i.resolved_at).length + commandStats.completed,
     avgResolutionTime: clusterIncidents.filter(i => i.resolved_at).length > 0
       ? Math.round(
           clusterIncidents
@@ -354,12 +377,15 @@ export default function AIMonitor() {
         )
       : 0,
     activeAgents: activeAIAgents,
-    preventedDowntime: clusterIncidents.filter(i => i.resolved_at).length * 15 // estimativa em minutos
+    preventedDowntime: totalPreventedDowntime
   };
 
-  const successRate = stats.total > 0 
-    ? Math.round((stats.resolved / stats.total) * 100) 
-    : 0;
+  // Taxa de sucesso combinada (comandos e incidentes)
+  const totalActions = commandStats.total + clusterIncidents.filter(i => i.action_taken).length;
+  const successfulActions = commandStats.completed + clusterIncidents.filter(i => i.resolved_at).length;
+  const successRate = totalActions > 0 
+    ? Math.round((successfulActions / totalActions) * 100) 
+    : (commandStats.total > 0 ? commandSuccessRate : 0);
 
   const getDateLocale = () => {
     switch(i18n.language) {
