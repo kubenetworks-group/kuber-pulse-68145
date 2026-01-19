@@ -291,8 +291,21 @@ export const AIStorageRecommendations = () => {
       </CardHeader>
 
       <CardContent className="space-y-4">
+        {/* Rate Limit Error from Edge Function (Gemini API) */}
+        {rateLimitError && (
+          <AIUsageLimitAlert
+            title="Limite temporário de IA atingido"
+            message={rateLimitError.message}
+            resetAt={rateLimitError.retryAfter || null}
+            onClose={clearRateLimitError}
+            onRetry={handleAnalyzeStorage}
+            isLoading={analyzing}
+            isApiRateLimit
+          />
+        )}
+
         {/* Usage Limit Display */}
-        {isAtLimit ? (
+        {!rateLimitError && isAtLimit ? (
           <AIUsageLimitAlert
             title="Limite de análises de storage atingido"
             used={aiUsageLimits.storageAnalyses.used}
@@ -303,7 +316,7 @@ export const AIStorageRecommendations = () => {
             onRetry={handleAnalyzeStorage}
             isLoading={analyzing}
           />
-        ) : (
+        ) : !rateLimitError && (
           <AIUsageLimitAlert
             used={aiUsageLimits.storageAnalyses.used}
             limit={aiUsageLimits.storageAnalyses.limit}
