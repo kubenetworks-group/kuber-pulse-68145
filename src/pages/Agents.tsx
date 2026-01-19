@@ -8,7 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCluster } from "@/contexts/ClusterContext";
 import { toast } from "sonner";
-import { Terminal, Copy, Trash2, Plus, Download, Activity } from "lucide-react";
+import { Terminal, Copy, Trash2, Plus, Download, Activity, AlertTriangle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -31,6 +31,8 @@ interface AgentKey {
   updated_at: string;
   clusters: {
     name: string;
+    agent_version: string | null;
+    agent_update_available: boolean | null;
   };
 }
 
@@ -71,7 +73,7 @@ const Agents = () => {
     try {
       const { data, error } = await supabase
         .from('agent_api_keys')
-        .select('id, name, cluster_id, api_key_prefix, is_active, last_seen, created_at, updated_at, clusters(name)')
+        .select('id, name, cluster_id, api_key_prefix, is_active, last_seen, created_at, updated_at, clusters(name, agent_version, agent_update_available)')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -263,23 +265,30 @@ spec:
     toast.success('YAML baixado com sucesso');
   };
 
-  const getStatusColor = (lastSeen: string | null, isActive: boolean) => {
+  const getStatusColor = (lastSeen: string | null, isActive: boolean, updateAvailable: boolean | null) => {
     if (!isActive) return 'bg-muted text-muted-foreground';
     if (!lastSeen) return 'bg-warning text-warning-foreground';
     
     const minutesAgo = (new Date().getTime() - new Date(lastSeen).getTime()) / 1000 / 60;
-    if (minutesAgo < 2) return 'bg-success text-success-foreground';
-    if (minutesAgo < 5) return 'bg-warning text-warning-foreground';
+    if (minutesAgo < 5) {
+      // Online but check for updates
+      if (updateAvailable) return 'bg-warning text-warning-foreground';
+      return 'bg-success text-success-foreground';
+    }
+    if (minutesAgo < 60) return 'bg-warning text-warning-foreground';
     return 'bg-destructive text-destructive-foreground';
   };
 
-  const getStatusText = (lastSeen: string | null, isActive: boolean) => {
+  const getStatusText = (lastSeen: string | null, isActive: boolean, updateAvailable: boolean | null, agentVersion: string | null) => {
     if (!isActive) return 'Inativo';
     if (!lastSeen) return 'Aguardando';
     
     const minutesAgo = Math.floor((new Date().getTime() - new Date(lastSeen).getTime()) / 1000 / 60);
-    if (minutesAgo < 1) return 'Online';
-    if (minutesAgo < 5) return `${minutesAgo}min atrás`;
+    if (minutesAgo < 5) {
+      if (updateAvailable) return 'Desatualizado';
+      return 'Online';
+    }
+    if (minutesAgo < 60) return `${minutesAgo}min atrás`;
     return 'Offline';
   };
 
@@ -425,60 +434,88 @@ spec:
           </Card>
         ) : (
           <div className="grid gap-4">
-            {agentKeys.map((agent) => (
-              <Card key={agent.id} className="hover:shadow-md transition-all">
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <CardTitle>{agent.name}</CardTitle>
-                        <Badge className={getStatusColor(agent.last_seen, agent.is_active)}>
-                          <Activity className="w-3 h-3 mr-1" />
-                          {getStatusText(agent.last_seen, agent.is_active)}
-                        </Badge>
+            {agentKeys.map((agent) => {
+              const updateAvailable = agent.clusters?.agent_update_available;
+              const agentVersion = agent.clusters?.agent_version;
+              
+              return (
+                <Card key={agent.id} className="hover:shadow-md transition-all">
+                  <CardHeader>
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2">
+                          <CardTitle>{agent.name}</CardTitle>
+                          <Badge className={getStatusColor(agent.last_seen, agent.is_active, updateAvailable)}>
+                            {updateAvailable ? <AlertTriangle className="w-3 h-3 mr-1" /> : <Activity className="w-3 h-3 mr-1" />}
+                            {getStatusText(agent.last_seen, agent.is_active, updateAvailable, agentVersion)}
+                          </Badge>
+                          {agentVersion && (
+                            <Badge variant="outline" className="text-xs">
+                              v{agentVersion}
+                            </Badge>
+                          )}
+                        </div>
+                        <CardDescription>
+                          Cluster: {agent.clusters.name}
+                        </CardDescription>
                       </div>
-                      <CardDescription>
-                        Cluster: {agent.clusters.name}
-                      </CardDescription>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => deleteAgentKey(agent.id)}
+                        className="text-destructive"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => deleteAgentKey(agent.id)}
-                      className="text-destructive"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    <div>
-                      <Label className="text-xs text-muted-foreground">API Key (prefix)</Label>
-                      <div className="flex items-center gap-2 mt-1">
-                        <code className="flex-1 px-3 py-2 bg-muted rounded text-sm font-mono text-muted-foreground">
-                          {agent.api_key_prefix || 'kp_***...'}
-                        </code>
-                        <span className="text-xs text-muted-foreground italic">
-                          Chave mostrada apenas na criação
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded text-xs text-amber-600 dark:text-amber-400">
-                      ⚠️ Para baixar o YAML de deploy, crie uma nova API key. A chave só é exibida no momento da criação por segurança.
-                    </div>
-
-                    <div className="text-xs text-muted-foreground">
-                      Criado em {new Date(agent.created_at).toLocaleDateString('pt-BR')}
-                      {agent.last_seen && (
-                        <> · Última conexão: {new Date(agent.last_seen).toLocaleString('pt-BR')}</>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {/* Update available warning */}
+                      {updateAvailable && (
+                        <div className="p-3 bg-warning/10 border border-warning/30 rounded-lg">
+                          <div className="flex items-start gap-2">
+                            <AlertTriangle className="w-4 h-4 text-warning mt-0.5 flex-shrink-0" />
+                            <div>
+                              <p className="text-sm font-medium text-warning">Atualização disponível</p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Uma nova versão do agente está disponível. Execute o comando abaixo para atualizar:
+                              </p>
+                              <div className="mt-2 p-2 bg-background rounded text-xs font-mono break-all">
+                                kubectl set image deployment/kodo-agent agent=ghcr.io/kubenetworks-group/kodo-agent:latest -n kodo
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       )}
+
+                      <div>
+                        <Label className="text-xs text-muted-foreground">API Key (prefix)</Label>
+                        <div className="flex items-center gap-2 mt-1">
+                          <code className="flex-1 px-3 py-2 bg-muted rounded text-sm font-mono text-muted-foreground">
+                            {agent.api_key_prefix || 'kp_***...'}
+                          </code>
+                          <span className="text-xs text-muted-foreground italic">
+                            Chave mostrada apenas na criação
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded text-xs text-amber-600 dark:text-amber-400">
+                        ⚠️ Para baixar o YAML de deploy, crie uma nova API key. A chave só é exibida no momento da criação por segurança.
+                      </div>
+
+                      <div className="text-xs text-muted-foreground">
+                        Criado em {new Date(agent.created_at).toLocaleDateString('pt-BR')}
+                        {agent.last_seen && (
+                          <> · Última conexão: {new Date(agent.last_seen).toLocaleString('pt-BR')}</>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         )}
       </div>
