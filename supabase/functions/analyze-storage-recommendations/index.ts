@@ -334,13 +334,24 @@ Retorne JSON puro (sem markdown):
   } catch (error) {
     console.error('Error in analyze-storage-recommendations:', error);
 
-    const statusCode = error instanceof Error && error.message === 'Unauthorized' ? 401 :
-                       error instanceof Error && error.message.includes('402') ? 402 :
-                       error instanceof Error && error.message.includes('429') ? 429 : 500;
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    
+    // Detect rate limit errors from various sources
+    const isRateLimitError = errorMessage.includes('429') || 
+                             errorMessage.includes('Limite de requisições') ||
+                             errorMessage.includes('rate limit') ||
+                             errorMessage.toLowerCase().includes('too many requests');
+    
+    const isPaymentError = errorMessage.includes('402') || 
+                           errorMessage.includes('Payment required');
+
+    const statusCode = errorMessage === 'Unauthorized' ? 401 :
+                       isPaymentError ? 402 :
+                       isRateLimitError ? 429 : 500;
 
     return new Response(
       JSON.stringify({
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: errorMessage,
         success: false,
       }),
       {
