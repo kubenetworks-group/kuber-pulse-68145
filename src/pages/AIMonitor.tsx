@@ -11,7 +11,8 @@ import { SecurityThreatCard } from "@/components/SecurityThreatCard";
 import { ContainerTerminalAlert } from "@/components/ContainerTerminalAlert";
 import { AgentUpdateBanner } from "@/components/AgentUpdateBanner";
 import { useSecurityThreats } from "@/hooks/useSecurityThreats";
-import { Bot, Activity, CheckCircle, Shield, Zap, AlertCircle, History, ShieldAlert, Settings, Clock, Server, AlertTriangle } from "lucide-react";
+import { Bot, Activity, CheckCircle, Shield, Zap, AlertCircle, History, ShieldAlert, Settings, Clock, Server, AlertTriangle, RefreshCw, Search } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { AutoHealConfig } from "@/components/AutoHealConfig";
 import { AutoHealActionsLog } from "@/components/AutoHealActionsLog";
 import { ClusterSecurityAnalysis } from "@/components/ClusterSecurityAnalysis";
@@ -62,6 +63,8 @@ export default function AIMonitor() {
   const [recentAnomalies, setRecentAnomalies] = useState<any[]>([]);
   const [scanHistory, setScanHistory] = useState<any[]>([]);
   const [agentCommands, setAgentCommands] = useState<any[]>([]);
+  const [analyzingCluster, setAnalyzingCluster] = useState(false);
+  const [lastAnalysisTime, setLastAnalysisTime] = useState<Date | null>(null);
 
   // Security Threats Hook - Real-time monitoring
   const {
@@ -234,11 +237,18 @@ export default function AIMonitor() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Fetch incidents
-      const { data: incidentsData, error: incidentsError } = await supabase
+      // Fetch incidents - filter by cluster if selected
+      let query = supabase
         .from('ai_incidents')
-        .select('*')
-        .order('created_at', { ascending: false });
+        .select('*');
+      
+      if (selectedClusterId) {
+        query = query.eq('cluster_id', selectedClusterId);
+      }
+      
+      const { data: incidentsData, error: incidentsError } = await query
+        .order('created_at', { ascending: false })
+        .limit(100);
 
       if (incidentsError) throw incidentsError;
       setIncidents((incidentsData || []) as any);
@@ -252,6 +262,91 @@ export default function AIMonitor() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Manual analysis function
+  const handleManualAnalysis = async () => {
+    if (!selectedClusterId || !user) {
+      toast({
+        title: "Selecione um cluster",
+        description: "Você precisa selecionar um cluster para executar a análise",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setAnalyzingCluster(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('agent-analyze-anomalies', {
+        body: { cluster_id: selectedClusterId, user_id: user.id }
+      });
+
+      if (error) throw error;
+
+      setLastAnalysisTime(new Date());
+      
+      if (data.anomalies && data.anomalies.length > 0) {
+        toast({
+          title: "🔍 Análise Concluída",
+          description: `Encontradas ${data.anomalies.length} anomalia(s) no cluster`,
+          variant: data.anomalies.some((a: any) => a.severity === 'critical') ? 'destructive' : 'default'
+        });
+        // Refresh anomalies
+        fetchRecentAnomalies();
+        fetchData();
+      } else {
+        toast({
+          title: "✅ Cluster Saudável",
+          description: data.summary || "Nenhuma anomalia detectada no momento",
+        });
+      }
+    } catch (error: any) {
+      console.error('Error analyzing cluster:', error);
+      
+      // Check for rate limit
+      if (error.message?.includes('rate limit') || error.message?.includes('429')) {
+        toast({
+          title: "Limite de análises atingido",
+          description: "Aguarde alguns minutos antes de executar outra análise",
+          variant: "destructive"
+        });
+      } else {
+        toast({
+          title: "Erro na análise",
+          description: error.message || "Não foi possível analisar o cluster",
+          variant: "destructive"
+        });
+      }
+    } finally {
+      setAnalyzingCluster(false);
+    }
+  };
+
+  // Check agent status
+  const getAgentStatus = () => {
+    if (!selectedClusterId) return null;
+    
+    const cluster = clusters.find(c => c.id === selectedClusterId);
+    if (!cluster) return null;
+
+    const lastSeen = cluster.agent_last_seen_at 
+      ? new Date(cluster.agent_last_seen_at) 
+      : (cluster.last_sync ? new Date(cluster.last_sync) : null);
+    
+    if (!lastSeen) {
+      return { status: 'never', message: 'Agente nunca conectou' };
+    }
+
+    const minutesAgo = Math.floor((new Date().getTime() - lastSeen.getTime()) / (60 * 1000));
+    
+    if (minutesAgo < 5) {
+      return { status: 'online', message: 'Agente online', lastSeen };
+    } else if (minutesAgo < 60) {
+      return { status: 'recent', message: `Última atividade há ${minutesAgo} minutos`, lastSeen };
+    } else {
+      const hoursAgo = Math.floor(minutesAgo / 60);
+      return { status: 'offline', message: `Agente offline há ${hoursAgo} hora(s)`, lastSeen };
     }
   };
 
@@ -617,24 +712,142 @@ export default function AIMonitor() {
 
           {/* Anomalies Tab */}
           <TabsContent value="anomalies" className="space-y-4">
+            {/* Agent Status Alert */}
+            {(() => {
+              const agentStatus = getAgentStatus();
+              if (!selectedClusterId) {
+                return (
+                  <Card className="border-warning/30 bg-warning/5">
+                    <CardContent className="pt-4">
+                      <div className="flex items-center gap-3">
+                        <AlertTriangle className="h-5 w-5 text-warning flex-shrink-0" />
+                        <div>
+                          <p className="font-medium text-warning">Nenhum cluster selecionado</p>
+                          <p className="text-sm text-muted-foreground">
+                            Selecione um cluster no menu lateral para visualizar as anomalias.
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              }
+              if (agentStatus?.status === 'never') {
+                return (
+                  <Card className="border-destructive/30 bg-destructive/5">
+                    <CardContent className="pt-4">
+                      <div className="flex items-center gap-3">
+                        <Server className="h-5 w-5 text-destructive flex-shrink-0" />
+                        <div>
+                          <p className="font-medium text-destructive">Agente Kodo não conectado</p>
+                          <p className="text-sm text-muted-foreground">
+                            O agente nunca se conectou a este cluster. Instale o agente para começar a monitorar.
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              }
+              if (agentStatus?.status === 'offline') {
+                return (
+                  <Card className="border-warning/30 bg-warning/5">
+                    <CardContent className="pt-4">
+                      <div className="flex items-center gap-3">
+                        <AlertTriangle className="h-5 w-5 text-warning flex-shrink-0" />
+                        <div>
+                          <p className="font-medium text-warning">Agente Offline</p>
+                          <p className="text-sm text-muted-foreground">
+                            {agentStatus.message}. As anomalias podem estar desatualizadas.
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              }
+              return null;
+            })()}
+
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <AlertCircle className="h-5 w-5" />
-                  Anomalias Detectadas pelo Agente
-                </CardTitle>
-                <CardDescription>
-                  Problemas detectados automaticamente no cluster através do agente Kodo
-                </CardDescription>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <AlertCircle className="h-5 w-5" />
+                      Anomalias Detectadas pelo Agente
+                    </CardTitle>
+                    <CardDescription>
+                      Problemas detectados automaticamente no cluster através do agente Kodo
+                    </CardDescription>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {lastAnalysisTime && (
+                      <span className="text-xs text-muted-foreground">
+                        Última análise: {format(lastAnalysisTime, 'HH:mm', { locale: getDateLocale() })}
+                      </span>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleManualAnalysis}
+                      disabled={analyzingCluster || !selectedClusterId}
+                      className="gap-2"
+                    >
+                      {analyzingCluster ? (
+                        <>
+                          <RefreshCw className="h-4 w-4 animate-spin" />
+                          Analisando...
+                        </>
+                      ) : (
+                        <>
+                          <Search className="h-4 w-4" />
+                          Executar Análise
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
                 {recentAnomalies.length === 0 ? (
                   <div className="text-center py-12">
-                    <Bot className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
-                    <h3 className="text-lg font-semibold mb-2">Nenhuma anomalia detectada</h3>
-                    <p className="text-muted-foreground text-sm">
-                      O agente está monitorando seu cluster. Anomalias aparecerão aqui quando detectadas.
-                    </p>
+                    {!selectedClusterId ? (
+                      <>
+                        <Server className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
+                        <h3 className="text-lg font-semibold mb-2">Selecione um Cluster</h3>
+                        <p className="text-muted-foreground text-sm">
+                          Escolha um cluster no menu lateral para visualizar as anomalias detectadas.
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="h-16 w-16 mx-auto mb-4 text-success opacity-70" />
+                        <h3 className="text-lg font-semibold mb-2 text-success">Cluster Saudável</h3>
+                        <p className="text-muted-foreground text-sm max-w-md mx-auto">
+                          Nenhuma anomalia detectada. O agente está monitorando seu cluster continuamente.
+                        </p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleManualAnalysis}
+                          disabled={analyzingCluster}
+                          className="mt-4 gap-2"
+                        >
+                          {analyzingCluster ? (
+                            <>
+                              <RefreshCw className="h-4 w-4 animate-spin" />
+                              Analisando...
+                            </>
+                          ) : (
+                            <>
+                              <Search className="h-4 w-4" />
+                              Executar Análise Manual
+                            </>
+                          )}
+                        </Button>
+                      </>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -942,11 +1155,26 @@ export default function AIMonitor() {
                 </div>
               ) : filteredIncidents.length === 0 ? (
                 <div className="text-center py-12">
-                  <Bot className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
-                  <h3 className="text-lg font-semibold mb-2">{t('aiMonitor.noIncidentsDetected')}</h3>
-                  <p className="text-muted-foreground">
-                    {t('aiMonitor.aiMonitoring')}
-                  </p>
+                  {!selectedClusterId ? (
+                    <>
+                      <Server className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
+                      <h3 className="text-lg font-semibold mb-2">Selecione um Cluster</h3>
+                      <p className="text-muted-foreground text-sm">
+                        Escolha um cluster no menu lateral para visualizar os incidentes.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="h-16 w-16 mx-auto mb-4 text-success opacity-70" />
+                      <h3 className="text-lg font-semibold mb-2 text-success">{t('aiMonitor.noIncidentsDetected')}</h3>
+                      <p className="text-muted-foreground text-sm max-w-md mx-auto">
+                        Nenhum incidente detectado. A IA está monitorando seu cluster continuamente para detectar problemas.
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Incidentes são criados automaticamente quando anomalias são detectadas pelo agente Kodo.
+                      </p>
+                    </>
+                  )}
                 </div>
               ) : (
                 filteredIncidents.map(incident => (
