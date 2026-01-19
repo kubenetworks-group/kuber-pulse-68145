@@ -4,138 +4,93 @@ import { Card } from "@/components/ui/card";
 import { Footer } from "@/components/Footer";
 import kodoLogo from "@/assets/kodo-logo.png";
 import { useEffect, useState, useRef } from "react";
-import { 
-  Shield, 
-  Zap, 
-  Brain, 
-  DollarSign, 
-  Activity, 
-  Wrench,
-  ArrowRight,
-  Check,
-  Sparkles,
-  Server,
-  Lock,
-  BarChart3,
-  Upload,
-  Settings,
-  LineChart,
-  BellRing,
-  Terminal,
-  Cpu,
-  Database,
-  GitBranch,
-  Boxes,
-  Network
-} from "lucide-react";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
+import { Shield, Zap, Brain, DollarSign, Activity, Wrench, ArrowRight, Check, Sparkles, Server, Lock, BarChart3, Upload, Settings, LineChart, BellRing, Terminal, Cpu, Database, GitBranch, Boxes, Network } from "lucide-react";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 // Animated counter hook
 const useCounter = (end: number, duration: number = 2000, start: number = 0) => {
   const [count, setCount] = useState(start);
   const [isVisible, setIsVisible] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setIsVisible(true);
-        }
-      },
-      { threshold: 0.1 }
-    );
-
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setIsVisible(true);
+      }
+    }, {
+      threshold: 0.1
+    });
     if (ref.current) {
       observer.observe(ref.current);
     }
-
     return () => observer.disconnect();
   }, []);
-
   useEffect(() => {
     if (!isVisible) return;
-    
     let startTime: number;
     const animate = (currentTime: number) => {
       if (!startTime) startTime = currentTime;
       const progress = Math.min((currentTime - startTime) / duration, 1);
       setCount(Math.floor(progress * (end - start) + start));
-      
       if (progress < 1) {
         requestAnimationFrame(animate);
       }
     };
-    
     requestAnimationFrame(animate);
   }, [isVisible, end, duration, start]);
-
-  return { count, ref };
+  return {
+    count,
+    ref
+  };
 };
 
 // Matrix code rain component
 const MatrixRain = () => {
   const chars = "01アイウエオカキクケコサシスセソタチツテト";
   const columns = 20;
-  
-  return (
-    <div className="absolute inset-0 overflow-hidden opacity-10 pointer-events-none">
-      {Array.from({ length: columns }).map((_, i) => (
-        <div
-          key={i}
-          className="absolute text-primary text-xs font-mono whitespace-nowrap"
-          style={{
-            left: `${(i / columns) * 100}%`,
-            animation: `matrix-fall ${8 + Math.random() * 4}s linear infinite`,
-            animationDelay: `${Math.random() * 5}s`,
-          }}
-        >
-          {Array.from({ length: 30 }).map((_, j) => (
-            <div key={j} style={{ opacity: 1 - j * 0.03 }}>
+  return <div className="absolute inset-0 overflow-hidden opacity-10 pointer-events-none">
+      {Array.from({
+      length: columns
+    }).map((_, i) => <div key={i} className="absolute text-primary text-xs font-mono whitespace-nowrap" style={{
+      left: `${i / columns * 100}%`,
+      animation: `matrix-fall ${8 + Math.random() * 4}s linear infinite`,
+      animationDelay: `${Math.random() * 5}s`
+    }}>
+          {Array.from({
+        length: 30
+      }).map((_, j) => <div key={j} style={{
+        opacity: 1 - j * 0.03
+      }}>
               {chars[Math.floor(Math.random() * chars.length)]}
-            </div>
-          ))}
-        </div>
-      ))}
-    </div>
-  );
+            </div>)}
+        </div>)}
+    </div>;
 };
 
 // Floating tech icons
 const FloatingTechIcons = () => {
   const icons = [Cpu, Database, GitBranch, Boxes, Network, Terminal];
-  
-  return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none">
-      {icons.map((Icon, i) => (
-        <div
-          key={i}
-          className="absolute animate-float-tech opacity-20"
-          style={{
-            left: `${10 + (i * 15)}%`,
-            top: `${20 + (i % 3) * 25}%`,
-            animationDelay: `${i * 0.5}s`,
-            animationDuration: `${5 + i}s`,
-          }}
-        >
+  return <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      {icons.map((Icon, i) => <div key={i} className="absolute animate-float-tech opacity-20" style={{
+      left: `${10 + i * 15}%`,
+      top: `${20 + i % 3 * 25}%`,
+      animationDelay: `${i * 0.5}s`,
+      animationDuration: `${5 + i}s`
+    }}>
           <Icon className="w-8 h-8 text-primary" />
-        </div>
-      ))}
-    </div>
-  );
+        </div>)}
+    </div>;
 };
 
 // Typing effect component
-const TypingText = ({ texts }: { texts: string[] }) => {
+const TypingText = ({
+  texts
+}: {
+  texts: string[];
+}) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [displayText, setDisplayText] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
-
   useEffect(() => {
     const currentText = texts[currentIndex];
     const timeout = setTimeout(() => {
@@ -150,157 +105,134 @@ const TypingText = ({ texts }: { texts: string[] }) => {
           setDisplayText(displayText.slice(0, -1));
         } else {
           setIsDeleting(false);
-          setCurrentIndex((prev) => (prev + 1) % texts.length);
+          setCurrentIndex(prev => (prev + 1) % texts.length);
         }
       }
     }, isDeleting ? 50 : 100);
-
     return () => clearTimeout(timeout);
   }, [displayText, isDeleting, currentIndex, texts]);
-
-  return (
-    <span className="text-primary">
+  return <span className="text-primary">
       {displayText}
       <span className="animate-pulse">|</span>
-    </span>
-  );
+    </span>;
 };
-
-const features = [
-  {
-    icon: Brain,
-    title: "Monitor IA",
-    description: "Analise inteligente e deteccao de anomalias com machine learning para prevenir incidentes antes que acontecam.",
-    color: "text-primary",
-    gradient: "from-primary/20 to-violet-500/20"
-  },
-  {
-    icon: Shield,
-    title: "Seguranca",
-    description: "Analise completa de RBAC, Network Policies, Pod Security e muito mais. Identifique vulnerabilidades automaticamente.",
-    color: "text-success",
-    gradient: "from-success/20 to-emerald-500/20"
-  },
-  {
-    icon: DollarSign,
-    title: "FinOps",
-    description: "Controle de custos multi-cloud com insights detalhados. Economize ate 40% na sua infraestrutura.",
-    color: "text-warning",
-    gradient: "from-warning/20 to-amber-500/20"
-  },
-  {
-    icon: Activity,
-    title: "Observabilidade",
-    description: "Metricas em tempo real de CPU, memoria, storage e rede. Dashboards personalizados para cada necessidade.",
-    color: "text-chart-4",
-    gradient: "from-violet-500/20 to-purple-500/20"
-  },
-  {
-    icon: Wrench,
-    title: "Auto-Healing",
-    description: "Correcoes automaticas de problemas detectados. Reinicie pods, escale recursos e muito mais.",
-    color: "text-destructive",
-    gradient: "from-destructive/20 to-red-500/20"
-  },
-  {
-    icon: Server,
-    title: "Multi-Cluster",
-    description: "Gerencie multiplos clusters Kubernetes de diferentes provedores em uma unica interface unificada.",
-    color: "text-primary",
-    gradient: "from-blue-500/20 to-cyan-500/20"
-  }
-];
-
-const stats = [
-  { value: 99.9, suffix: "%", label: "Uptime garantido" },
-  { value: 40, suffix: "%", label: "Economia media" },
-  { value: 5, suffix: "min", label: "Setup rapido" },
-  { value: 24, suffix: "/7", label: "Monitoramento" },
-];
-
-const howItWorks = [
-  {
-    step: 1,
-    icon: Upload,
-    title: "Conecte seu Cluster",
-    description: "Instale o agente Kodo no seu cluster Kubernetes em menos de 5 minutos."
-  },
-  {
-    step: 2,
-    icon: Settings,
-    title: "Configure Preferencias",
-    description: "Defina alertas personalizados e politicas de auto-healing."
-  },
-  {
-    step: 3,
-    icon: LineChart,
-    title: "Monitore em Tempo Real",
-    description: "Acompanhe metricas e anomalias em dashboards interativos."
-  },
-  {
-    step: 4,
-    icon: BellRing,
-    title: "Receba Insights",
-    description: "Seja notificado antes que problemas afetem seus usuarios."
-  }
-];
-
-const faqs = [
-  {
-    question: "O que e o Kodo?",
-    answer: "Kodo e uma plataforma de gestao Kubernetes com inteligencia artificial que oferece auto-healing automatico, analise de seguranca, FinOps e observabilidade em tempo real para seus clusters K8s."
-  },
-  {
-    question: "Como funciona o auto-healing do Kodo?",
-    answer: "O auto-healing do Kodo usa IA para detectar anomalias e problemas em seus clusters Kubernetes automaticamente. Quando um problema e identificado, o sistema pode reiniciar pods, escalar deployments ou aplicar correcoes sem intervencao manual."
-  },
-  {
-    question: "O Kodo funciona com qualquer provedor de cloud?",
-    answer: "Sim! O Kodo e multi-cloud e funciona com AWS EKS, Google GKE, Azure AKS, DigitalOcean Kubernetes, e clusters on-premises."
-  },
-  {
-    question: "Quanto tempo leva para configurar o Kodo?",
-    answer: "A configuracao do Kodo leva menos de 5 minutos. Basta instalar nosso agente no seu cluster usando kubectl ou helm."
-  },
-  {
-    question: "O Kodo e seguro?",
-    answer: "Sim, seguranca e nossa prioridade. O Kodo coleta apenas metadados e metricas de performance dos seus clusters, nunca dados de aplicacao ou secrets."
-  },
-  {
-    question: "Posso testar o Kodo gratuitamente?",
-    answer: "Sim! Oferecemos um plano gratuito permanente que inclui 1 cluster e 5 analises de IA por mes. Nao pedimos cartao de credito."
-  }
-];
-
-const pricingPlans = [
-  {
-    name: "Free",
-    price: "R$0",
-    period: "/mes",
-    description: "Para comecar a explorar",
-    features: ["1 cluster", "5 analises IA/mes", "Metricas basicas", "Suporte comunidade"],
-    cta: "Comecar Gratis",
-    popular: false
-  },
-  {
-    name: "Pro",
-    price: "R$149",
-    period: "/mes",
-    description: "Para times em crescimento",
-    features: ["Ate 10 clusters", "Analises IA ilimitadas", "Auto-Healing", "Alertas avancados", "Suporte prioritario"],
-    cta: "Comecar Agora",
-    popular: true
-  }
-];
-
+const features = [{
+  icon: Brain,
+  title: "Monitor IA",
+  description: "Analise inteligente e deteccao de anomalias com machine learning para prevenir incidentes antes que acontecam.",
+  color: "text-primary",
+  gradient: "from-primary/20 to-violet-500/20"
+}, {
+  icon: Shield,
+  title: "Seguranca",
+  description: "Analise completa de RBAC, Network Policies, Pod Security e muito mais. Identifique vulnerabilidades automaticamente.",
+  color: "text-success",
+  gradient: "from-success/20 to-emerald-500/20"
+}, {
+  icon: DollarSign,
+  title: "FinOps",
+  description: "Controle de custos multi-cloud com insights detalhados. Economize ate 40% na sua infraestrutura.",
+  color: "text-warning",
+  gradient: "from-warning/20 to-amber-500/20"
+}, {
+  icon: Activity,
+  title: "Observabilidade",
+  description: "Metricas em tempo real de CPU, memoria, storage e rede. Dashboards personalizados para cada necessidade.",
+  color: "text-chart-4",
+  gradient: "from-violet-500/20 to-purple-500/20"
+}, {
+  icon: Wrench,
+  title: "Auto-Healing",
+  description: "Correcoes automaticas de problemas detectados. Reinicie pods, escale recursos e muito mais.",
+  color: "text-destructive",
+  gradient: "from-destructive/20 to-red-500/20"
+}, {
+  icon: Server,
+  title: "Multi-Cluster",
+  description: "Gerencie multiplos clusters Kubernetes de diferentes provedores em uma unica interface unificada.",
+  color: "text-primary",
+  gradient: "from-blue-500/20 to-cyan-500/20"
+}];
+const stats = [{
+  value: 99.9,
+  suffix: "%",
+  label: "Uptime garantido"
+}, {
+  value: 40,
+  suffix: "%",
+  label: "Economia media"
+}, {
+  value: 5,
+  suffix: "min",
+  label: "Setup rapido"
+}, {
+  value: 24,
+  suffix: "/7",
+  label: "Monitoramento"
+}];
+const howItWorks = [{
+  step: 1,
+  icon: Upload,
+  title: "Conecte seu Cluster",
+  description: "Instale o agente Kodo no seu cluster Kubernetes em menos de 5 minutos."
+}, {
+  step: 2,
+  icon: Settings,
+  title: "Configure Preferencias",
+  description: "Defina alertas personalizados e politicas de auto-healing."
+}, {
+  step: 3,
+  icon: LineChart,
+  title: "Monitore em Tempo Real",
+  description: "Acompanhe metricas e anomalias em dashboards interativos."
+}, {
+  step: 4,
+  icon: BellRing,
+  title: "Receba Insights",
+  description: "Seja notificado antes que problemas afetem seus usuarios."
+}];
+const faqs = [{
+  question: "O que e o Kodo?",
+  answer: "Kodo e uma plataforma de gestao Kubernetes com inteligencia artificial que oferece auto-healing automatico, analise de seguranca, FinOps e observabilidade em tempo real para seus clusters K8s."
+}, {
+  question: "Como funciona o auto-healing do Kodo?",
+  answer: "O auto-healing do Kodo usa IA para detectar anomalias e problemas em seus clusters Kubernetes automaticamente. Quando um problema e identificado, o sistema pode reiniciar pods, escalar deployments ou aplicar correcoes sem intervencao manual."
+}, {
+  question: "O Kodo funciona com qualquer provedor de cloud?",
+  answer: "Sim! O Kodo e multi-cloud e funciona com AWS EKS, Google GKE, Azure AKS, DigitalOcean Kubernetes, e clusters on-premises."
+}, {
+  question: "Quanto tempo leva para configurar o Kodo?",
+  answer: "A configuracao do Kodo leva menos de 5 minutos. Basta instalar nosso agente no seu cluster usando kubectl ou helm."
+}, {
+  question: "O Kodo e seguro?",
+  answer: "Sim, seguranca e nossa prioridade. O Kodo coleta apenas metadados e metricas de performance dos seus clusters, nunca dados de aplicacao ou secrets."
+}, {
+  question: "Posso testar o Kodo gratuitamente?",
+  answer: "Sim! Oferecemos um plano gratuito permanente que inclui 1 cluster e 5 analises de IA por mes. Nao pedimos cartao de credito."
+}];
+const pricingPlans = [{
+  name: "Free",
+  price: "R$0",
+  period: "/mes",
+  description: "Para comecar a explorar",
+  features: ["1 cluster", "5 analises IA/mes", "Metricas basicas", "Suporte comunidade"],
+  cta: "Comecar Gratis",
+  popular: false
+}, {
+  name: "Pro",
+  price: "R$149",
+  period: "/mes",
+  description: "Para times em crescimento",
+  features: ["Ate 10 clusters", "Analises IA ilimitadas", "Auto-Healing", "Alertas avancados", "Suporte prioritario"],
+  cta: "Comecar Agora",
+  popular: true
+}];
 export default function LandingPage() {
   const stat1 = useCounter(99.9, 2000, 0);
   const stat2 = useCounter(40, 2000, 0);
   const stat3 = useCounter(5, 1500, 0);
   const stat4 = useCounter(24, 1500, 0);
-
-  return (
-    <div className="min-h-screen bg-background relative overflow-hidden">
+  return <div className="min-h-screen bg-background relative overflow-hidden">
       {/* Advanced Background Effects */}
       <div className="absolute inset-0 bg-grid-pattern opacity-[0.02]" />
       <div className="absolute inset-0 code-bg" />
@@ -308,9 +240,15 @@ export default function LandingPage() {
       <FloatingTechIcons />
       
       {/* Animated gradient orbs */}
-      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/20 rounded-full blur-[100px] animate-pulse" style={{ animationDuration: '4s' }} />
-      <div className="absolute bottom-1/3 right-1/4 w-[500px] h-[500px] bg-violet-500/15 rounded-full blur-[120px] animate-pulse" style={{ animationDuration: '6s' }} />
-      <div className="absolute top-2/3 left-1/2 w-72 h-72 bg-cyan-500/10 rounded-full blur-[80px] animate-pulse" style={{ animationDuration: '5s' }} />
+      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/20 rounded-full blur-[100px] animate-pulse" style={{
+      animationDuration: '4s'
+    }} />
+      <div className="absolute bottom-1/3 right-1/4 w-[500px] h-[500px] bg-violet-500/15 rounded-full blur-[120px] animate-pulse" style={{
+      animationDuration: '6s'
+    }} />
+      <div className="absolute top-2/3 left-1/2 w-72 h-72 bg-cyan-500/10 rounded-full blur-[80px] animate-pulse" style={{
+      animationDuration: '5s'
+    }} />
 
       {/* Header */}
       <header className="relative z-20 border-b border-border/50 bg-background/60 backdrop-blur-xl sticky top-0">
@@ -327,16 +265,10 @@ export default function LandingPage() {
           </Link>
           
           <div className="hidden md:flex items-center gap-8">
-            {["Recursos", "Como Funciona", "Precos", "FAQ"].map((item, i) => (
-              <a 
-                key={item}
-                href={`#${item.toLowerCase().replace(" ", "-")}`} 
-                className="text-muted-foreground hover:text-primary transition-all hover:scale-105 relative group"
-              >
+            {["Recursos", "Como Funciona", "Precos", "FAQ"].map((item, i) => <a key={item} href={`#${item.toLowerCase().replace(" ", "-")}`} className="text-muted-foreground hover:text-primary transition-all hover:scale-105 relative group">
                 {item}
                 <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-primary to-violet-500 group-hover:w-full transition-all duration-300" />
-              </a>
-            ))}
+              </a>)}
           </div>
 
           <div className="flex items-center gap-3">
@@ -360,7 +292,7 @@ export default function LandingPage() {
         <section className="relative z-10 container mx-auto px-4 pt-20 pb-32">
           <div className="max-w-5xl mx-auto text-center space-y-8">
             {/* Terminal-style badge */}
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-card/80 border border-primary/30 text-primary font-mono text-sm animate-in fade-in slide-in-from-bottom-4 duration-700 animate-border-glow">
+            <div className="">
               <Terminal className="w-4 h-4" />
               <span className="text-muted-foreground">$</span>
               <span>kubectl get kodo --status=</span>
@@ -465,11 +397,7 @@ export default function LandingPage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {features.map((feature, index) => (
-                <Card 
-                  key={feature.title}
-                  className="group p-6 bg-card/50 backdrop-blur-sm border-border/50 hover:border-primary/50 transition-all duration-500 hover:shadow-xl hover:shadow-primary/10 hover:-translate-y-2 relative overflow-hidden"
-                >
+              {features.map((feature, index) => <Card key={feature.title} className="group p-6 bg-card/50 backdrop-blur-sm border-border/50 hover:border-primary/50 transition-all duration-500 hover:shadow-xl hover:shadow-primary/10 hover:-translate-y-2 relative overflow-hidden">
                   {/* Animated background gradient */}
                   <div className={`absolute inset-0 bg-gradient-to-br ${feature.gradient} opacity-0 group-hover:opacity-100 transition-opacity duration-500`} />
                   
@@ -483,8 +411,7 @@ export default function LandingPage() {
 
                   {/* Corner decoration */}
                   <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-bl from-primary/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                </Card>
-              ))}
+                </Card>)}
             </div>
           </div>
         </section>
@@ -510,8 +437,7 @@ export default function LandingPage() {
               <div className="hidden lg:block absolute top-1/2 left-0 right-0 h-1 bg-gradient-to-r from-primary via-violet-500 to-success transform -translate-y-1/2 rounded-full" />
               
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-                {howItWorks.map((item, index) => (
-                  <div key={item.step} className="relative group">
+                {howItWorks.map((item, index) => <div key={item.step} className="relative group">
                     <Card className="p-6 bg-card/80 backdrop-blur-sm border-border/50 hover:border-primary/50 transition-all duration-300 h-full hover:shadow-xl hover:shadow-primary/10 hover:-translate-y-2">
                       <div className="flex flex-col items-center text-center">
                         {/* Step number with glow */}
@@ -530,8 +456,7 @@ export default function LandingPage() {
                         <p className="text-sm text-muted-foreground">{item.description}</p>
                       </div>
                     </Card>
-                  </div>
-                ))}
+                  </div>)}
               </div>
             </div>
 
@@ -566,23 +491,13 @@ export default function LandingPage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-              {pricingPlans.map((plan) => (
-                <Card 
-                  key={plan.name}
-                  className={`p-8 relative overflow-hidden transition-all duration-300 hover:-translate-y-2 ${
-                    plan.popular 
-                      ? 'border-primary/50 bg-gradient-to-br from-primary/10 to-violet-500/10 shadow-xl shadow-primary/10' 
-                      : 'bg-card/50 backdrop-blur-sm border-border/50 hover:border-primary/30'
-                  }`}
-                >
-                  {plan.popular && (
-                    <>
+              {pricingPlans.map(plan => <Card key={plan.name} className={`p-8 relative overflow-hidden transition-all duration-300 hover:-translate-y-2 ${plan.popular ? 'border-primary/50 bg-gradient-to-br from-primary/10 to-violet-500/10 shadow-xl shadow-primary/10' : 'bg-card/50 backdrop-blur-sm border-border/50 hover:border-primary/30'}`}>
+                  {plan.popular && <>
                       <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary to-violet-500" />
                       <div className="absolute top-4 right-4 px-3 py-1 rounded-full bg-gradient-to-r from-primary to-violet-500 text-primary-foreground text-xs font-bold animate-pulse">
                         Popular
                       </div>
-                    </>
-                  )}
+                    </>}
                   
                   <h3 className="text-2xl font-bold mb-2">{plan.name}</h3>
                   <p className="text-muted-foreground mb-4">{plan.description}</p>
@@ -593,26 +508,20 @@ export default function LandingPage() {
                   </div>
 
                   <ul className="space-y-3 mb-8">
-                    {plan.features.map((feature) => (
-                      <li key={feature} className="flex items-center gap-3">
+                    {plan.features.map(feature => <li key={feature} className="flex items-center gap-3">
                         <div className="w-5 h-5 rounded-full bg-success/20 flex items-center justify-center flex-shrink-0">
                           <Check className="w-3 h-3 text-success" />
                         </div>
                         <span className="text-sm">{feature}</span>
-                      </li>
-                    ))}
+                      </li>)}
                   </ul>
 
                   <Link to="/auth" className="block">
-                    <Button 
-                      className={`w-full transition-all ${plan.popular ? 'bg-gradient-to-r from-primary to-violet-500 hover:opacity-90' : 'hover:bg-primary/10'}`}
-                      variant={plan.popular ? "default" : "outline"}
-                    >
+                    <Button className={`w-full transition-all ${plan.popular ? 'bg-gradient-to-r from-primary to-violet-500 hover:opacity-90' : 'hover:bg-primary/10'}`} variant={plan.popular ? "default" : "outline"}>
                       {plan.cta}
                     </Button>
                   </Link>
-                </Card>
-              ))}
+                </Card>)}
             </div>
 
             <div className="text-center mt-8">
@@ -642,20 +551,14 @@ export default function LandingPage() {
 
             <div className="max-w-3xl mx-auto">
               <Accordion type="single" collapsible className="space-y-4">
-                {faqs.map((faq, index) => (
-                  <AccordionItem 
-                    key={index} 
-                    value={`item-${index}`}
-                    className="bg-card/50 backdrop-blur-sm border border-border/50 rounded-xl px-6 data-[state=open]:border-primary/50 data-[state=open]:shadow-lg data-[state=open]:shadow-primary/5 transition-all"
-                  >
+                {faqs.map((faq, index) => <AccordionItem key={index} value={`item-${index}`} className="bg-card/50 backdrop-blur-sm border border-border/50 rounded-xl px-6 data-[state=open]:border-primary/50 data-[state=open]:shadow-lg data-[state=open]:shadow-primary/5 transition-all">
                     <AccordionTrigger className="text-left hover:no-underline py-5">
                       <span className="font-semibold text-lg">{faq.question}</span>
                     </AccordionTrigger>
                     <AccordionContent className="text-muted-foreground pb-5 leading-relaxed">
                       {faq.answer}
                     </AccordionContent>
-                  </AccordionItem>
-                ))}
+                  </AccordionItem>)}
               </Accordion>
             </div>
           </div>
@@ -701,6 +604,5 @@ export default function LandingPage() {
       </main>
 
       <Footer />
-    </div>
-  );
+    </div>;
 }
