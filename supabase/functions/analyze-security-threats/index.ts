@@ -62,7 +62,7 @@ serve(async (req) => {
 
   try {
     const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
+    if (!authHeader?.startsWith('Bearer ')) {
       throw new Error('Missing authorization header');
     }
 
@@ -76,10 +76,14 @@ serve(async (req) => {
       }
     );
 
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
-    if (userError || !user) {
+    const token = authHeader.replace('Bearer ', '');
+    const { data, error: claimsError } = await supabaseClient.auth.getClaims(token);
+    if (claimsError || !data?.claims?.sub) {
+      console.error('Claims error:', claimsError);
       throw new Error('Unauthorized');
     }
+    
+    const userId = data.claims.sub;
 
     const { cluster_id, silent = false } = await req.json();
 
@@ -230,7 +234,7 @@ Retorne JSON (sem markdown):
 
     // Try Gemini first
     try {
-      aiResult = await callGemini(geminiMessages, user.id, "analyze-security-threats");
+      aiResult = await callGemini(geminiMessages, userId, "analyze-security-threats");
     } catch (geminiError: any) {
       console.log('Gemini failed:', geminiError.message);
       
@@ -353,7 +357,7 @@ Retorne JSON (sem markdown):
       if (newThreats.length > 0) {
         const threatsToInsert = newThreats.map((threat: any) => ({
           cluster_id,
-          user_id: user.id,
+          user_id: userId,
           threat_type: threat.threat_type,
           severity: threat.severity,
           title: threat.title,
@@ -389,7 +393,7 @@ Retorne JSON (sem markdown):
             await supabaseClient
               .from('notifications')
               .insert({
-                user_id: user.id,
+                user_id: userId,
                 title: criticalHighThreats.some((t: any) => t.severity === 'critical')
                   ? '🚨 ALERTA CRITICO DE SEGURANCA'
                   : '⚠️ Alerta de Seguranca',
