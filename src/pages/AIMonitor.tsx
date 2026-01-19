@@ -11,7 +11,7 @@ import { SecurityThreatCard } from "@/components/SecurityThreatCard";
 import { ContainerTerminalAlert } from "@/components/ContainerTerminalAlert";
 import { AgentUpdateBanner } from "@/components/AgentUpdateBanner";
 import { useSecurityThreats } from "@/hooks/useSecurityThreats";
-import { Bot, Activity, CheckCircle, Shield, Zap, AlertCircle, History, ShieldAlert, Settings } from "lucide-react";
+import { Bot, Activity, CheckCircle, Shield, Zap, AlertCircle, History, ShieldAlert, Settings, Clock } from "lucide-react";
 import { AutoHealConfig } from "@/components/AutoHealConfig";
 import { AutoHealActionsLog } from "@/components/AutoHealActionsLog";
 import { ClusterSecurityAnalysis } from "@/components/ClusterSecurityAnalysis";
@@ -830,9 +830,147 @@ export default function AIMonitor() {
             </div>
           </TabsContent>
 
-          {/* History Tab */}
+          {/* History Tab - Histórico consolidado */}
           <TabsContent value="history" className="space-y-4">
-            <ScanHistoryTab scanHistory={scanHistory} loading={loading} />
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <History className="h-5 w-5" />
+                  Histórico de Ações da IA
+                </CardTitle>
+                <CardDescription>
+                  Registro completo de incidentes resolvidos, comandos executados e anomalias tratadas
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {(() => {
+                  // Combinar dados de diferentes fontes em um histórico unificado
+                  const historyItems = [
+                    // Incidentes resolvidos
+                    ...clusterIncidents
+                      .filter(i => i.resolved_at)
+                      .map(i => ({
+                        id: i.id,
+                        type: 'incident' as const,
+                        title: i.title,
+                        description: i.description,
+                        severity: i.severity,
+                        status: 'resolved',
+                        date: i.resolved_at || i.created_at,
+                        createdAt: i.created_at,
+                        icon: '🔧',
+                        action: i.auto_heal_action || 'Resolvido manualmente'
+                      })),
+                    // Comandos executados
+                    ...agentCommands
+                      .filter(c => c.status === 'completed' || c.status === 'failed')
+                      .map(c => ({
+                        id: c.id,
+                        type: 'command' as const,
+                        title: `Comando: ${c.command_type.replace(/_/g, ' ')}`,
+                        description: c.result?.message || JSON.stringify(c.command_params),
+                        severity: c.status === 'failed' ? 'high' : 'low',
+                        status: c.status,
+                        date: c.completed_at || c.executed_at || c.created_at,
+                        createdAt: c.created_at,
+                        icon: c.status === 'completed' ? '✅' : '❌',
+                        action: c.command_type
+                      })),
+                    // Anomalias resolvidas
+                    ...recentAnomalies
+                      .filter(a => a.resolved)
+                      .map(a => ({
+                        id: a.id,
+                        type: 'anomaly' as const,
+                        title: `Anomalia: ${a.anomaly_type}`,
+                        description: a.description,
+                        severity: a.severity,
+                        status: 'resolved',
+                        date: a.resolved_at || a.created_at,
+                        createdAt: a.created_at,
+                        icon: '🔍',
+                        action: a.recommendation || 'Auto-heal aplicado'
+                      }))
+                  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+                  if (historyItems.length === 0) {
+                    return (
+                      <div className="text-center py-12">
+                        <History className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
+                        <h3 className="text-lg font-semibold mb-2">Nenhum histórico disponível</h3>
+                        <p className="text-muted-foreground text-sm">
+                          Ações da IA aparecerão aqui conforme forem executadas e resolvidas.
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-3">
+                      {historyItems.slice(0, 50).map((item) => (
+                        <div 
+                          key={`${item.type}-${item.id}`}
+                          className={`p-4 border rounded-lg ${
+                            item.status === 'completed' || item.status === 'resolved' 
+                              ? 'bg-success/5 border-success/20' 
+                              : 'bg-destructive/5 border-destructive/20'
+                          }`}
+                        >
+                          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 flex-wrap mb-2">
+                                <span className="text-lg">{item.icon}</span>
+                                <Badge variant={
+                                  item.type === 'incident' ? 'default' :
+                                  item.type === 'command' ? 'secondary' : 'outline'
+                                } className="text-xs">
+                                  {item.type === 'incident' ? 'Incidente' :
+                                   item.type === 'command' ? 'Comando' : 'Anomalia'}
+                                </Badge>
+                                <Badge variant={
+                                  item.severity === 'critical' ? 'destructive' :
+                                  item.severity === 'high' ? 'destructive' :
+                                  item.severity === 'medium' ? 'secondary' : 'outline'
+                                } className="text-xs">
+                                  {item.severity}
+                                </Badge>
+                              </div>
+                              <p className="font-medium text-sm">{item.title}</p>
+                              <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                                {typeof item.description === 'string' 
+                                  ? item.description 
+                                  : JSON.stringify(item.description).substring(0, 100)}
+                              </p>
+                              {item.action && (
+                                <p className="text-xs text-primary mt-2">
+                                  💡 Ação: {item.action}
+                                </p>
+                              )}
+                            </div>
+                            <div className="text-left sm:text-right text-xs text-muted-foreground space-y-1">
+                              <div className="flex items-center gap-1 sm:justify-end">
+                                <Clock className="w-3 h-3" />
+                                <span>
+                                  {format(new Date(item.date), 'dd/MM/yyyy HH:mm', { locale: getDateLocale() })}
+                                </span>
+                              </div>
+                              <div className="text-[10px]">
+                                Criado: {format(new Date(item.createdAt), 'dd/MM HH:mm', { locale: getDateLocale() })}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </CardContent>
+            </Card>
+            
+            {/* Manter o histórico de scans também */}
+            {scanHistory.length > 0 && (
+              <ScanHistoryTab scanHistory={scanHistory} loading={loading} />
+            )}
           </TabsContent>
 
           {/* Auto-Heal Tab */}
