@@ -718,11 +718,17 @@ export default function AIMonitor() {
                     {agentCommands.map((cmd) => {
                       // Encontrar o cluster para verificar status do agente
                       const cmdCluster = clusters.find(c => c.id === cmd.cluster_id);
+                      
+                      // Usar agent_last_seen_at ou last_sync como fallback
                       const agentLastSeen = cmdCluster?.agent_last_seen_at 
                         ? new Date(cmdCluster.agent_last_seen_at) 
-                        : null;
+                        : (cmdCluster?.last_sync ? new Date(cmdCluster.last_sync) : null);
+                      
                       const isAgentOnline = agentLastSeen && 
                         (new Date().getTime() - agentLastSeen.getTime()) < 5 * 60 * 1000; // 5 min
+                      
+                      const isAgentRecentlyActive = agentLastSeen && 
+                        (new Date().getTime() - agentLastSeen.getTime()) < 60 * 60 * 1000; // 1 hora
                       
                       // Diagnóstico do comando
                       const getDiagnostic = () => {
@@ -735,28 +741,55 @@ export default function AIMonitor() {
                           };
                         }
                         if (cmd.status === 'pending' || cmd.status === 'sent') {
-                          if (!cmdCluster?.agent_version) {
+                          // Verificar se o agente está buscando comandos (endpoint get-commands)
+                          // Se o agente envia métricas mas não busca comandos, pode ser versão antiga
+                          if (!cmdCluster?.agent_version && !cmdCluster?.agent_last_seen_at) {
+                            // Sem agent_version mas com métricas recentes = versão antiga do agente
+                            if (cmdCluster?.last_sync && isAgentRecentlyActive) {
+                              return {
+                                type: 'warning',
+                                message: 'Agente Kodo precisa de atualização',
+                                details: `O agente está enviando métricas (última: ${format(new Date(cmdCluster.last_sync), 'dd/MM/yyyy HH:mm', { locale: getDateLocale() })}), mas não está buscando comandos. Atualize o agente para a versão mais recente: kubectl set image deployment/kodo-agent agent=ghcr.io/kubenetworks-group/kodo-agent:latest -n kodo`
+                              };
+                            }
                             return {
                               type: 'warning',
-                              message: 'Agente Kodo não instalado no cluster',
-                              details: 'O comando está aguardando, mas o agente nunca se conectou. Instale o agente no cluster para que os comandos sejam executados.'
+                              message: 'Agente Kodo não conectado',
+                              details: 'O agente nunca se conectou a este cluster. Verifique se o agente está instalado e rodando.'
                             };
                           }
+                          
                           if (!isAgentOnline) {
+                            const offlineMinutes = agentLastSeen 
+                              ? Math.floor((new Date().getTime() - agentLastSeen.getTime()) / (60 * 1000))
+                              : null;
+                            
+                            let offlineText = '';
+                            if (offlineMinutes) {
+                              if (offlineMinutes < 60) {
+                                offlineText = `${offlineMinutes} minutos`;
+                              } else if (offlineMinutes < 1440) {
+                                offlineText = `${Math.floor(offlineMinutes / 60)} horas`;
+                              } else {
+                                offlineText = `${Math.floor(offlineMinutes / 1440)} dias`;
+                              }
+                            }
+                            
                             return {
                               type: 'warning',
-                              message: 'Agente Kodo offline',
-                              details: `O agente foi visto pela última vez em ${agentLastSeen ? format(agentLastSeen, 'dd/MM/yyyy HH:mm', { locale: getDateLocale() }) : 'nunca'}. Verifique se o pod do agente está rodando no cluster.`
+                              message: `Agente Kodo offline há ${offlineText || 'tempo indeterminado'}`,
+                              details: `Última atividade: ${agentLastSeen ? format(agentLastSeen, 'dd/MM/yyyy HH:mm', { locale: getDateLocale() }) : 'nunca'}. Verifique se o pod do agente está rodando: kubectl get pods -n kodo`
                             };
                           }
+                          
                           // Comando pendente há muito tempo
                           const createdAt = new Date(cmd.created_at);
                           const waitingMinutes = Math.floor((new Date().getTime() - createdAt.getTime()) / (60 * 1000));
                           if (waitingMinutes > 10) {
                             return {
-                              type: 'warning',
+                              type: 'info',
                               message: `Aguardando execução há ${waitingMinutes} minutos`,
-                              details: 'O agente pode estar ocupado processando outros comandos ou enfrentando problemas de conectividade.'
+                              details: 'O agente busca comandos a cada minuto. Se persistir, verifique os logs do agente.'
                             };
                           }
                         }
