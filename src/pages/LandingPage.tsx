@@ -292,12 +292,11 @@ export default function LandingPage() {
         <section className="relative z-10 container mx-auto px-4 pt-20 pb-32">
           <div className="max-w-5xl mx-auto text-center space-y-8">
             {/* Terminal-style badge */}
-            <div className="">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-card/50 border border-border/50 font-mono text-sm">
               <Terminal className="w-4 h-4" />
               <span className="text-muted-foreground">$</span>
               <span>kubectl get kodo --status=</span>
               <span className="text-success">active</span>
-              <span className="animate-pulse">_</span>
             </div>
             
             <h1 className="text-4xl sm:text-5xl lg:text-7xl font-bold leading-tight animate-in fade-in slide-in-from-bottom-4 duration-700 delay-100">
