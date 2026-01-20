@@ -118,24 +118,30 @@ const Settings = () => {
     e.preventDefault();
     
     if (!validateUsername(profile.username)) return;
+    if (!user?.id) return;
     
     setLoading(true);
 
+    // Use upsert to handle cases where profile doesn't exist yet
     const { error } = await supabase
       .from("profiles")
-      .update({
+      .upsert({
+        id: user.id,
         username: profile.username || null,
         company: profile.company,
-      })
-      .eq("id", user?.id);
+        full_name: profile.full_name || null,
+        avatar_url: profile.avatar_url || null,
+      }, { 
+        onConflict: 'id' 
+      });
 
     if (error) {
       if (error.code === '23505') {
         toast.error("Este username já está em uso");
       } else {
         toast.error("Falha ao atualizar perfil");
+        console.error(error);
       }
-      console.error(error);
     } else {
       toast.success("Perfil atualizado com sucesso!");
     }
