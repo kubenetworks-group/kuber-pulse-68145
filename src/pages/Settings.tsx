@@ -159,7 +159,7 @@ const Settings = () => {
     },
     {
       name: "Pro",
-      price: "R$ 99",
+      price: "R$ 250",
       period: "/mês",
       features: ["10 clusters", "Análises de IA ilimitadas", "90 dias de histórico", "Auto-healing", "Suporte prioritário"],
       current: currentPlan === 'pro',

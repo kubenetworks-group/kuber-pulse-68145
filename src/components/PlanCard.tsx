@@ -23,7 +23,7 @@ const planDetails: Record<PlanType, { name: string; price: string; priceNote?: s
   },
   pro: {
     name: 'Pro',
-    price: 'R$ 350',
+    price: 'R$ 250',
     priceNote: '/mês',
     description: 'Para equipes e profissionais',
     highlight: true,
