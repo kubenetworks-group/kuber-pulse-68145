@@ -29,15 +29,22 @@ export function AgentUpdateBanner() {
     if (!selectedClusterId) return;
 
     try {
-      // Get cluster's current agent version
+      // Get cluster's current agent version and last seen time
       const { data: clusterData, error: clusterError } = await supabase
         .from('clusters')
-        .select('agent_version, agent_update_available, agent_update_message')
+        .select('agent_version, agent_last_seen_at, agent_update_available, agent_update_message')
         .eq('id', selectedClusterId)
         .single();
 
       if (clusterError || !clusterData) {
         console.log('Could not get cluster agent version');
+        return;
+      }
+
+      // Don't show update banner if agent has never connected
+      if (!clusterData.agent_last_seen_at || !clusterData.agent_version) {
+        console.log('Agent has never connected to this cluster');
+        setUpdateInfo(null);
         return;
       }
 
@@ -53,11 +60,11 @@ export function AgentUpdateBanner() {
         return;
       }
 
-      const currentVersion = clusterData.agent_version || 'unknown';
+      const currentVersion = clusterData.agent_version;
       
       // Compare versions
       const compareVersions = (v1: string, v2: string): number => {
-        if (!v1 || !v2 || v1 === 'unknown' || v2 === 'unknown') return -1;
+        if (!v1 || !v2) return 0;
         const normalize = (v: string) => v.replace(/^v/, '').split('.').map(Number);
         const [major1, minor1, patch1] = normalize(v1);
         const [major2, minor2, patch2] = normalize(v2);
@@ -66,8 +73,7 @@ export function AgentUpdateBanner() {
         return patch1 - patch2;
       };
 
-      const needsUpdate = currentVersion !== 'unknown' && 
-        compareVersions(currentVersion, latestVersion.version) < 0;
+      const needsUpdate = compareVersions(currentVersion, latestVersion.version) < 0;
 
       setUpdateInfo({
         current_version: currentVersion,
