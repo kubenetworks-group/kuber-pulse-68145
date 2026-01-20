@@ -5,6 +5,7 @@ import { Footer } from "./Footer";
 import { DocsAssistantChat } from "./DocsAssistantChat";
 import { TrialBanner } from "./TrialBanner";
 import { AgentUpdateButton } from "./AgentUpdateButton";
+import { UserProfileDropdown } from "./UserProfileDropdown";
 import { useState, useEffect, useRef } from "react";
 import { useLocation } from "react-router-dom";
 import { Menu, X } from "lucide-react";
@@ -118,6 +119,7 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
             <div className="flex items-center gap-2">
               <AgentUpdateButton />
               <NotificationBell />
+              <UserProfileDropdown />
             </div>
           </div>
         </div>
