@@ -165,7 +165,8 @@ export const NotificationBell = () => {
     setUnreadCount(0);
   };
 
-  const deleteNotification = async (notificationId: string) => {
+  const deleteNotification = async (e: React.MouseEvent, notificationId: string) => {
+    e.stopPropagation();
     const { error } = await supabase
       .from('notifications')
       .delete()
@@ -181,6 +182,24 @@ export const NotificationBell = () => {
     if (wasUnread) {
       setUnreadCount(prev => Math.max(0, prev - 1));
     }
+  };
+
+  const deleteAllNotifications = async () => {
+    if (notifications.length === 0) return;
+
+    const ids = notifications.map(n => n.id);
+    const { error } = await supabase
+      .from('notifications')
+      .delete()
+      .in('id', ids);
+
+    if (error) {
+      console.error('Error deleting all notifications:', error);
+      return;
+    }
+
+    setNotifications([]);
+    setUnreadCount(0);
   };
 
   return (
@@ -211,16 +230,28 @@ export const NotificationBell = () => {
       <DropdownMenuContent align="end" className="w-[400px] p-0">
         <div className="flex items-center justify-between p-4 border-b">
           <h3 className="font-semibold">Notificações</h3>
-          {unreadCount > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={markAllAsRead}
-              className="text-xs"
-            >
-              Marcar todas como lidas
-            </Button>
-          )}
+          <div className="flex items-center gap-1">
+            {unreadCount > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={markAllAsRead}
+                className="text-xs"
+              >
+                Marcar como lidas
+              </Button>
+            )}
+            {notifications.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={deleteAllNotifications}
+                className="text-xs text-destructive hover:text-destructive"
+              >
+                Limpar todas
+              </Button>
+            )}
+          </div>
         </div>
         
         <ScrollArea className="h-[400px]">
@@ -286,7 +317,7 @@ export const NotificationBell = () => {
                               variant="ghost"
                               size="icon"
                               className="h-7 w-7"
-                              onClick={() => deleteNotification(notification.id)}
+                              onClick={(e) => deleteNotification(e, notification.id)}
                             >
                               <X className="h-4 w-4" />
                             </Button>
