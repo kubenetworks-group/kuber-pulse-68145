@@ -8,6 +8,7 @@ import { ClusterOnboarding } from "@/components/ClusterOnboarding";
 import { ClusterStatusSummary } from "@/components/ClusterStatusSummary";
 import { AgentUpdateBanner } from "@/components/AgentUpdateBanner";
 import { AdminAlertsDisplay } from "@/components/AdminAlertsDisplay";
+import { WeeklyReportBanner } from "@/components/WeeklyReportBanner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCluster } from "@/contexts/ClusterContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -126,6 +127,9 @@ const Index = () => {
       <div className="p-4 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 animate-fade-in">
         {/* Agent Update Banner */}
         <AgentUpdateBanner />
+
+        {/* Weekly Report Banner */}
+        <WeeklyReportBanner />
 
         {/* Admin Alerts */}
         <AdminAlertsDisplay />

@@ -1535,6 +1535,113 @@ export type Database = {
         }
         Relationships: []
       }
+      weekly_reports: {
+        Row: {
+          ai_summary: string | null
+          auto_heals_applied: number | null
+          cluster_health_score: number | null
+          cluster_id: string
+          cluster_status: string | null
+          created_at: string
+          critical_incidents: number | null
+          critical_issues: Json | null
+          id: string
+          is_read: boolean | null
+          nodes_count: number | null
+          pods_count: number | null
+          pods_healthy: number | null
+          pods_restarted: number | null
+          pods_unhealthy: number | null
+          read_at: string | null
+          recommendations: Json | null
+          report_date: string
+          resolved_incidents: number | null
+          resource_limits_applied: number | null
+          storage_available_gb: number | null
+          storage_used_gb: number | null
+          total_agent_actions: number | null
+          total_incidents: number | null
+          total_storage_gb: number | null
+          updated_at: string
+          user_id: string
+          warning_incidents: number | null
+          week_end: string
+          week_start: string
+        }
+        Insert: {
+          ai_summary?: string | null
+          auto_heals_applied?: number | null
+          cluster_health_score?: number | null
+          cluster_id: string
+          cluster_status?: string | null
+          created_at?: string
+          critical_incidents?: number | null
+          critical_issues?: Json | null
+          id?: string
+          is_read?: boolean | null
+          nodes_count?: number | null
+          pods_count?: number | null
+          pods_healthy?: number | null
+          pods_restarted?: number | null
+          pods_unhealthy?: number | null
+          read_at?: string | null
+          recommendations?: Json | null
+          report_date?: string
+          resolved_incidents?: number | null
+          resource_limits_applied?: number | null
+          storage_available_gb?: number | null
+          storage_used_gb?: number | null
+          total_agent_actions?: number | null
+          total_incidents?: number | null
+          total_storage_gb?: number | null
+          updated_at?: string
+          user_id: string
+          warning_incidents?: number | null
+          week_end: string
+          week_start: string
+        }
+        Update: {
+          ai_summary?: string | null
+          auto_heals_applied?: number | null
+          cluster_health_score?: number | null
+          cluster_id?: string
+          cluster_status?: string | null
+          created_at?: string
+          critical_incidents?: number | null
+          critical_issues?: Json | null
+          id?: string
+          is_read?: boolean | null
+          nodes_count?: number | null
+          pods_count?: number | null
+          pods_healthy?: number | null
+          pods_restarted?: number | null
+          pods_unhealthy?: number | null
+          read_at?: string | null
+          recommendations?: Json | null
+          report_date?: string
+          resolved_incidents?: number | null
+          resource_limits_applied?: number | null
+          storage_available_gb?: number | null
+          storage_used_gb?: number | null
+          total_agent_actions?: number | null
+          total_incidents?: number | null
+          total_storage_gb?: number | null
+          updated_at?: string
+          user_id?: string
+          warning_incidents?: number | null
+          week_end?: string
+          week_start?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "weekly_reports_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_approvals: {
         Row: {
           action_params: Json
