@@ -49,30 +49,71 @@ export function AgentUpdateButton() {
 
     setLoading(true);
     try {
-      // Get API key for this cluster to check update
-      const { data: apiKey } = await supabase
-        .from('agent_api_keys')
-        .select('api_key')
-        .eq('cluster_id', selectedClusterId)
-        .eq('is_active', true)
+      // Get cluster's current agent version and last seen time
+      const { data: clusterData, error: clusterError } = await supabase
+        .from('clusters')
+        .select('agent_version, agent_last_seen_at')
+        .eq('id', selectedClusterId)
         .single();
 
-      if (!apiKey) {
+      if (clusterError || !clusterData) {
         setLoading(false);
         return;
       }
 
-      // Call edge function to check update
-      const { data, error } = await supabase.functions.invoke('agent-check-update', {
-        headers: {
-          'x-agent-key': apiKey.api_key,
-          'x-agent-version': 'v0.0.1', // This would come from actual agent
-        }
+      // Don't show update button if agent has never connected
+      if (!clusterData.agent_last_seen_at || !clusterData.agent_version) {
+        setUpdateInfo(null);
+        setLoading(false);
+        return;
+      }
+
+      // Get latest available version
+      const { data: latestVersion } = await supabase
+        .from('agent_versions')
+        .select('version, release_notes')
+        .eq('is_latest', true)
+        .single();
+
+      if (!latestVersion) {
+        setLoading(false);
+        return;
+      }
+
+      const currentVersion = clusterData.agent_version;
+      
+      // Compare versions
+      const compareVersions = (v1: string, v2: string): number => {
+        if (!v1 || !v2) return 0;
+        const normalize = (v: string) => v.replace(/^v/, '').split('.').map(Number);
+        const [major1, minor1, patch1] = normalize(v1);
+        const [major2, minor2, patch2] = normalize(v2);
+        if (major1 !== major2) return major1 - major2;
+        if (minor1 !== minor2) return minor1 - minor2;
+        return patch1 - patch2;
+      };
+
+      const needsUpdate = compareVersions(currentVersion, latestVersion.version) < 0;
+
+      // Determine release type
+      const getReleaseType = (current: string, latest: string): 'major' | 'minor' | 'patch' | null => {
+        if (!current || !latest) return null;
+        const normalize = (v: string) => v.replace(/^v/, '').split('.').map(Number);
+        const [major1, minor1] = normalize(current);
+        const [major2, minor2] = normalize(latest);
+        if (major1 !== major2) return 'major';
+        if (minor1 !== minor2) return 'minor';
+        return 'patch';
+      };
+
+      setUpdateInfo({
+        current_version: currentVersion,
+        latest_version: latestVersion.version,
+        update_available: needsUpdate,
+        is_required: false,
+        release_notes: needsUpdate ? latestVersion.release_notes : null,
+        release_type: needsUpdate ? getReleaseType(currentVersion, latestVersion.version) : null
       });
-
-      if (error) throw error;
-
-      setUpdateInfo(data);
     } catch (error) {
       console.error('Error checking for agent updates:', error);
     } finally {
