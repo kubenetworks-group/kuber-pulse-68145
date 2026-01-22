@@ -8,10 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/AuthContext";
-import { useSubscription } from "@/contexts/SubscriptionContext";
+import { useSubscription, PLAN_LIMITS } from "@/contexts/SubscriptionContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Database, Loader2, Sparkles, GraduationCap, Crown, Clock, Brain, Server, User, CreditCard, Check, Shield, MessageSquare, XCircle } from "lucide-react";
+import { Database, Loader2, Sparkles, GraduationCap, Crown, Clock, Brain, Server, User, CreditCard, Check, Shield, MessageSquare, XCircle, Info } from "lucide-react";
 import { AIUsageWidget } from "@/components/AIUsageWidget";
 import { useNavigate } from "react-router-dom";
 import { AvatarUpload } from "@/components/AvatarUpload";
@@ -346,14 +346,14 @@ const Settings = () => {
                   <Crown className="h-6 w-6 text-amber-500" />
                 </div>
                 <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <h3 className="text-lg font-semibold">Seu Plano Atual</h3>
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                    <h3 className="text-lg font-semibold">Seu Plano Contratado</h3>
                     <Badge variant="secondary" className="capitalize">
-                      {currentPlan}
+                      {subscription?.plan || 'free'}
                     </Badge>
                     {isTrialActive && (
                       <Badge className="bg-amber-500/20 text-amber-600 border-amber-500/30">
-                        Trial - {daysLeftInTrial} dias restantes
+                        Trial Pro - {daysLeftInTrial} dias restantes
                       </Badge>
                     )}
                     {isReadOnly && (
@@ -368,6 +368,7 @@ const Settings = () => {
                         <p className="text-xs text-muted-foreground">Análises de IA</p>
                         <p className="font-medium text-sm">
                           {subscription?.ai_analyses_used || 0} / {planLimits.aiAnalysesPerMonth === Infinity ? '∞' : planLimits.aiAnalysesPerMonth}
+                          {isTrialActive && <span className="text-xs text-muted-foreground ml-1">(trial)</span>}
                         </p>
                         {planLimits.aiAnalysesPerMonth !== Infinity && (
                           <Progress value={aiUsagePercent} className="h-1 mt-1" />
@@ -380,7 +381,14 @@ const Settings = () => {
                       <div>
                         <p className="text-xs text-muted-foreground">Limite de clusters</p>
                         <p className="font-medium">
-                          {planLimits.clusters === Infinity ? 'Ilimitado' : `Até ${planLimits.clusters}`}
+                          {isTrialActive ? (
+                            <>
+                              Até {PLAN_LIMITS.pro.clusters}
+                              <span className="text-xs text-muted-foreground ml-1">(trial)</span>
+                            </>
+                          ) : (
+                            planLimits.clusters === Infinity ? 'Ilimitado' : `Até ${planLimits.clusters}`
+                          )}
                         </p>
                       </div>
                     </div>
@@ -389,10 +397,25 @@ const Settings = () => {
                       <Clock className="w-4 h-4 text-purple-500" />
                       <div>
                         <p className="text-xs text-muted-foreground">Histórico</p>
-                        <p className="font-medium">{planLimits.historyRetentionDays} dias</p>
+                        <p className="font-medium">
+                          {planLimits.historyRetentionDays} dias
+                          {isTrialActive && <span className="text-xs text-muted-foreground ml-1">(trial)</span>}
+                        </p>
                       </div>
                     </div>
                   </div>
+
+                  {isTrialActive && (
+                    <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 mt-4">
+                      <Info className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                      <p className="text-xs text-amber-700 dark:text-amber-400">
+                        Você está no período de teste com acesso aos recursos Pro. 
+                        Após o término, seu plano será <strong>{subscription?.plan || 'free'}</strong> com limite de{' '}
+                        <strong>{PLAN_LIMITS[subscription?.plan || 'free'].clusters} cluster</strong> e{' '}
+                        <strong>{PLAN_LIMITS[subscription?.plan || 'free'].aiAnalysesPerMonth} análises de IA/mês</strong>.
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             </Card>

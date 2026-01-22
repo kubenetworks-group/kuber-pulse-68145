@@ -3,12 +3,12 @@ import { useSearchParams } from 'react-router-dom';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { PlanCard } from '@/components/PlanCard';
 import { ManageSubscription } from '@/components/ManageSubscription';
-import { useSubscription, PlanType } from '@/contexts/SubscriptionContext';
+import { useSubscription, PlanType, PLAN_LIMITS } from '@/contexts/SubscriptionContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
-import { Clock, Brain, Server, Calendar, Sparkles, CheckCircle } from 'lucide-react';
+import { Clock, Brain, Server, Calendar, Sparkles, CheckCircle, Info } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
 export default function Pricing() {
@@ -74,6 +74,9 @@ export default function Pricing() {
     }
   };
 
+  // Get the actual plan limits (not effective limits during trial)
+  const actualPlanLimits = PLAN_LIMITS[subscription?.plan || 'free'];
+  
   const aiUsagePercent = planLimits.aiAnalysesPerMonth === Infinity 
     ? 0 
     : ((subscription?.ai_analyses_used || 0) / planLimits.aiAnalysesPerMonth) * 100;
@@ -117,12 +120,12 @@ export default function Pricing() {
                   <Calendar className="w-4 h-4 text-primary" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Plano</p>
+                  <p className="text-sm text-muted-foreground">Plano Contratado</p>
                   <p className="font-medium capitalize flex items-center gap-2">
-                    {currentPlan}
+                    {subscription?.plan || 'free'}
                     {isTrialActive && (
                       <Badge variant="secondary" className="text-xs">
-                        Em teste
+                        Em teste Pro
                       </Badge>
                     )}
                     {isReadOnly && (
@@ -146,7 +149,7 @@ export default function Pricing() {
                     <Clock className="w-4 h-4 text-amber-500" />
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">Trial restante</p>
+                    <p className="text-sm text-muted-foreground">Trial Pro restante</p>
                     <p className="font-medium">{daysLeftInTrial} dias</p>
                   </div>
                 </div>
@@ -174,11 +177,30 @@ export default function Pricing() {
                 <div>
                   <p className="text-sm text-muted-foreground">Limite de clusters</p>
                   <p className="font-medium">
-                    {planLimits.clusters === Infinity ? 'Ilimitado' : `Até ${planLimits.clusters}`}
+                    {isTrialActive ? (
+                      <>
+                        <span>Até {PLAN_LIMITS.pro.clusters}</span>
+                        <span className="text-xs text-muted-foreground ml-1">(trial)</span>
+                      </>
+                    ) : (
+                      actualPlanLimits.clusters === Infinity ? 'Ilimitado' : `Até ${actualPlanLimits.clusters}`
+                    )}
                   </p>
                 </div>
               </div>
             </div>
+
+            {isTrialActive && (
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                <Info className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                <p className="text-xs text-amber-700 dark:text-amber-400">
+                  Você está no período de teste com acesso aos recursos Pro. 
+                  Após o término, seu plano será <strong>{subscription?.plan || 'free'}</strong> com limite de{' '}
+                  <strong>{actualPlanLimits.clusters} cluster{actualPlanLimits.clusters > 1 ? 's' : ''}</strong> e{' '}
+                  <strong>{actualPlanLimits.aiAnalysesPerMonth} análises de IA/mês</strong>.
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
 
