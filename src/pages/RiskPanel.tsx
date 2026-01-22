@@ -41,6 +41,22 @@ const RiskPanel = () => {
     );
   }
 
+  if (!selectedClusterId) {
+    return (
+      <DashboardLayout>
+        <div className="p-4 sm:p-6 lg:p-8">
+          <div className="flex flex-col items-center justify-center py-20">
+            <AlertTriangle className="h-16 w-16 text-muted-foreground mb-4" />
+            <h2 className="text-xl font-semibold mb-2">Nenhum cluster selecionado</h2>
+            <p className="text-muted-foreground text-center max-w-md">
+              Selecione um cluster no menu superior para visualizar a análise de riscos e o painel de saúde do Kubernetes.
+            </p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout>
       <div className="p-4 sm:p-6 lg:p-8 space-y-6 animate-fade-in">
@@ -60,9 +76,7 @@ const RiskPanel = () => {
             </div>
           </div>
           
-          {analysis && (
-            <RiskScoreCard score={analysis.overallScore} />
-          )}
+          <RiskScoreCard score={analysis.overallScore} />
         </div>
 
         {/* Tabs */}
@@ -80,46 +94,38 @@ const RiskPanel = () => {
 
           {/* Tab: Análise de Riscos */}
           <TabsContent value="risks" className="space-y-6">
-            {analysis && (
-              <>
-                {/* Risk Categories */}
-                <RisksOverview risks={analysis.risks} />
+            {/* Risk Categories */}
+            <RisksOverview risks={analysis.risks} />
 
-                {/* Grid: Changes + Availability */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <ClusterChangesWidget changes={analysis.recentChanges} />
-                  <AvailabilityWidget availability={analysis.availability} />
-                </div>
+            {/* Grid: Changes + Availability */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <ClusterChangesWidget changes={analysis.recentChanges} />
+              <AvailabilityWidget availability={analysis.availability} />
+            </div>
 
-                {/* Public Exposures */}
-                <PublicExposuresWidget exposures={analysis.publicExposures} />
+            {/* Public Exposures */}
+            <PublicExposuresWidget exposures={analysis.publicExposures} />
 
-                {/* Trend Chart */}
-                <ProblemTrendChart trends={analysis.trends} />
-              </>
-            )}
+            {/* Trend Chart */}
+            <ProblemTrendChart trends={analysis.trends} />
           </TabsContent>
 
           {/* Tab: Kubernetes Health Manager */}
           <TabsContent value="health" className="space-y-6">
-            {analysis && (
-              <>
-                {/* Unstable Pods + Resource Issues */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <UnstablePodsWidget pods={analysis.unstablePods} />
-                  <ResourceMisuseWidget issues={analysis.resourceIssues} />
-                </div>
+            {/* Unstable Pods + Resource Issues */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <UnstablePodsWidget pods={analysis.unstablePods} />
+              <ResourceMisuseWidget issues={analysis.resourceIssues} />
+            </div>
 
-                {/* Missing Probes + Volumes */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <MissingProbesWidget issues={analysis.probeIssues} />
-                  <ProblematicVolumesWidget problems={analysis.volumeProblems} />
-                </div>
+            {/* Missing Probes + Volumes */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <MissingProbesWidget issues={analysis.probeIssues} />
+              <ProblematicVolumesWidget problems={analysis.volumeProblems} />
+            </div>
 
-                {/* Certificates */}
-                <CertificatesWidget issues={analysis.certificateIssues} />
-              </>
-            )}
+            {/* Certificates */}
+            <CertificatesWidget issues={analysis.certificateIssues} />
           </TabsContent>
         </Tabs>
       </div>

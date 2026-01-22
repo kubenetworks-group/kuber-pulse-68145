@@ -137,9 +137,28 @@ const defaultAvailability: AvailabilityData = {
   podHealth: 100,
 };
 
+const defaultAnalysis: RiskAnalysis = {
+  overallScore: 0,
+  risks: {
+    security: { ...defaultRiskCategory },
+    availability: { ...defaultRiskCategory },
+    configuration: { ...defaultRiskCategory },
+    exposure: { ...defaultRiskCategory },
+  },
+  trends: [],
+  unstablePods: [],
+  resourceIssues: [],
+  volumeProblems: [],
+  probeIssues: [],
+  certificateIssues: [],
+  recentChanges: [],
+  availability: { ...defaultAvailability },
+  publicExposures: [],
+};
+
 export const useRiskAnalysis = () => {
   const { selectedClusterId } = useCluster();
-  const [analysis, setAnalysis] = useState<RiskAnalysis | null>(null);
+  const [analysis, setAnalysis] = useState<RiskAnalysis>(defaultAnalysis);
   const [loading, setLoading] = useState(true);
 
   const calculateRiskLevel = (score: number): "critical" | "high" | "medium" | "low" => {
@@ -151,6 +170,7 @@ export const useRiskAnalysis = () => {
 
   const fetchRiskData = async () => {
     if (!selectedClusterId) {
+      setAnalysis(defaultAnalysis);
       setLoading(false);
       return;
     }
@@ -266,60 +286,77 @@ export const useRiskAnalysis = () => {
         availability.totalPods = podData.pods.length;
         
         podData.pods.forEach((pod: any) => {
-          if (pod.Status === "Running") {
+          // Use lowercase properties as per actual data structure
+          const podPhase = pod.phase || pod.Phase || pod.Status;
+          const podName = pod.name || pod.Name;
+          const podNamespace = pod.namespace || pod.Namespace;
+          const podTotalRestarts = pod.total_restarts || pod.RestartCount || 0;
+          const podContainers = pod.containers || pod.Containers || [];
+          
+          if (podPhase === "Running") {
             availability.runningPods++;
-          } else if (pod.Status === "Pending") {
+          } else if (podPhase === "Pending") {
             availability.pendingPods++;
             availabilityScore += 5;
-          } else if (pod.Status === "Failed") {
+          } else if (podPhase === "Failed") {
             availability.failedPods++;
             availabilityScore += 10;
           }
 
-          // Check for unstable pods
-          const restartCount = pod.RestartCount || 0;
-          if (restartCount > 5 || pod.Status === "CrashLoopBackOff" || pod.Status === "Failed") {
+          // Check for unstable pods - look at individual container restart counts too
+          let totalContainerRestarts = podTotalRestarts;
+          if (podContainers && Array.isArray(podContainers)) {
+            podContainers.forEach((c: any) => {
+              totalContainerRestarts += c.restart_count || c.RestartCount || 0;
+            });
+          }
+          
+          if (totalContainerRestarts > 5 || podPhase === "CrashLoopBackOff" || podPhase === "Failed") {
             unstablePods.push({
-              name: pod.Name,
-              namespace: pod.Namespace,
-              restartCount,
-              status: pod.Status,
-              reason: pod.StatusReason,
+              name: podName,
+              namespace: podNamespace,
+              restartCount: totalContainerRestarts,
+              status: podPhase,
+              reason: pod.status_reason || pod.StatusReason,
             });
           }
 
           // Check for missing probes (if available in data)
-          if (pod.Containers && Array.isArray(pod.Containers)) {
-            pod.Containers.forEach((container: any) => {
+          if (podContainers && Array.isArray(podContainers)) {
+            podContainers.forEach((container: any) => {
+              const containerName = container.name || container.Name || "unknown";
               const missing: ("readiness" | "liveness" | "startup")[] = [];
-              if (!container.ReadinessProbe) missing.push("readiness");
-              if (!container.LivenessProbe) missing.push("liveness");
+              
+              // Check both lowercase and PascalCase property names
+              if (!container.readiness_probe && !container.ReadinessProbe) missing.push("readiness");
+              if (!container.liveness_probe && !container.LivenessProbe) missing.push("liveness");
               
               if (missing.length > 0) {
                 probeIssues.push({
-                  podName: pod.Name,
-                  namespace: pod.Namespace,
-                  containerName: container.Name || "unknown",
+                  podName: podName,
+                  namespace: podNamespace,
+                  containerName,
                   missingProbes: missing,
                 });
                 configurationScore += missing.length * 3;
               }
 
-              // Check resource limits
-              if (!container.Resources?.Limits) {
+              // Check resource limits - look at resources object
+              const resources = container.resources || container.Resources;
+              if (!resources?.limits && !resources?.Limits) {
                 resourceIssues.push({
-                  podName: pod.Name,
-                  namespace: pod.Namespace,
-                  containerName: container.Name || "unknown",
+                  podName: podName,
+                  namespace: podNamespace,
+                  containerName,
                   issue: "no_limits",
                 });
                 configurationScore += 5;
               }
-              if (!container.Resources?.Requests) {
+              if (!resources?.requests && !resources?.Requests) {
                 resourceIssues.push({
-                  podName: pod.Name,
-                  namespace: pod.Namespace,
-                  containerName: container.Name || "unknown",
+                  podName: podName,
+                  namespace: podNamespace,
+                  containerName,
                   issue: "no_requests",
                 });
                 configurationScore += 3;
@@ -351,7 +388,9 @@ export const useRiskAnalysis = () => {
       if (nodeData?.nodes && Array.isArray(nodeData.nodes)) {
         availability.totalNodes = nodeData.nodes.length;
         nodeData.nodes.forEach((node: any) => {
-          if (node.Status === "Ready") {
+          // Use lowercase properties as per actual data structure
+          const nodeStatus = node.status || node.Status;
+          if (nodeStatus === "Ready") {
             availability.readyNodes++;
           } else {
             availabilityScore += 20;
@@ -367,17 +406,26 @@ export const useRiskAnalysis = () => {
       const eventsData = eventsMetrics?.metric_data as any;
       if (eventsData?.events && Array.isArray(eventsData.events)) {
         eventsData.events
-          .filter((e: any) => ["Warning", "Normal"].includes(e.Type))
+          .filter((e: any) => ["Warning", "Normal"].includes(e.type || e.Type))
           .slice(0, 20)
           .forEach((event: any) => {
+            // Use lowercase properties as per actual data structure
+            const involvedObj = event.involved_object || event.InvolvedObject || {};
+            const objName = typeof involvedObj === 'object' 
+              ? `${involvedObj.kind || ''}/${involvedObj.name || ''}` 
+              : involvedObj;
+            const eventNamespace = typeof involvedObj === 'object'
+              ? involvedObj.namespace || event.namespace || event.Namespace
+              : event.namespace || event.Namespace;
+              
             recentChanges.push({
-              id: `${event.InvolvedObject}-${event.LastTimestamp}`,
-              type: event.Type,
-              reason: event.Reason,
-              message: event.Message,
-              namespace: event.Namespace,
-              involvedObject: event.InvolvedObject,
-              timestamp: event.LastTimestamp,
+              id: `${objName}-${event.last_time || event.LastTimestamp}`,
+              type: event.type || event.Type,
+              reason: event.reason || event.Reason,
+              message: event.message || event.Message,
+              namespace: eventNamespace || "unknown",
+              involvedObject: objName,
+              timestamp: event.last_time || event.LastTimestamp,
             });
           });
       }
@@ -386,8 +434,11 @@ export const useRiskAnalysis = () => {
       const volumeProblems: VolumeProblem[] = [];
       if (pvcs && pvcs.length > 0) {
         pvcs.forEach((pvc: any) => {
-          const usagePercent = pvc.used_bytes && pvc.capacity_bytes
-            ? (pvc.used_bytes / pvc.capacity_bytes) * 100
+          // Use requested_bytes as capacity (actual column name from DB)
+          const capacityBytes = pvc.requested_bytes || pvc.capacity_bytes;
+          const usedBytes = pvc.used_bytes || 0;
+          const usagePercent = usedBytes && capacityBytes
+            ? (usedBytes / capacityBytes) * 100
             : 0;
 
           if (usagePercent > 85) {
