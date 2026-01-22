@@ -11,6 +11,11 @@ const PRICE_TO_PLAN: Record<string, string> = {
   "price_1SZvJ1KqhwUY4V5zcXrVOLkS": "pro",
 };
 
+const logStep = (step: string, details?: Record<string, unknown>) => {
+  const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
+  console.log(`[STRIPE-WEBHOOK] ${step}${detailsStr}`);
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -30,11 +35,38 @@ serve(async (req) => {
     const body = await req.text();
     const signature = req.headers.get("stripe-signature");
 
-    // For now, we'll process without signature verification
-    // In production, add STRIPE_WEBHOOK_SECRET
-    const event = JSON.parse(body) as Stripe.Event;
+    // CRITICAL: Verify webhook signature
+    const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
+    if (!webhookSecret) {
+      logStep("ERROR: STRIPE_WEBHOOK_SECRET not configured");
+      return new Response(JSON.stringify({ error: "Webhook not configured" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500,
+      });
+    }
 
-    console.log(`[STRIPE-WEBHOOK] Event received: ${event.type}`);
+    if (!signature) {
+      logStep("ERROR: Missing stripe-signature header");
+      return new Response(JSON.stringify({ error: "Missing signature" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400,
+      });
+    }
+
+    let event: Stripe.Event;
+    try {
+      event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+      logStep("Signature verified", { eventType: event.type, eventId: event.id });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      logStep("ERROR: Signature verification failed", { error: errorMessage });
+      return new Response(JSON.stringify({ error: "Invalid signature" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400,
+      });
+    }
+
+    logStep("Processing event", { type: event.type });
 
     switch (event.type) {
       case "checkout.session.completed": {
@@ -43,7 +75,6 @@ serve(async (req) => {
         const plan = session.metadata?.plan || "pro";
 
         if (userId && session.subscription) {
-          // Get subscription details
           const subscription = await stripe.subscriptions.retrieve(session.subscription as string);
           const priceId = subscription.items.data[0]?.price.id;
 
@@ -61,9 +92,9 @@ serve(async (req) => {
             .eq("user_id", userId);
 
           if (error) {
-            console.error("[STRIPE-WEBHOOK] Error updating subscription:", error);
+            logStep("Error updating subscription", { error: error.message, userId });
           } else {
-            console.log(`[STRIPE-WEBHOOK] Subscription activated for user ${userId}`);
+            logStep("Subscription activated", { userId, plan });
           }
         }
         break;
@@ -100,9 +131,9 @@ serve(async (req) => {
             .eq("user_id", userId);
 
           if (error) {
-            console.error("[STRIPE-WEBHOOK] Error updating subscription:", error);
+            logStep("Error updating subscription", { error: error.message, userId });
           } else {
-            console.log(`[STRIPE-WEBHOOK] Subscription updated for user ${userId}, status: ${status}`);
+            logStep("Subscription updated", { userId, status });
           }
         }
         break;
@@ -126,9 +157,9 @@ serve(async (req) => {
             .eq("user_id", userId);
 
           if (error) {
-            console.error("[STRIPE-WEBHOOK] Error canceling subscription:", error);
+            logStep("Error canceling subscription", { error: error.message, userId });
           } else {
-            console.log(`[STRIPE-WEBHOOK] Subscription canceled for user ${userId}`);
+            logStep("Subscription canceled", { userId });
           }
         }
         break;
@@ -138,7 +169,6 @@ serve(async (req) => {
         const invoice = event.data.object as Stripe.Invoice;
         const customerId = invoice.customer as string;
 
-        // Find user by stripe_customer_id
         const { data: subscriptionData } = await supabaseAdmin
           .from("subscriptions")
           .select("user_id")
@@ -155,24 +185,29 @@ serve(async (req) => {
             .eq("user_id", subscriptionData.user_id);
 
           if (error) {
-            console.error("[STRIPE-WEBHOOK] Error marking subscription as readonly:", error);
+            logStep("Error marking subscription as readonly", { error: error.message });
           } else {
-            console.log(`[STRIPE-WEBHOOK] Payment failed for customer ${customerId}`);
+            logStep("Payment failed, subscription marked readonly", { customerId });
           }
         }
         break;
       }
+
+      default:
+        logStep("Unhandled event type", { type: event.type });
     }
 
     return new Response(JSON.stringify({ received: true }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
     });
-  } catch (error: any) {
-    console.error("[STRIPE-WEBHOOK] Error:", error);
-    return new Response(JSON.stringify({ error: error.message || "Unknown error" }), {
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    logStep("Unexpected error", { error: errorMessage });
+    // Don't expose internal error details
+    return new Response(JSON.stringify({ error: "Internal error" }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 400,
+      status: 500,
     });
   }
 });
