@@ -9,13 +9,23 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, Server, Bot, AlertTriangle, Search, RefreshCw, Shield, Settings2, Clock, Database, FileText, ShieldAlert, Bell } from "lucide-react";
+import { Users, Server, Bot, AlertTriangle, Search, RefreshCw, Shield, Settings2, Clock, Database, FileText, ShieldAlert, Bell, Trash2, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { formatDistanceToNow, format, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { AuditLogsTab } from "@/components/AuditLogsTab";
 import { AdminClusterAlertsTab } from "@/components/AdminClusterAlertsTab";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface UserData {
   id: string;
@@ -60,6 +70,8 @@ const AdminDashboard = () => {
   const [selectedUser, setSelectedUser] = useState<UserData | null>(null);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   
   // Form states
   const [trialDays, setTrialDays] = useState<string>("7");
@@ -144,6 +156,40 @@ const AdminDashboard = () => {
     setSelectedPlan(user.subscription?.plan || "free");
     setSelectedStatus(user.subscription?.status || "trialing");
     setEditModalOpen(true);
+  };
+
+  const handleDeleteUser = async () => {
+    if (!selectedUser) return;
+    
+    setDeleteLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error("Sessão expirada");
+        return;
+      }
+
+      const { error } = await supabase.functions.invoke('admin-delete-user', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        body: { user_id: selectedUser.id },
+      });
+
+      if (error) {
+        console.error('Delete user error:', error);
+        toast.error("Erro ao excluir usuário");
+        return;
+      }
+
+      toast.success(`Usuário ${selectedUser.email} excluído com sucesso!`);
+      setDeleteConfirmOpen(false);
+      setEditModalOpen(false);
+      await fetchData();
+    } catch (error) {
+      console.error('Unexpected error:', error);
+      toast.error("Erro inesperado ao excluir usuário");
+    } finally {
+      setDeleteLoading(false);
+    }
   };
 
   const filteredUsers = users.filter((user) => {
@@ -633,6 +679,25 @@ const AdminDashboard = () => {
                 </Button>
               </div>
             </div>
+
+            {/* Delete User Section */}
+            <div className="space-y-3 pt-4 border-t border-destructive/30">
+              <div className="flex items-center gap-2">
+                <Trash2 className="h-4 w-4 text-destructive" />
+                <Label className="font-medium text-destructive">Zona de Perigo</Label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Esta ação é irreversível. Todos os dados do usuário serão permanentemente excluídos.
+              </p>
+              <Button 
+                variant="destructive" 
+                className="w-full"
+                onClick={() => setDeleteConfirmOpen(true)}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Excluir Usuário
+              </Button>
+            </div>
           </div>
 
           <DialogFooter>
@@ -642,6 +707,50 @@ const AdminDashboard = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar exclusão de usuário</AlertDialogTitle>
+            <AlertDialogDescription>
+              Você está prestes a excluir permanentemente o usuário:
+              <br />
+              <strong className="text-foreground">{selectedUser?.email}</strong>
+              <br /><br />
+              Esta ação irá remover:
+              <ul className="list-disc list-inside mt-2 space-y-1">
+                <li>Todos os clusters e dados relacionados</li>
+                <li>Histórico de análises e incidentes</li>
+                <li>Configurações e preferências</li>
+                <li>Logs de auditoria do usuário</li>
+              </ul>
+              <br />
+              <strong className="text-destructive">Esta ação NÃO pode ser desfeita!</strong>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteLoading}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDeleteUser}
+              disabled={deleteLoading}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Excluindo...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Sim, excluir usuário
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DashboardLayout>
   );
 };
