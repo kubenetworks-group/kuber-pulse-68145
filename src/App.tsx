@@ -14,6 +14,7 @@ import LandingPage from "./pages/LandingPage";
 import Welcome from "./pages/Welcome";
 import Clusters from "./pages/Clusters";
 import AIMonitor from "./pages/AIMonitor";
+import RiskPanel from "./pages/RiskPanel";
 import Costs from "./pages/Costs";
 import Storage from "./pages/Storage";
 import Settings from "./pages/Settings";
@@ -69,6 +70,14 @@ const App = () => (
                   element={
                     <ProtectedRoute>
                       <AIMonitor />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/risk"
+                  element={
+                    <ProtectedRoute>
+                      <RiskPanel />
                     </ProtectedRoute>
                   }
                 />
