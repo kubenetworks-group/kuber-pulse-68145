@@ -89,6 +89,9 @@ spec:
         app: kodo-agent
     spec:
       serviceAccountName: kodo-agent
+      # Uncomment and configure if using a private registry
+      # imagePullSecrets:
+      # - name: ghcr-secret
       containers:
       - name: agent
         image: ghcr.io/kubenetworks-group/kodo-agent:latest
@@ -105,4 +108,8 @@ spec:
           limits:
             memory: "128Mi"
             cpu: "200m"
-            
+        securityContext:
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
