@@ -1704,7 +1704,50 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      agent_api_keys_secure: {
+        Row: {
+          api_key_prefix: string | null
+          cluster_id: string | null
+          created_at: string | null
+          id: string | null
+          is_active: boolean | null
+          last_seen: string | null
+          name: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          api_key_prefix?: string | null
+          cluster_id?: string | null
+          created_at?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          last_seen?: string | null
+          name?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          api_key_prefix?: string | null
+          cluster_id?: string | null
+          created_at?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          last_seen?: string | null
+          name?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_api_keys_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       cleanup_old_pvc_usage_history: { Args: never; Returns: undefined }
