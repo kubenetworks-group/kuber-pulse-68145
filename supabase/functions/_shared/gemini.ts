@@ -4,8 +4,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models";
 const GEMINI_MODEL = "gemini-2.0-flash";
 
-// Lovable AI Gateway configuration (no API key required!)
-const LOVABLE_AI_GATEWAY_URL = "https://ai-gateway.lovable.dev/api/v1/chat/completions";
+// Lovable AI Gateway configuration
+const LOVABLE_AI_GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 const LOVABLE_AI_MODEL = "google/gemini-2.5-flash"; // Fast and efficient
 
 // Free tier limits for Gemini
