@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go build:*)",
+      "Bash(git tag:*)",
+      "Bash(git restore:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nfix(agent): use real CPU/Memory metrics from Metrics API\n\n- Fix CPU/Memory calculation to use actual usage from Kubernetes Metrics API\n- Add fallback to pod requests when Metrics API is unavailable\n- Add used_physical_bytes and available_physical_bytes to storage metrics\n- Improve storage metrics with per-node breakdown\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git push:*)",
+      "Bash(npm run build:*)",
+      "Bash(source:*)",
+      "Bash(nvm ls:*)",
+      "Bash(nvm use:*)",
+      "Bash(npm install:*)",
+      "Bash(grep:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nchore(agent): update deployment template to v0.0.31\n\n- Bump agent image version to v0.0.31 with real metrics support\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git commit:*)",
+      "WebSearch",
+      "WebFetch(domain:magalu.cloud)",
+      "Bash(cat:*)",
+      "mcp__ide__getDiagnostics",
+      "Bash(find:*)"
+    ]
+  }
+}
