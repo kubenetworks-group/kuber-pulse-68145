@@ -1,11 +1,14 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // Google Gemini API configuration
-// Using gemini-2.0-flash as gemini-1.5-flash is deprecated in v1beta
 const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models";
 const GEMINI_MODEL = "gemini-2.0-flash";
 
-// Free tier limits for Gemini 1.5 Flash
+// Lovable AI Gateway configuration (no API key required!)
+const LOVABLE_AI_GATEWAY_URL = "https://ai-gateway.lovable.dev/api/v1/chat/completions";
+const LOVABLE_AI_MODEL = "google/gemini-2.5-flash"; // Fast and efficient
+
+// Free tier limits for Gemini
 const FREE_TIER_RPD = 1500; // Requests per day (free tier)
 const FREE_TIER_RPM = 15; // Requests per minute
 const FREE_TIER_WARNING_THRESHOLD = 0.8; // 80% warning
@@ -57,6 +60,77 @@ function convertToGeminiFormat(messages: GeminiMessage[]): { contents: any[]; sy
   }
   
   return result;
+}
+
+// Convert messages to OpenAI format for Lovable AI Gateway
+function convertToOpenAIFormat(messages: GeminiMessage[]): { role: string; content: string }[] {
+  return messages.map(msg => ({
+    role: msg.role,
+    content: msg.content
+  }));
+}
+
+// Call Lovable AI Gateway (no API key required)
+async function callLovableAI(
+  messages: GeminiMessage[],
+  userId: string,
+  functionName: string
+): Promise<GeminiResponse> {
+  const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
+  
+  if (!lovableApiKey) {
+    throw new Error("LOVABLE_API_KEY não configurada para fallback");
+  }
+  
+  console.log(`[Lovable AI] Calling ${LOVABLE_AI_MODEL} for ${functionName} (fallback)...`);
+  
+  const response = await fetch(LOVABLE_AI_GATEWAY_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${lovableApiKey}`
+    },
+    body: JSON.stringify({
+      model: LOVABLE_AI_MODEL,
+      messages: convertToOpenAIFormat(messages),
+      max_tokens: 4096,
+      temperature: 0.7
+    })
+  });
+  
+  if (!response.ok) {
+    const error = await response.text();
+    console.error("Lovable AI error:", response.status, error);
+    throw new Error(`Lovable AI error: ${response.status}`);
+  }
+  
+  const data = await response.json();
+  const content = data.choices?.[0]?.message?.content || "";
+  const inputTokens = data.usage?.prompt_tokens || estimateTokens(messages.map(m => m.content).join(" "));
+  const outputTokens = data.usage?.completion_tokens || estimateTokens(content);
+  
+  // Log usage (Lovable AI is free for Lovable projects)
+  const supabase = getSupabaseAdmin();
+  await supabase.from("ai_usage_logs").insert({
+    user_id: userId,
+    function_name: functionName,
+    model: LOVABLE_AI_MODEL,
+    provider: "lovable",
+    input_tokens: inputTokens,
+    output_tokens: outputTokens,
+    is_free_tier: true,
+    estimated_cost_usd: 0
+  });
+  
+  console.log(`[Lovable AI] Response: ${inputTokens} input, ${outputTokens} output tokens (free)`);
+  
+  return {
+    content,
+    inputTokens,
+    outputTokens,
+    isFreeTier: true,
+    estimatedCost: 0
+  };
 }
 
 // Get Supabase admin client
@@ -201,7 +275,7 @@ async function checkFreeTierStatus(userId: string): Promise<{ isFreeTier: boolea
   return { isFreeTier: dailyCount < FREE_TIER_RPD, dailyCount };
 }
 
-// Main function to call Gemini API (non-streaming)
+// Main function to call Gemini API (non-streaming) with Lovable AI fallback
 export async function callGemini(
   messages: GeminiMessage[],
   userId: string,
@@ -209,8 +283,10 @@ export async function callGemini(
 ): Promise<GeminiResponse> {
   const apiKey = Deno.env.get("GOOGLE_GEMINI_API_KEY");
   
+  // If no Gemini API key, go straight to Lovable AI
   if (!apiKey) {
-    throw new Error("GOOGLE_GEMINI_API_KEY não configurada");
+    console.log("[Gemini] No API key, using Lovable AI Gateway...");
+    return callLovableAI(messages, userId, functionName);
   }
   
   const { isFreeTier } = await checkFreeTierStatus(userId);
@@ -230,77 +306,86 @@ export async function callGemini(
   
   console.log(`[Gemini] Calling ${GEMINI_MODEL} for ${functionName}...`);
   
-  const response = await fetch(
-    `${GEMINI_API_URL}/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(requestBody)
-    }
-  );
-  
-  if (!response.ok) {
-    const error = await response.text();
-    console.error("Gemini API error:", response.status, error);
-    
-    // Handle specific error codes with clear messages
-    if (response.status === 429) {
-      throw new Error("Limite de requisições da IA excedido. Por favor, aguarde alguns minutos e tente novamente.");
-    }
-    
-    if (response.status === 403) {
-      throw new Error("Acesso à API de IA negado. Verifique a configuração da chave de API.");
-    }
-    
-    if (response.status === 503 || response.status === 500) {
-      throw new Error("Serviço de IA temporariamente indisponível. Tente novamente em alguns instantes.");
-    }
-    
-    // Parse error for better messages
-    try {
-      const errorData = JSON.parse(error);
-      const errorMessage = errorData.error?.message || error;
-      throw new Error(`Erro na API de IA: ${errorMessage}`);
-    } catch (parseError) {
-      if (parseError instanceof Error && parseError.message.includes("Limite")) {
-        throw parseError;
+  try {
+    const response = await fetch(
+      `${GEMINI_API_URL}/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody)
       }
-      throw new Error(`Erro na API de IA (código ${response.status})`);
+    );
+    
+    if (!response.ok) {
+      const error = await response.text();
+      console.error("Gemini API error:", response.status, error);
+      
+      // For rate limit errors (429), fall back to Lovable AI immediately
+      if (response.status === 429) {
+        console.log("[Gemini] Rate limited (429), falling back to Lovable AI...");
+        return callLovableAI(messages, userId, functionName);
+      }
+      
+      // For server errors, also try Lovable AI fallback
+      if (response.status === 503 || response.status === 500) {
+        console.log(`[Gemini] Server error (${response.status}), falling back to Lovable AI...`);
+        return callLovableAI(messages, userId, functionName);
+      }
+      
+      if (response.status === 403) {
+        console.log("[Gemini] Access denied (403), falling back to Lovable AI...");
+        return callLovableAI(messages, userId, functionName);
+      }
+      
+      // For other errors, try to parse and throw
+      try {
+        const errorData = JSON.parse(error);
+        const errorMessage = errorData.error?.message || error;
+        throw new Error(`Erro na API de IA: ${errorMessage}`);
+      } catch (parseError) {
+        throw new Error(`Erro na API de IA (código ${response.status})`);
+      }
     }
+    
+    const data = await response.json();
+    
+    if (!data.candidates || data.candidates.length === 0) {
+      console.error("No candidates in response:", JSON.stringify(data));
+      // Try Lovable AI fallback
+      console.log("[Gemini] No candidates, falling back to Lovable AI...");
+      return callLovableAI(messages, userId, functionName);
+    }
+    
+    const content = data.candidates[0].content?.parts?.[0]?.text || "";
+    const usageMetadata = data.usageMetadata || {};
+    const inputTokens = usageMetadata.promptTokenCount || estimateTokens(messages.map(m => m.content).join(" "));
+    const outputTokens = usageMetadata.candidatesTokenCount || estimateTokens(content);
+    
+    // Calculate estimated cost (only if not in free tier)
+    const estimatedCost = isFreeTier ? 0 : 
+      (inputTokens / 1_000_000) * GEMINI_INPUT_PRICE + 
+      (outputTokens / 1_000_000) * GEMINI_OUTPUT_PRICE;
+    
+    // Log usage and send notifications
+    await logUsageAndNotify(userId, functionName, inputTokens, outputTokens, isFreeTier, estimatedCost);
+    
+    console.log(`[Gemini] Response: ${inputTokens} input, ${outputTokens} output tokens, cost: $${estimatedCost.toFixed(6)}`);
+    
+    return {
+      content,
+      inputTokens,
+      outputTokens,
+      isFreeTier,
+      estimatedCost
+    };
+  } catch (error) {
+    // Any unexpected error: try Lovable AI fallback
+    console.warn("[Gemini] Unexpected error, falling back to Lovable AI:", error);
+    return callLovableAI(messages, userId, functionName);
   }
-  
-  const data = await response.json();
-  
-  if (!data.candidates || data.candidates.length === 0) {
-    console.error("No candidates in response:", JSON.stringify(data));
-    throw new Error("No response from Gemini");
-  }
-  
-  const content = data.candidates[0].content?.parts?.[0]?.text || "";
-  const usageMetadata = data.usageMetadata || {};
-  const inputTokens = usageMetadata.promptTokenCount || estimateTokens(messages.map(m => m.content).join(" "));
-  const outputTokens = usageMetadata.candidatesTokenCount || estimateTokens(content);
-  
-  // Calculate estimated cost (only if not in free tier)
-  const estimatedCost = isFreeTier ? 0 : 
-    (inputTokens / 1_000_000) * GEMINI_INPUT_PRICE + 
-    (outputTokens / 1_000_000) * GEMINI_OUTPUT_PRICE;
-  
-  // Log usage and send notifications
-  await logUsageAndNotify(userId, functionName, inputTokens, outputTokens, isFreeTier, estimatedCost);
-  
-  console.log(`[Gemini] Response: ${inputTokens} input, ${outputTokens} output tokens, cost: $${estimatedCost.toFixed(6)}`);
-  
-  return {
-    content,
-    inputTokens,
-    outputTokens,
-    isFreeTier,
-    estimatedCost
-  };
 }
 
-// Streaming function for chat assistants
+// Streaming function for chat assistants with Lovable AI fallback
 export async function streamGemini(
   messages: GeminiMessage[],
   userId: string,
@@ -308,8 +393,10 @@ export async function streamGemini(
 ): Promise<ReadableStream> {
   const apiKey = Deno.env.get("GOOGLE_GEMINI_API_KEY");
   
+  // If no Gemini API key, use Lovable AI streaming
   if (!apiKey) {
-    throw new Error("GOOGLE_GEMINI_API_KEY não configurada");
+    console.log("[Gemini] No API key, using Lovable AI Gateway streaming...");
+    return streamLovableAI(messages, userId, functionName);
   }
   
   const { isFreeTier } = await checkFreeTierStatus(userId);
@@ -329,72 +416,171 @@ export async function streamGemini(
   
   console.log(`[Gemini] Streaming ${GEMINI_MODEL} for ${functionName}...`);
   
-  const response = await fetch(
-    `${GEMINI_API_URL}/${GEMINI_MODEL}:streamGenerateContent?key=${apiKey}&alt=sse`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(requestBody)
+  try {
+    const response = await fetch(
+      `${GEMINI_API_URL}/${GEMINI_MODEL}:streamGenerateContent?key=${apiKey}&alt=sse`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody)
+      }
+    );
+    
+    if (!response.ok) {
+      const error = await response.text();
+      console.error("Gemini streaming error:", response.status, error);
+      
+      // For rate limit or server errors, fall back to Lovable AI
+      if (response.status === 429 || response.status === 503 || response.status === 500 || response.status === 403) {
+        console.log(`[Gemini] Error ${response.status}, falling back to Lovable AI streaming...`);
+        return streamLovableAI(messages, userId, functionName);
+      }
+      
+      throw new Error(`Gemini API error: ${response.status}`);
     }
-  );
+    
+    // Track tokens for logging
+    let totalContent = "";
+    const inputTokens = estimateTokens(messages.map(m => m.content).join(" "));
+    
+    // Transform the Gemini SSE stream to OpenAI-compatible format
+    const transformStream = new TransformStream({
+      async transform(chunk, controller) {
+        const text = new TextDecoder().decode(chunk);
+        const lines = text.split("\n");
+        
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const jsonStr = line.slice(6).trim();
+            if (jsonStr === "[DONE]") {
+              controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
+              continue;
+            }
+            
+            try {
+              const data = JSON.parse(jsonStr);
+              const content = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+              
+              if (content) {
+                totalContent += content;
+                // Convert to OpenAI-compatible format
+                const openAIFormat = {
+                  choices: [{
+                    delta: { content },
+                    index: 0
+                  }]
+                };
+                controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(openAIFormat)}\n\n`));
+              }
+            } catch (e) {
+              // Skip invalid JSON
+            }
+          }
+        }
+      },
+      async flush(controller) {
+        // Log usage at the end of streaming
+        const outputTokens = estimateTokens(totalContent);
+        const estimatedCost = isFreeTier ? 0 : 
+          (inputTokens / 1_000_000) * GEMINI_INPUT_PRICE + 
+          (outputTokens / 1_000_000) * GEMINI_OUTPUT_PRICE;
+        
+        await logUsageAndNotify(userId, functionName, inputTokens, outputTokens, isFreeTier, estimatedCost);
+        
+        console.log(`[Gemini] Stream complete: ${inputTokens} input, ${outputTokens} output tokens`);
+        
+        controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
+      }
+    });
+    
+    return response.body!.pipeThrough(transformStream);
+  } catch (error) {
+    console.warn("[Gemini] Streaming error, falling back to Lovable AI:", error);
+    return streamLovableAI(messages, userId, functionName);
+  }
+}
+
+// Stream using Lovable AI Gateway
+async function streamLovableAI(
+  messages: GeminiMessage[],
+  userId: string,
+  functionName: string
+): Promise<ReadableStream> {
+  const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
+  
+  if (!lovableApiKey) {
+    throw new Error("LOVABLE_API_KEY não configurada para fallback de streaming");
+  }
+  
+  console.log(`[Lovable AI] Streaming ${LOVABLE_AI_MODEL} for ${functionName}...`);
+  
+  const response = await fetch(LOVABLE_AI_GATEWAY_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${lovableApiKey}`
+    },
+    body: JSON.stringify({
+      model: LOVABLE_AI_MODEL,
+      messages: convertToOpenAIFormat(messages),
+      max_tokens: 4096,
+      temperature: 0.7,
+      stream: true
+    })
+  });
   
   if (!response.ok) {
     const error = await response.text();
-    console.error("Gemini streaming error:", response.status, error);
-    throw new Error(`Gemini API error: ${response.status}`);
+    console.error("Lovable AI streaming error:", response.status, error);
+    throw new Error(`Lovable AI streaming error: ${response.status}`);
   }
   
   // Track tokens for logging
   let totalContent = "";
   const inputTokens = estimateTokens(messages.map(m => m.content).join(" "));
   
-  // Transform the Gemini SSE stream to OpenAI-compatible format
+  // Transform stream for logging
   const transformStream = new TransformStream({
     async transform(chunk, controller) {
       const text = new TextDecoder().decode(chunk);
-      const lines = text.split("\n");
       
+      // Extract content from SSE data for token counting
+      const lines = text.split("\n");
       for (const line of lines) {
         if (line.startsWith("data: ")) {
           const jsonStr = line.slice(6).trim();
-          if (jsonStr === "[DONE]") {
-            controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
-            continue;
-          }
-          
-          try {
-            const data = JSON.parse(jsonStr);
-            const content = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-            
-            if (content) {
-              totalContent += content;
-              // Convert to OpenAI-compatible format
-              const openAIFormat = {
-                choices: [{
-                  delta: { content },
-                  index: 0
-                }]
-              };
-              controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(openAIFormat)}\n\n`));
+          if (jsonStr !== "[DONE]") {
+            try {
+              const data = JSON.parse(jsonStr);
+              const content = data.choices?.[0]?.delta?.content || "";
+              if (content) totalContent += content;
+            } catch (e) {
+              // Skip invalid JSON
             }
-          } catch (e) {
-            // Skip invalid JSON
           }
         }
       }
+      
+      // Pass through unchanged (already in OpenAI format)
+      controller.enqueue(chunk);
     },
     async flush(controller) {
       // Log usage at the end of streaming
       const outputTokens = estimateTokens(totalContent);
-      const estimatedCost = isFreeTier ? 0 : 
-        (inputTokens / 1_000_000) * GEMINI_INPUT_PRICE + 
-        (outputTokens / 1_000_000) * GEMINI_OUTPUT_PRICE;
       
-      await logUsageAndNotify(userId, functionName, inputTokens, outputTokens, isFreeTier, estimatedCost);
+      const supabase = getSupabaseAdmin();
+      await supabase.from("ai_usage_logs").insert({
+        user_id: userId,
+        function_name: functionName,
+        model: LOVABLE_AI_MODEL,
+        provider: "lovable",
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
+        is_free_tier: true,
+        estimated_cost_usd: 0
+      });
       
-      console.log(`[Gemini] Stream complete: ${inputTokens} input, ${outputTokens} output tokens`);
-      
-      controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
+      console.log(`[Lovable AI] Stream complete: ${inputTokens} input, ${outputTokens} output tokens (free)`);
     }
   });
   
