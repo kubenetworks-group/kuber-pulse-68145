@@ -30,7 +30,7 @@ const plans = [
   },
   {
     name: "Pro",
-    price: "R$ 149",
+    price: "R$ 250",
     period: "/mês",
     description: "Para times em produção",
     highlight: true,
@@ -42,7 +42,7 @@ const features = [
     category: "Monitoramento",
     icon: BarChart3,
     items: [
-      { name: "Clusters monitorados", free: "1", pro: "Ilimitado" },
+      { name: "Clusters monitorados", free: "1", pro: "10" },
       { name: "Retenção de métricas", free: "7 dias", pro: "90 dias" },
       { name: "Dashboard em tempo real", free: true, pro: true },
       { name: "Alertas básicos", free: true, pro: true },
@@ -53,7 +53,7 @@ const features = [
     category: "Inteligência Artificial",
     icon: Brain,
     items: [
-      { name: "Análises de IA por mês", free: "5", pro: "Ilimitado" },
+      { name: "Análises de IA por mês", free: "10", pro: "Ilimitado" },
       { name: "Detecção de anomalias", free: "Básico", pro: "Avançado" },
       { name: "Recomendações automáticas", free: true, pro: true },
       { name: "Predição de incidentes", free: false, pro: true },
@@ -233,10 +233,10 @@ export default function PlansComparison() {
             <Card className="p-8 bg-gradient-to-br from-primary/5 to-violet-500/5 border-primary/20">
               <Lock className="w-12 h-12 text-primary mx-auto mb-4" />
               <h2 className="text-2xl font-bold mb-3">
-                Comece com 14 dias de trial Pro
+                Comece com 30 dias de trial Pro
               </h2>
               <p className="text-muted-foreground mb-6">
-                Experimente todas as funcionalidades do plano Pro gratuitamente. Não é necessário cartão de crédito.
+                Experimente todas as funcionalidades do plano Pro gratuitamente por 30 dias. Não é necessário cartão de crédito.
               </p>
               <Link to="/auth">
                 <Button size="lg" className="gap-2">
@@ -260,7 +260,7 @@ export default function PlansComparison() {
               <Card className="p-6">
                 <h3 className="font-semibold mb-2">O que acontece após o trial?</h3>
                 <p className="text-sm text-muted-foreground">
-                  Após 14 dias, você pode escolher continuar com o plano Pro ou migrar para o plano Free sem perder seus dados.
+                  Após 30 dias, você pode escolher continuar com o plano Pro ou migrar para o plano Free sem perder seus dados.
                 </p>
               </Card>
               <Card className="p-6">
