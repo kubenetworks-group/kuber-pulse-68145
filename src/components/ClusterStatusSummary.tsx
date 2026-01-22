@@ -2,13 +2,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useCluster } from "@/contexts/ClusterContext";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { useEffect, useState } from "react";
 import { 
   CheckCircle2, 
   AlertTriangle, 
   XCircle, 
   Activity,
-  TrendingUp
+  TrendingUp,
+  Wifi,
+  WifiOff,
+  Shield,
+  Server,
+  Box
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -19,22 +25,33 @@ interface PodStatus {
   total: number;
 }
 
+interface AttentionItem {
+  type: 'agent' | 'pods' | 'anomaly' | 'security';
+  severity: 'warning' | 'critical';
+  title: string;
+  description: string;
+  icon: typeof AlertTriangle;
+}
+
 interface ClusterStatusSummaryProps {
   clusterData: any;
 }
 
 export const ClusterStatusSummary = ({ clusterData }: ClusterStatusSummaryProps) => {
   const { selectedClusterId } = useCluster();
+  const { user } = useAuth();
   const [podStatus, setPodStatus] = useState<PodStatus>({ healthy: 0, warning: 0, critical: 0, total: 0 });
   const [recentAnomalies, setRecentAnomalies] = useState(0);
+  const [securityThreats, setSecurityThreats] = useState({ critical: 0, high: 0 });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (selectedClusterId) {
+    if (selectedClusterId && user) {
       fetchPodStatus();
       fetchRecentAnomalies();
+      fetchSecurityThreats();
     }
-  }, [selectedClusterId]);
+  }, [selectedClusterId, user]);
 
   const fetchPodStatus = async () => {
     try {
@@ -98,14 +115,120 @@ export const ClusterStatusSummary = ({ clusterData }: ClusterStatusSummaryProps)
     }
   };
 
+  const fetchSecurityThreats = async () => {
+    if (!user) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('security_threats')
+        .select('severity')
+        .eq('cluster_id', selectedClusterId)
+        .eq('user_id', user.id)
+        .eq('status', 'active');
+
+      if (error) throw error;
+
+      const critical = data?.filter(t => t.severity === 'critical').length || 0;
+      const high = data?.filter(t => t.severity === 'high').length || 0;
+      
+      setSecurityThreats({ critical, high });
+    } catch (error) {
+      console.error('Error fetching security threats:', error);
+    }
+  };
+
+  // Check if agent is offline (last seen more than 5 minutes ago)
+  const isAgentOffline = () => {
+    if (!clusterData?.agent_last_seen_at && !clusterData?.last_sync) return true;
+    const lastSeen = new Date(clusterData.agent_last_seen_at || clusterData.last_sync);
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    return lastSeen < fiveMinutesAgo;
+  };
+
+  // Build attention items list
+  const getAttentionItems = (): AttentionItem[] => {
+    const items: AttentionItem[] = [];
+
+    // Agent offline
+    if (isAgentOffline()) {
+      items.push({
+        type: 'agent',
+        severity: 'critical',
+        title: 'Agente Offline',
+        description: 'O agente Kodo não está enviando métricas. Verifique a conexão do cluster.',
+        icon: WifiOff
+      });
+    }
+
+    // Security threats
+    if (securityThreats.critical > 0) {
+      items.push({
+        type: 'security',
+        severity: 'critical',
+        title: `${securityThreats.critical} Ameaça${securityThreats.critical > 1 ? 's' : ''} Crítica${securityThreats.critical > 1 ? 's' : ''}`,
+        description: 'Ameaças de segurança críticas detectadas. Ação imediata recomendada.',
+        icon: Shield
+      });
+    } else if (securityThreats.high > 0) {
+      items.push({
+        type: 'security',
+        severity: 'warning',
+        title: `${securityThreats.high} Ameaça${securityThreats.high > 1 ? 's' : ''} Alta${securityThreats.high > 1 ? 's' : ''}`,
+        description: 'Ameaças de segurança de alta severidade detectadas.',
+        icon: Shield
+      });
+    }
+
+    // Critical pods
+    if (podStatus.critical > 0) {
+      items.push({
+        type: 'pods',
+        severity: 'critical',
+        title: `${podStatus.critical} Pod${podStatus.critical > 1 ? 's' : ''} em Falha`,
+        description: 'Pods em estado crítico ou com falha. Verifique os logs.',
+        icon: Box
+      });
+    } else if (podStatus.warning > 0) {
+      items.push({
+        type: 'pods',
+        severity: 'warning',
+        title: `${podStatus.warning} Pod${podStatus.warning > 1 ? 's' : ''} com Problemas`,
+        description: 'Pods pendentes ou com muitos restarts.',
+        icon: Box
+      });
+    }
+
+    // Anomalies
+    if (recentAnomalies > 0) {
+      items.push({
+        type: 'anomaly',
+        severity: recentAnomalies > 2 ? 'critical' : 'warning',
+        title: `${recentAnomalies} Anomalia${recentAnomalies > 1 ? 's' : ''} Detectada${recentAnomalies > 1 ? 's' : ''}`,
+        description: 'Comportamentos anômalos detectados nas últimas 24h.',
+        icon: Activity
+      });
+    }
+
+    return items;
+  };
+
+  const attentionItems = getAttentionItems();
+
   const getOverallStatus = () => {
     if (!clusterData) return 'unknown';
-    if (clusterData.status === 'offline' || podStatus.critical > 0 || recentAnomalies > 2) {
+    
+    // Check for critical items
+    const hasCritical = attentionItems.some(item => item.severity === 'critical');
+    if (hasCritical || clusterData.status === 'offline') {
       return 'critical';
     }
-    if (clusterData.status === 'warning' || podStatus.warning > 0 || recentAnomalies > 0) {
+    
+    // Check for warning items
+    const hasWarning = attentionItems.some(item => item.severity === 'warning');
+    if (hasWarning || clusterData.status === 'warning') {
       return 'warning';
     }
+    
     return 'healthy';
   };
 
@@ -189,18 +312,62 @@ export const ClusterStatusSummary = ({ clusterData }: ClusterStatusSummaryProps)
           </div>
         </div>
 
-        {/* Anomalies Alert */}
-        {recentAnomalies > 0 && (
-          <div className="p-3 rounded-lg bg-warning/10 border border-warning/30 flex items-center gap-3">
-            <AlertTriangle className="h-5 w-5 text-warning" />
-            <div>
-              <p className="text-sm font-medium text-warning">
-                {recentAnomalies} anomalia{recentAnomalies > 1 ? 's' : ''} detectada{recentAnomalies > 1 ? 's' : ''} nas últimas 24h
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Acesse o Monitor IA para mais detalhes
-              </p>
-            </div>
+        {/* Attention Items - Show specific issues */}
+        {attentionItems.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-muted-foreground">Itens que precisam de atenção:</p>
+            {attentionItems.map((item, index) => {
+              const ItemIcon = item.icon;
+              const isCritical = item.severity === 'critical';
+              
+              return (
+                <div 
+                  key={index}
+                  className={`p-3 rounded-lg flex items-start gap-3 ${
+                    isCritical 
+                      ? 'bg-destructive/10 border border-destructive/30' 
+                      : 'bg-warning/10 border border-warning/30'
+                  }`}
+                >
+                  <ItemIcon className={`h-5 w-5 mt-0.5 ${
+                    isCritical ? 'text-destructive' : 'text-warning'
+                  }`} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className={`text-sm font-medium ${
+                        isCritical ? 'text-destructive' : 'text-warning'
+                      }`}>
+                        {item.title}
+                      </p>
+                      <Badge 
+                        variant="outline" 
+                        className={`text-[10px] px-1.5 py-0 ${
+                          isCritical 
+                            ? 'bg-destructive/20 text-destructive border-destructive/30' 
+                            : 'bg-warning/20 text-warning border-warning/30'
+                        }`}
+                      >
+                        {item.type === 'agent' && 'Agente'}
+                        {item.type === 'pods' && 'Pods'}
+                        {item.type === 'security' && 'Segurança'}
+                        {item.type === 'anomaly' && 'Anomalia'}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {item.description}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Agent Status Indicator */}
+        {!isAgentOffline() && (
+          <div className="flex items-center gap-2 text-xs text-success">
+            <Wifi className="h-3.5 w-3.5" />
+            <span>Agente Kodo conectado e enviando métricas</span>
           </div>
         )}
 
