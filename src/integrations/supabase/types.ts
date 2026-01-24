@@ -1566,6 +1566,7 @@ export type Database = {
           detection_source: string | null
           false_positive: boolean | null
           id: string
+          is_attack: boolean | null
           raw_data: Json | null
           remediated_at: string | null
           remediation_result: Json | null
@@ -1590,6 +1591,7 @@ export type Database = {
           detection_source?: string | null
           false_positive?: boolean | null
           id?: string
+          is_attack?: boolean | null
           raw_data?: Json | null
           remediated_at?: string | null
           remediation_result?: Json | null
@@ -1614,6 +1616,7 @@ export type Database = {
           detection_source?: string | null
           false_positive?: boolean | null
           id?: string
+          is_attack?: boolean | null
           raw_data?: Json | null
           remediated_at?: string | null
           remediation_result?: Json | null

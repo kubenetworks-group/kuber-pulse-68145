@@ -370,11 +370,14 @@ export function SecurityThreatsPanel({
   onMarkFalsePositive,
   onUpdateStatus,
 }: SecurityThreatsPanelProps) {
-  const activeThreats = threats.filter(t => t.status === 'active');
+  // Filter ONLY real attacks (is_attack === true) for the threats panel
+  // Configuration risks (is_attack === false) should appear in the Risks tab
+  const attackThreats = threats.filter(t => t.is_attack !== false);
+  const activeThreats = attackThreats.filter(t => t.status === 'active');
   const criticalThreats = activeThreats.filter(t => t.severity === 'critical');
   const highThreats = activeThreats.filter(t => t.severity === 'high');
   const otherThreats = activeThreats.filter(t => t.severity !== 'critical' && t.severity !== 'high');
-  const resolvedThreats = threats.filter(t => t.status === 'mitigated' || t.status === 'false_positive');
+  const resolvedThreats = attackThreats.filter(t => t.status === 'mitigated' || t.status === 'false_positive');
 
   if (loading) {
     return (

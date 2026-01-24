@@ -234,16 +234,18 @@ serve(async (req) => {
 
 ANALISE AS AMEACAS DE SEGURANCA ABAIXO E CLASSIFIQUE:
 
-**TIPOS DE AMEACAS:**
-1. **ddos** - Ataque DDoS, muitas conexoes, alto trafego
-2. **brute_force** - Tentativas de acesso forcado
-3. **port_scan** - Varredura de portas
-4. **suspicious_process** - Processos suspeitos
-5. **crypto_mining** - Mineracao de criptomoedas
-6. **privilege_escalation** - Escalacao de privilegios
-7. **data_exfiltration** - Exfiltracao de dados
-8. **shell_injection** - Injecao de shell, backdoor
-9. **unauthorized_access** - Acesso nao autorizado
+**IMPORTANTE: Diferencie ATAQUES REAIS de RISCOS DE CONFIGURACAO**
+
+**ATAQUES REAIS (is_attack = true):**
+- ddos, brute_force, crypto_mining, malware, ransomware, botnet
+- shell_injection, backdoor, data_exfiltration
+- Processos suspeitos com comandos maliciosos
+
+**RISCOS DE CONFIGURACAO (is_attack = false):**
+- privilege_escalation (containers privilegiados)
+- unauthorized_access (host network/pid)
+- port_scan (portas expostas)
+- misconfiguration, compliance_violation
 
 **SEVERIDADE:**
 - critical: Ameaca ativa, risco imediato
@@ -257,6 +259,7 @@ Retorne JSON (sem markdown):
     {
       "threat_type": "tipo da ameaca",
       "severity": "critical|high|medium|low",
+      "is_attack": true ou false,
       "title": "Titulo curto em portugues",
       "description": "Descricao detalhada em portugues",
       "container_name": "nome do container",
@@ -423,6 +426,7 @@ Retorne JSON (sem markdown):
           user_id: userId,
           threat_type: threat.threat_type,
           severity: threat.severity,
+          is_attack: threat.is_attack ?? true,
           title: threat.title,
           description: threat.description,
           container_name: threat.container_name,
