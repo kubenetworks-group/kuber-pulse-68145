@@ -508,6 +508,161 @@ serve(async (req) => {
       }
     }
 
+    // Process security threats and create immediate alerts
+    const securityThreatsMetric = metrics.find(m => m.type === 'security_threats');
+    if (securityThreatsMetric) {
+      const threatData = securityThreatsMetric.data as any;
+      
+      // Get user_id from cluster
+      const { data: clusterData } = await supabaseClient
+        .from('clusters')
+        .select('user_id, name')
+        .eq('id', cluster_id)
+        .single();
+
+      if (clusterData) {
+        const userId = clusterData.user_id;
+        const clusterName = clusterData.name;
+        
+        // Collect all threats
+        const allThreats: any[] = [];
+        
+        // High priority threats
+        for (const pod of threatData.privileged_containers || []) {
+          allThreats.push({
+            ...pod,
+            threat_type: 'privilege_escalation',
+            severity: 'high',
+            title: `Container privilegiado: ${pod.container_name}`,
+          });
+        }
+        for (const pod of threatData.host_network_pods || []) {
+          allThreats.push({
+            ...pod,
+            threat_type: 'unauthorized_access',
+            severity: 'high',
+            title: `Pod com acesso à rede do host: ${pod.pod_name}`,
+          });
+        }
+        for (const pod of threatData.host_pid_pods || []) {
+          allThreats.push({
+            ...pod,
+            threat_type: 'unauthorized_access',
+            severity: 'high',
+            title: `Pod com acesso ao PID do host: ${pod.pod_name}`,
+          });
+        }
+        
+        // Medium priority threats
+        for (const pod of threatData.suspicious_pods || []) {
+          allThreats.push({
+            ...pod,
+            threat_type: 'suspicious_process',
+            severity: 'medium',
+            title: `Pod suspeito: ${pod.pod_name}`,
+          });
+        }
+        
+        // Network anomalies (potential attacks)
+        for (const anomaly of threatData.network_anomalies || []) {
+          allThreats.push({
+            ...anomaly,
+            threat_type: anomaly.type || 'ddos',
+            severity: anomaly.threat_level || 'high',
+            title: anomaly.reason || 'Anomalia de rede detectada',
+          });
+        }
+        
+        // Suspicious events
+        for (const event of threatData.suspicious_events || []) {
+          allThreats.push({
+            ...event,
+            threat_type: 'brute_force',
+            severity: event.threat_level || 'medium',
+            title: event.reason || 'Evento suspeito detectado',
+          });
+        }
+
+        if (allThreats.length > 0) {
+          console.log(`🔒 Processing ${allThreats.length} security threats`);
+          
+          // Get existing active threats to avoid duplicates
+          const { data: existingThreats } = await supabaseClient
+            .from('security_threats')
+            .select('title, namespace, threat_type')
+            .eq('cluster_id', cluster_id)
+            .eq('status', 'active')
+            .gte('created_at', new Date(Date.now() - 60 * 60 * 1000).toISOString()); // Last hour
+
+          const existingKeys = new Set(
+            (existingThreats || []).map((t: any) => `${t.title}-${t.namespace}-${t.threat_type}`)
+          );
+
+          const newThreats = allThreats.filter((threat: any) => {
+            const key = `${threat.title}-${threat.namespace}-${threat.threat_type}`;
+            return !existingKeys.has(key);
+          });
+
+          if (newThreats.length > 0) {
+            // Insert new threats
+            const threatsToInsert = newThreats.slice(0, 50).map((threat: any) => ({
+              cluster_id,
+              user_id: userId,
+              threat_type: threat.threat_type,
+              severity: threat.severity || 'medium',
+              status: 'active',
+              title: threat.title,
+              description: threat.reason || `Ameaça detectada no namespace ${threat.namespace}`,
+              affected_resources: [{
+                pod: threat.pod_name,
+                container: threat.container_name,
+                namespace: threat.namespace,
+                node: threat.node_name,
+              }],
+              raw_data: threat,
+              detection_source: 'agent',
+            }));
+
+            const { error: insertError } = await supabaseClient
+              .from('security_threats')
+              .insert(threatsToInsert);
+
+            if (insertError) {
+              console.error('Error storing security threats:', insertError);
+            } else {
+              console.log(`✅ Stored ${threatsToInsert.length} new security threats`);
+            }
+
+            // Create notifications for critical/high threats
+            const criticalHighThreats = newThreats.filter((t: any) => 
+              t.severity === 'critical' || t.severity === 'high'
+            );
+
+            if (criticalHighThreats.length > 0) {
+              const isCritical = criticalHighThreats.some((t: any) => t.severity === 'critical');
+              
+              await supabaseClient
+                .from('notifications')
+                .insert({
+                  user_id: userId,
+                  title: isCritical 
+                    ? '🚨 ALERTA CRÍTICO: Ataque Detectado!'
+                    : '⚠️ Ameaça de Segurança Detectada',
+                  message: `${criticalHighThreats.length} ameaça(s) de alta severidade detectada(s) no cluster ${clusterName}. Verifique imediatamente!`,
+                  type: 'error',
+                  related_entity_type: 'security_threat',
+                  related_entity_id: cluster_id,
+                });
+
+              console.log(`🔔 Created notification for ${criticalHighThreats.length} high-severity threats`);
+            }
+          } else {
+            console.log(`✅ No new threats (${allThreats.length} duplicates skipped)`);
+          }
+        }
+      }
+    }
+
     console.log(`✅ Successfully stored ${metrics.length} metrics`);
 
     return new Response(
