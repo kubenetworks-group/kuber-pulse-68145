@@ -277,7 +277,7 @@ export default function LandingPage() {
                 Login
               </Button>
             </Link>
-            <Link to="/auth">
+            <Link to="/auth?tab=signup">
               <Button className="bg-gradient-to-r from-primary to-violet-500 hover:opacity-90 transition-all hover:scale-105 animate-glow-pulse">
                 <Zap className="w-4 h-4 mr-2" />
                 Comecar Agora
@@ -315,7 +315,7 @@ export default function LandingPage() {
 
             {/* CTA Buttons */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-6 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300">
-              <Link to="/auth">
+              <Link to="/auth?tab=signup">
                 <Button size="lg" className="bg-gradient-to-r from-primary to-violet-500 hover:opacity-90 transition-all hover:scale-105 gap-2 text-lg px-8 py-7 shadow-xl shadow-primary/20 group">
                   <Sparkles className="w-5 h-5 group-hover:animate-spin" />
                   Comecar Gratis
