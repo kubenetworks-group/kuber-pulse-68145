@@ -176,8 +176,21 @@ serve(async (req) => {
       'kodo-agent', 'local-path-storage', 'default',
     ];
 
+    // Determine what to apply based on settings
+    // When force=true, it means "run now" but still respect the individual settings
+    // Only if NO settings exist yet, force=true will apply all fixes
+    const shouldApplyAnomalies = settings?.auto_apply_anomalies ?? false;
+    const shouldApplySecurity = settings?.auto_apply_security ?? false;
+    
+    // If force is used but user has configured settings, respect those settings
+    // If force is used and no settings configured yet, default to both true for initial run
+    const applyAnomalies = force && !settings ? true : shouldApplyAnomalies;
+    const applySecurity = force && !settings ? true : shouldApplySecurity;
+
+    console.log(`Auto-heal config: anomalies=${applyAnomalies}, security/resources=${applySecurity}, force=${force}`);
+
     // 1. Check and fix anomalies
-    if (settings?.auto_apply_anomalies || force) {
+    if (applyAnomalies) {
       const { data: anomalies } = await supabase
         .from('agent_anomalies')
         .select('*')
@@ -462,7 +475,7 @@ serve(async (req) => {
 
     // 3. Check and fix pods with issues (controlled by auto_apply_anomalies)
     // This includes: CrashLoopBackOff, ImagePullBackOff, high restarts, stuck pods
-    if (settings?.auto_apply_anomalies || force) {
+    if (applyAnomalies) {
       // Find pods that are NOT Ready, in CrashLoopBackOff, or have restart issues
       const podsWithIssues = podDetails.filter((pod: any) => {
         // Skip system namespaces
@@ -603,7 +616,7 @@ serve(async (req) => {
 
     // 4. Check and fix resource-related issues (CPU/Memory limits)
     // NOTE: This is controlled by auto_apply_security - only applies resource adjustments
-    if (settings?.auto_apply_security || force) {
+    if (applySecurity) {
       // Check security metrics for pods without resource limits
       const { data: securityMetrics } = await supabase
         .from('agent_metrics')
