@@ -347,9 +347,22 @@ export function useSecurityThreats() {
         },
         (payload) => {
           const updatedThreat = transformThreat(payload.new);
-          setThreats(prev =>
-            prev.map(t => (t.id === updatedThreat.id ? updatedThreat : t))
-          );
+          setThreats(prev => {
+            const newThreats = prev.map(t => (t.id === updatedThreat.id ? updatedThreat : t));
+            
+            // Recalculate stats with updated threats
+            setStats({
+              total: newThreats.length,
+              critical: newThreats.filter(t => t.severity === 'critical').length,
+              high: newThreats.filter(t => t.severity === 'high').length,
+              medium: newThreats.filter(t => t.severity === 'medium').length,
+              low: newThreats.filter(t => t.severity === 'low').length,
+              active: newThreats.filter(t => t.status === 'active').length,
+              mitigated: newThreats.filter(t => t.status === 'mitigated' || t.mitigated).length,
+            });
+            
+            return newThreats;
+          });
         }
       )
       .subscribe();
