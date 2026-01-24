@@ -301,40 +301,12 @@ export function useSecurityThreats() {
     }
   };
 
-  // Initial fetch and realtime subscription
+  // Initial fetch only - removed continuous monitoring to prevent constant reloads
   useEffect(() => {
     if (user) {
       fetchThreats();
     }
-  }, [user, selectedClusterId]);
-
-  // Continuous security monitoring - auto-trigger analysis every 2 minutes
-  useEffect(() => {
-    if (!user || !selectedClusterId) return;
-
-    const runContinuousMonitoring = async () => {
-      try {
-        // Silently run security analysis in background
-        await supabase.functions.invoke('analyze-security-threats', {
-          body: { cluster_id: selectedClusterId, silent: true },
-        });
-        // Refresh threats after analysis
-        await fetchThreats();
-      } catch (error) {
-        console.error('Background security monitoring error:', error);
-      }
-    };
-
-    // Run initial analysis after 10 seconds
-    const initialTimeout = setTimeout(runContinuousMonitoring, 10000);
-
-    // Then run every 2 minutes (120000ms)
-    const monitoringInterval = setInterval(runContinuousMonitoring, 120000);
-
-    return () => {
-      clearTimeout(initialTimeout);
-      clearInterval(monitoringInterval);
-    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, selectedClusterId]);
 
   // Realtime subscription
