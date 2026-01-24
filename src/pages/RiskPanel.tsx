@@ -1,3 +1,4 @@
+import { useState, useMemo } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useRiskAnalysis } from "@/hooks/useRiskAnalysis";
@@ -17,6 +18,7 @@ import { CertificatesWidget } from "@/components/risk/CertificatesWidget";
 import { LoadBalancerMonitorWidget } from "@/components/risk/LoadBalancerMonitorWidget";
 import { SecurityThreatsPanel } from "@/components/risk/SecurityThreatsPanel";
 import { ConfigurationRisksWidget } from "@/components/risk/ConfigurationRisksWidget";
+import { RiskPanelFilters, RiskFilters, filterThreats, extractNamespaces } from "@/components/risk/RiskPanelFilters";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertTriangle, Activity, Globe, ShieldAlert } from "lucide-react";
 
@@ -34,14 +36,28 @@ const RiskPanel = () => {
     updateThreatStatus 
   } = useSecurityThreats();
   
+  // Filter state
+  const [filters, setFilters] = useState<RiskFilters>({
+    severity: "all",
+    status: "all",
+    namespace: "all",
+    period: "all",
+  });
+  
   const selectedCluster = clusters.find(c => c.id === selectedClusterId);
   
+  // Extract namespaces from all threats for the filter dropdown
+  const availableNamespaces = useMemo(() => extractNamespaces(threats), [threats]);
+  
+  // Apply filters to threats
+  const filteredThreats = useMemo(() => filterThreats(threats, filters), [threats, filters]);
+  
   // Only count REAL ATTACKS for the badge, not configuration risks
-  const activeAttacks = threats.filter(t => t.status === 'active' && t.is_attack !== false);
+  const activeAttacks = filteredThreats.filter(t => t.status === 'active' && t.is_attack !== false);
   const hasActiveAttacks = activeAttacks.length > 0;
   
   // Configuration risks go to Risks tab
-  const configRisks = threats.filter(t => t.is_attack === false && t.status === 'active');
+  const configRisks = filteredThreats.filter(t => t.is_attack === false && t.status === 'active');
 
   if (loading) {
     return (
@@ -133,8 +149,14 @@ const RiskPanel = () => {
 
           {/* Tab: Security Threats */}
           <TabsContent value="threats" className="space-y-6">
+            <RiskPanelFilters
+              filters={filters}
+              onFiltersChange={setFilters}
+              namespaces={availableNamespaces}
+              showStatusFilter={true}
+            />
             <SecurityThreatsPanel
-              threats={threats}
+              threats={filteredThreats}
               stats={threatStats}
               loading={threatsLoading}
               scanning={scanning}
@@ -147,6 +169,13 @@ const RiskPanel = () => {
 
           {/* Tab: Análise de Riscos */}
           <TabsContent value="risks" className="space-y-6">
+            <RiskPanelFilters
+              filters={filters}
+              onFiltersChange={setFilters}
+              namespaces={availableNamespaces}
+              showStatusFilter={true}
+            />
+            
             {/* Configuration Risks from Security Threats */}
             {configRisks.length > 0 && (
               <ConfigurationRisksWidget
