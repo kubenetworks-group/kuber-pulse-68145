@@ -2,6 +2,7 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useRiskAnalysis } from "@/hooks/useRiskAnalysis";
 import { useCluster } from "@/contexts/ClusterContext";
+import { useSecurityThreats } from "@/hooks/useSecurityThreats";
 import { RiskScoreCard } from "@/components/risk/RiskScoreCard";
 import { RisksOverview } from "@/components/risk/RisksOverview";
 import { ClusterChangesWidget } from "@/components/risk/ClusterChangesWidget";
@@ -14,14 +15,26 @@ import { MissingProbesWidget } from "@/components/risk/MissingProbesWidget";
 import { ProblematicVolumesWidget } from "@/components/risk/ProblematicVolumesWidget";
 import { CertificatesWidget } from "@/components/risk/CertificatesWidget";
 import { LoadBalancerMonitorWidget } from "@/components/risk/LoadBalancerMonitorWidget";
+import { SecurityThreatsPanel } from "@/components/risk/SecurityThreatsPanel";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertTriangle, Activity, Globe } from "lucide-react";
+import { AlertTriangle, Activity, Globe, ShieldAlert } from "lucide-react";
 
 const RiskPanel = () => {
   const { analysis, loading } = useRiskAnalysis();
   const { clusters, selectedClusterId } = useCluster();
+  const { 
+    threats, 
+    stats: threatStats, 
+    loading: threatsLoading, 
+    scanning,
+    runSecurityScan,
+    mitigateThreat,
+    markAsFalsePositive,
+    updateThreatStatus 
+  } = useSecurityThreats();
   
   const selectedCluster = clusters.find(c => c.id === selectedClusterId);
+  const hasActiveThreats = threats.filter(t => t.status === 'active').length > 0;
 
   if (loading) {
     return (
@@ -81,8 +94,17 @@ const RiskPanel = () => {
         </div>
 
         {/* Tabs */}
-        <Tabs defaultValue="risks" className="space-y-6">
-          <TabsList className="grid w-full max-w-lg grid-cols-3">
+        <Tabs defaultValue={hasActiveThreats ? "threats" : "risks"} className="space-y-6">
+          <TabsList className="grid w-full max-w-2xl grid-cols-4">
+            <TabsTrigger value="threats" className="flex items-center gap-2 relative">
+              <ShieldAlert className="h-4 w-4" />
+              Ameaças
+              {hasActiveThreats && (
+                <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center animate-pulse">
+                  {threats.filter(t => t.status === 'active').length}
+                </span>
+              )}
+            </TabsTrigger>
             <TabsTrigger value="risks" className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4" />
               Riscos
@@ -96,6 +118,20 @@ const RiskPanel = () => {
               Health
             </TabsTrigger>
           </TabsList>
+
+          {/* Tab: Security Threats */}
+          <TabsContent value="threats" className="space-y-6">
+            <SecurityThreatsPanel
+              threats={threats}
+              stats={threatStats}
+              loading={threatsLoading}
+              scanning={scanning}
+              onScan={runSecurityScan}
+              onMitigate={mitigateThreat}
+              onMarkFalsePositive={markAsFalsePositive}
+              onUpdateStatus={updateThreatStatus}
+            />
+          </TabsContent>
 
           {/* Tab: Análise de Riscos */}
           <TabsContent value="risks" className="space-y-6">
