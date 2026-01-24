@@ -7,6 +7,45 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Define which threat types are REAL ATTACKS vs CONFIGURATION RISKS
+const ATTACK_THREAT_TYPES = [
+  'crypto_mining',
+  'ddos', 
+  'brute_force',
+  'shell_injection',
+  'data_exfiltration',
+  'malware',
+  'backdoor',
+  'intrusion',
+  'ransomware',
+  'botnet',
+];
+
+const CONFIG_RISK_TYPES = [
+  'privilege_escalation',
+  'unauthorized_access',
+  'port_scan',
+  'suspicious_process',
+  'misconfiguration',
+  'compliance_violation',
+];
+
+// Check if a threat type is a real attack
+function isRealAttack(threatType: string, source: string, reason: string = ''): boolean {
+  // Direct attack types
+  if (ATTACK_THREAT_TYPES.includes(threatType)) return true;
+  
+  // Check source - config issues are NOT attacks
+  if (['privileged_container', 'host_network', 'host_pid', 'resource_anomaly'].includes(source)) {
+    return false;
+  }
+  
+  // Check reason for attack indicators
+  const reasonLower = reason.toLowerCase();
+  const attackIndicators = ['attack', 'malware', 'crypto', 'mining', 'xmrig', 'botnet', 'backdoor', 'exfiltration', 'intrusion', 'ddos', 'brute'];
+  return attackIndicators.some(indicator => reasonLower.includes(indicator));
+}
+
 // Map threat data to severity
 function determineSeverity(threatLevel: string, threatType: string): string {
   const severityMap: Record<string, string> = {
@@ -16,7 +55,7 @@ function determineSeverity(threatLevel: string, threatType: string): string {
     'low': 'low',
   };
 
-  if (['crypto_mining', 'backdoor', 'shell_injection', 'data_exfiltration'].includes(threatType)) {
+  if (['crypto_mining', 'backdoor', 'shell_injection', 'data_exfiltration', 'malware', 'ransomware'].includes(threatType)) {
     return threatLevel === 'medium' ? 'high' : (threatLevel === 'low' ? 'medium' : threatLevel);
   }
 
@@ -24,35 +63,54 @@ function determineSeverity(threatLevel: string, threatType: string): string {
 }
 
 // Get threat type from analysis
-function getThreatType(reason: string): string {
+function getThreatType(reason: string, source: string): { type: string; isAttack: boolean } {
   const reasonLower = reason.toLowerCase();
 
   if (reasonLower.includes('crypto') || reasonLower.includes('mining') || reasonLower.includes('xmrig')) {
-    return 'crypto_mining';
+    return { type: 'crypto_mining', isAttack: true };
   }
-  if (reasonLower.includes('privileged') || reasonLower.includes('privilege')) {
-    return 'privilege_escalation';
+  if (reasonLower.includes('ddos') || reasonLower.includes('flood') || reasonLower.includes('attack')) {
+    return { type: 'ddos', isAttack: true };
   }
-  if (reasonLower.includes('host network') || reasonLower.includes('hostnetwork')) {
-    return 'unauthorized_access';
+  if (reasonLower.includes('backdoor') || reasonLower.includes('reverse-shell') || reasonLower.includes('c2')) {
+    return { type: 'shell_injection', isAttack: true };
   }
-  if (reasonLower.includes('host pid') || reasonLower.includes('hostpid')) {
-    return 'unauthorized_access';
+  if (reasonLower.includes('exfiltration') || reasonLower.includes('data leak')) {
+    return { type: 'data_exfiltration', isAttack: true };
   }
-  if (reasonLower.includes('backdoor') || reasonLower.includes('reverse-shell')) {
-    return 'shell_injection';
+  if (reasonLower.includes('brute') || reasonLower.includes('forbidden') || reasonLower.includes('unauthorized')) {
+    return { type: 'brute_force', isAttack: true };
+  }
+  if (reasonLower.includes('malware') || reasonLower.includes('virus') || reasonLower.includes('trojan')) {
+    return { type: 'malware', isAttack: true };
+  }
+  
+  // Configuration risks (NOT attacks)
+  if (source === 'privileged_container' || reasonLower.includes('privileged') || reasonLower.includes('privilege')) {
+    return { type: 'privilege_escalation', isAttack: false };
+  }
+  if (source === 'host_network' || reasonLower.includes('host network') || reasonLower.includes('hostnetwork')) {
+    return { type: 'unauthorized_access', isAttack: false };
+  }
+  if (source === 'host_pid' || reasonLower.includes('host pid') || reasonLower.includes('hostpid')) {
+    return { type: 'unauthorized_access', isAttack: false };
   }
   if (reasonLower.includes('root')) {
-    return 'privilege_escalation';
+    return { type: 'privilege_escalation', isAttack: false };
   }
   if (reasonLower.includes('port') && reasonLower.includes('exposed')) {
-    return 'port_scan';
+    return { type: 'port_scan', isAttack: false };
   }
-  if (reasonLower.includes('forbidden') || reasonLower.includes('unauthorized')) {
-    return 'brute_force';
+  if (source === 'resource_anomaly') {
+    return { type: 'suspicious_process', isAttack: false };
   }
 
-  return 'suspicious_process';
+  // Default: if from suspicious events or network anomalies with attack-like patterns
+  if (source === 'suspicious_event' || source === 'network_anomaly') {
+    return { type: 'suspicious_process', isAttack: true };
+  }
+
+  return { type: 'misconfiguration', isAttack: false };
 }
 
 serve(async (req) => {
@@ -295,13 +353,14 @@ Retorne JSON (sem markdown):
       console.log('🔧 Using deterministic analysis (AI unavailable or rate limited)');
       
       const deterministicThreats = allThreats.slice(0, 20).map((threat: any) => {
-        const threatType = getThreatType(threat.reason || threat.source || '');
-        const severity = determineSeverity(threat.threat_level || 'medium', threatType);
+        const threatInfo = getThreatType(threat.reason || '', threat.source || '');
+        const severity = determineSeverity(threat.threat_level || 'medium', threatInfo.type);
         
         return {
-          threat_type: threatType,
+          threat_type: threatInfo.type,
           severity,
-          title: `${threatType.replace('_', ' ').toUpperCase()} detectado`,
+          is_attack: threatInfo.isAttack,
+          title: `${threatInfo.type.replace('_', ' ').toUpperCase()} detectado`,
           description: threat.reason || `Ameaça detectada em ${threat.pod_name || threat.container_name || 'recurso desconhecido'}`,
           container_name: threat.container_name || null,
           pod_name: threat.pod_name || null,
@@ -312,8 +371,12 @@ Retorne JSON (sem markdown):
             threat_score: severity === 'critical' ? 0.95 : severity === 'high' ? 0.75 : severity === 'medium' ? 0.5 : 0.25,
             confidence: 0.7,
             indicators: [threat.source || 'metric-based detection'],
-            recommendation: `Investigar ${threatType} no recurso afetado`,
-            mitigation_steps: ['Isolar recurso suspeito', 'Analisar logs', 'Aplicar políticas de segurança']
+            recommendation: threatInfo.isAttack 
+              ? `Investigar e mitigar ${threatInfo.type} imediatamente` 
+              : `Revisar configuração de ${threatInfo.type} quando possível`,
+            mitigation_steps: threatInfo.isAttack 
+              ? ['Isolar recurso suspeito', 'Analisar logs', 'Aplicar políticas de segurança']
+              : ['Revisar configuração', 'Aplicar best practices', 'Atualizar políticas de segurança']
           },
           evidence: {
             source: threat.source,
