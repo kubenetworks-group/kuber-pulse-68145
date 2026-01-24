@@ -317,7 +317,7 @@ export function SecurityThreatsFloatingAlert() {
           <Button
             variant="outline"
             className="flex-1 text-xs border-primary/50 hover:bg-primary/20"
-            onClick={() => window.location.href = '/risk-panel'}
+            onClick={() => window.location.href = '/risk'}
           >
             <ExternalLink className="h-3 w-3 mr-1" />
             Painel de Riscos
