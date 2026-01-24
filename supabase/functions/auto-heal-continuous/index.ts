@@ -160,6 +160,45 @@ serve(async (req) => {
     const severityOrder = ['low', 'medium', 'high', 'critical'];
     const thresholdIndex = severityOrder.indexOf(settings?.severity_threshold || 'high');
 
+    // ======= DEDUPLICATION: Fetch recent pending/sent commands to avoid duplicates =======
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    
+    const { data: recentPendingCommands } = await supabase
+      .from('agent_commands')
+      .select('id, command_type, command_params, status, created_at')
+      .eq('cluster_id', cluster_id)
+      .in('status', ['pending', 'sent', 'executing'])
+      .gte('created_at', oneHourAgo);
+    
+    // Build a set of resource keys that already have pending commands
+    const pendingResourceKeys = new Set<string>();
+    for (const cmd of recentPendingCommands || []) {
+      const params = cmd.command_params as any;
+      // Create a unique key for the resource being acted upon
+      let resourceKey = '';
+      if (params?.pod_name && params?.namespace) {
+        resourceKey = `pod:${params.namespace}/${params.pod_name}`;
+      } else if (params?.deployment_name && params?.namespace) {
+        resourceKey = `deployment:${params.namespace}/${params.deployment_name}`;
+      }
+      if (resourceKey) {
+        pendingResourceKeys.add(resourceKey);
+        console.log(`⏳ Resource already has pending command: ${resourceKey} (${cmd.command_type})`);
+      }
+    }
+    
+    // Helper function to check if a resource already has a pending command
+    const hasPendingCommand = (type: 'pod' | 'deployment', namespace: string, name: string): boolean => {
+      const key = `${type}:${namespace}/${name}`;
+      return pendingResourceKeys.has(key);
+    };
+    
+    // Helper to add to pending set after creating command
+    const markAsPending = (type: 'pod' | 'deployment', namespace: string, name: string) => {
+      pendingResourceKeys.add(`${type}:${namespace}/${name}`);
+    };
+    // ======= END DEDUPLICATION =======
+
     // System namespaces that should be skipped (infrastructure components, CNI, etc.)
     // Define early so it can be used in both anomalies and pod issues sections
     const systemNamespaces = [
@@ -187,7 +226,7 @@ serve(async (req) => {
     const applyAnomalies = force && !settings ? true : shouldApplyAnomalies;
     const applySecurity = force && !settings ? true : shouldApplySecurity;
 
-    console.log(`Auto-heal config: anomalies=${applyAnomalies}, security/resources=${applySecurity}, force=${force}`);
+    console.log(`Auto-heal config: anomalies=${applyAnomalies}, security/resources=${applySecurity}, force=${force}, pending_commands=${pendingResourceKeys.size}`);
 
     // 1. Check and fix anomalies
     if (applyAnomalies) {
@@ -403,6 +442,21 @@ serve(async (req) => {
             continue;
           }
 
+          // ======= DEDUPLICATION CHECK =======
+          const resourceType = healParams.deployment_name ? 'deployment' : 'pod';
+          const resourceName = healParams.deployment_name || healParams.pod_name;
+          const resourceNs = healParams.namespace || 'default';
+          
+          if (hasPendingCommand(resourceType, resourceNs, resourceName)) {
+            console.log(`⏭️ Skipping anomaly ${anomaly.id} - already has pending command for ${resourceType}:${resourceNs}/${resourceName}`);
+            // Mark anomaly as having auto-heal applied to avoid re-processing
+            await supabase
+              .from('agent_anomalies')
+              .update({ auto_heal_applied: true })
+              .eq('id', anomaly.id);
+            continue;
+          }
+
           // Create command for the agent
           await supabase
             .from('agent_commands')
@@ -413,6 +467,9 @@ serve(async (req) => {
               command_params: healParams,
               status: 'pending',
             });
+
+          // Mark resource as pending to avoid duplicates in same run
+          markAsPending(resourceType, resourceNs, resourceName);
 
           // Mark anomaly as resolved
           await supabase
@@ -515,6 +572,12 @@ serve(async (req) => {
       }
 
       for (const pod of podsToRestart) {
+        // ======= DEDUPLICATION CHECK =======
+        if (hasPendingCommand('pod', pod.namespace, pod.name)) {
+          console.log(`⏭️ Skipping pod ${pod.namespace}/${pod.name} - already has pending command`);
+          continue;
+        }
+
         const restartCount = pod.restarts || pod.total_restarts || 0;
         const hasBackOff = pod.containers?.some((c: any) =>
           c.state?.status === 'waiting' &&
@@ -592,6 +655,9 @@ serve(async (req) => {
             success: true,
           });
 
+          // Mark as pending to avoid duplicates
+          markAsPending('pod', pod.namespace, pod.name);
+
           console.log(`Scheduled restart for pod ${pod.namespace}/${pod.name} - ${triggerReason}`);
         } catch (error: any) {
           // Update action log with error
@@ -662,6 +728,12 @@ serve(async (req) => {
           const containerName = pod.containers?.[0]?.name;
           if (!containerName) continue;
 
+          // ======= DEDUPLICATION CHECK =======
+          if (hasPendingCommand('deployment', pod.namespace, deploymentName)) {
+            console.log(`⏭️ Skipping resource limits for ${pod.namespace}/${deploymentName} - already has pending command`);
+            continue;
+          }
+
           // Log the action
           const { data: actionLog } = await supabase
             .from('auto_heal_actions_log')
@@ -727,6 +799,9 @@ serve(async (req) => {
               success: true,
             });
 
+            // Mark as pending to avoid duplicates
+            markAsPending('deployment', pod.namespace, deploymentName);
+
             console.log(`Applied resource limits to ${pod.namespace}/${deploymentName}`);
           } catch (error: any) {
             await supabase
@@ -763,6 +838,14 @@ serve(async (req) => {
 
         // Skip if below threshold
         if (threatSeverityIndex < thresholdIndex && !force) continue;
+
+        // ======= DEDUPLICATION CHECK for security threats =======
+        const affectedNs = threat.affected_resources?.[0]?.namespace || 'default';
+        const affectedName = threat.affected_resources?.[0]?.name || '';
+        if (affectedName && hasPendingCommand('deployment', affectedNs, affectedName)) {
+          console.log(`⏭️ Skipping security threat ${threat.id} - already has pending command for ${affectedNs}/${affectedName}`);
+          continue;
+        }
 
         // Log the action
         const { data: actionLog } = await supabase
