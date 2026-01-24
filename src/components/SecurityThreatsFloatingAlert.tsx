@@ -159,9 +159,11 @@ export function SecurityThreatsFloatingAlert() {
 
   const criticalCount = threats.filter(t => t.severity === 'critical').length;
   const highCount = threats.filter(t => t.severity === 'high').length;
+  
+  const shouldShow = selectedClusterId && threats.length > 0 && !isDismissed;
 
   // Don't show if no cluster, no threats, or dismissed
-  if (!selectedClusterId || threats.length === 0 || isDismissed) {
+  if (!shouldShow) {
     return null;
   }
 
