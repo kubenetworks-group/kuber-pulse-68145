@@ -531,8 +531,12 @@ serve(async (req) => {
     const podDetails = latestMetrics?.metric_data?.pods || [];
 
     // 3. Check and fix pods with issues (controlled by auto_apply_anomalies)
-    // This includes: CrashLoopBackOff, ImagePullBackOff, high restarts, stuck pods
+    // This includes: CrashLoopBackOff, ImagePullBackOff, recent restarts, stuck pods
     if (applyAnomalies) {
+      // Threshold for considering restarts as problematic (lowered from 3 to 1 to catch recent issues)
+      const restartThreshold = settings?.severity_threshold === 'low' ? 1 : 
+                                settings?.severity_threshold === 'medium' ? 2 : 3;
+      
       // Find pods that are NOT Ready, in CrashLoopBackOff, or have restart issues
       const podsWithIssues = podDetails.filter((pod: any) => {
         // Skip system namespaces
@@ -546,30 +550,48 @@ serve(async (req) => {
           (c.state?.reason === 'CrashLoopBackOff' || c.state?.reason === 'ImagePullBackOff')
         );
 
-        // Check for high restart count
-        const hasHighRestarts = (pod.restarts > 3 || pod.total_restarts > 3);
+        // Check for restart count based on severity threshold
+        const restartCount = pod.restarts || pod.total_restarts || 0;
+        const hasRestarts = restartCount >= restartThreshold;
 
         // Check if pod is not ready but should be running
         const isStuck = pod.phase === 'Running' && pod.ready === false;
 
-        return hasBackOff || hasHighRestarts || isStuck;
+        return hasBackOff || hasRestarts || isStuck;
       });
 
-      // Also include pods with high restarts that are running OK (clear restart counter)
-      const podsWithHighRestarts = podDetails.filter((pod: any) =>
-        (pod.phase === 'Running' || pod.status === 'Running') &&
-        pod.ready === true &&
-        (pod.restarts > 3 || pod.total_restarts > 3) &&
-        !systemNamespaces.includes(pod.namespace)
-      );
+      // Also include pods with recent restarts that are running OK (to clear/reset them)
+      // This catches pods that had issues but recovered - we restart them to stabilize
+      const podsWithRecentRestarts = podDetails.filter((pod: any) => {
+        const restartCount = pod.restarts || pod.total_restarts || 0;
+        
+        // Check if any container had a recent termination (last 2 hours)
+        const hasRecentTermination = pod.containers?.some((c: any) => {
+          if (c.last_state?.finished_at) {
+            const finishedAt = new Date(c.last_state.finished_at);
+            const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+            return finishedAt > twoHoursAgo;
+          }
+          return false;
+        });
+        
+        return (pod.phase === 'Running' || pod.status === 'Running') &&
+               pod.ready === true &&
+               restartCount >= restartThreshold &&
+               hasRecentTermination &&
+               !systemNamespaces.includes(pod.namespace);
+      });
 
       // Combine and deduplicate
       const podsToRestart = [...podsWithIssues];
-      for (const pod of podsWithHighRestarts) {
+      for (const pod of podsWithRecentRestarts) {
         if (!podsToRestart.some(p => p.name === pod.name && p.namespace === pod.namespace)) {
           podsToRestart.push(pod);
         }
       }
+      
+      console.log(`🔍 Found ${podsWithIssues.length} pods with issues, ${podsWithRecentRestarts.length} with recent restarts (threshold: ${restartThreshold})`);
+      console.log(`📋 Total pods to restart: ${podsToRestart.length}`);
 
       for (const pod of podsToRestart) {
         // ======= DEDUPLICATION CHECK =======
