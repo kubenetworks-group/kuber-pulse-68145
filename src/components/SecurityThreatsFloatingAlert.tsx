@@ -18,6 +18,7 @@ interface SecurityThreat {
   description: string | null;
   created_at: string;
   affected_resources?: any[];
+  is_attack?: boolean; // True for real attacks, false for config risks
 }
 
 export function SecurityThreatsFloatingAlert() {
@@ -157,12 +158,14 @@ export function SecurityThreatsFloatingAlert() {
     }
   };
 
-  const criticalCount = threats.filter(t => t.severity === 'critical').length;
-  const highCount = threats.filter(t => t.severity === 'high').length;
+  // Filter only REAL ATTACKS (not configuration risks)
+  const attackThreats = threats.filter(t => t.is_attack !== false);
+  const criticalCount = attackThreats.filter(t => t.severity === 'critical').length;
+  const highCount = attackThreats.filter(t => t.severity === 'high').length;
   
-  const shouldShow = selectedClusterId && threats.length > 0 && !isDismissed;
+  const shouldShow = selectedClusterId && attackThreats.length > 0 && !isDismissed;
 
-  // Don't show if no cluster, no threats, or dismissed
+  // Don't show if no cluster, no attack threats, or dismissed
   if (!shouldShow) {
     return null;
   }
@@ -183,7 +186,7 @@ export function SecurityThreatsFloatingAlert() {
         )}>
           <ShieldAlert className="h-5 w-5 text-white" />
           <span className="text-white font-semibold">
-            {threats.length} Ameaça{threats.length > 1 ? 's' : ''}
+            {attackThreats.length} Ameaça{attackThreats.length > 1 ? 's' : ''}
           </span>
         </div>
       </div>

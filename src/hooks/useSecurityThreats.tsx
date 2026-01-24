@@ -11,6 +11,7 @@ export interface SecurityThreat {
   threat_type: string;
   severity: 'low' | 'medium' | 'high' | 'critical';
   status: 'active' | 'investigating' | 'mitigated' | 'false_positive';
+  is_attack: boolean; // True for real attacks, false for config risks
   title: string;
   description: string | null;
   affected_resources: any[];
@@ -61,6 +62,8 @@ export interface ThreatStats {
   low: number;
   active: number;
   mitigated: number;
+  attacks: number;     // Real attacks count
+  configRisks: number; // Configuration risks count
 }
 
 export function useSecurityThreats() {
@@ -77,11 +80,14 @@ export function useSecurityThreats() {
     low: 0,
     active: 0,
     mitigated: 0,
+    attacks: 0,
+    configRisks: 0,
   });
 
   // Helper to transform data with defaults
   const transformThreat = (data: any): SecurityThreat => ({
     ...data,
+    is_attack: data.is_attack ?? true, // Default to attack if not specified
     container_name: data.container_name || data.affected_resources?.[0]?.container || null,
     container_id: data.container_id || null,
     pod_name: data.pod_name || data.affected_resources?.[0]?.pod || null,
@@ -133,6 +139,8 @@ export function useSecurityThreats() {
         low: threatData.filter(t => t.severity === 'low').length,
         active: threatData.filter(t => t.status === 'active').length,
         mitigated: threatData.filter(t => t.status === 'mitigated' || t.mitigated).length,
+        attacks: threatData.filter(t => t.is_attack === true).length,
+        configRisks: threatData.filter(t => t.is_attack === false).length,
       });
     } catch (error) {
       console.error('Error fetching threats:', error);
@@ -359,6 +367,8 @@ export function useSecurityThreats() {
               low: newThreats.filter(t => t.severity === 'low').length,
               active: newThreats.filter(t => t.status === 'active').length,
               mitigated: newThreats.filter(t => t.status === 'mitigated' || t.mitigated).length,
+              attacks: newThreats.filter(t => t.is_attack === true).length,
+              configRisks: newThreats.filter(t => t.is_attack === false).length,
             });
             
             return newThreats;

@@ -16,6 +16,7 @@ import { ProblematicVolumesWidget } from "@/components/risk/ProblematicVolumesWi
 import { CertificatesWidget } from "@/components/risk/CertificatesWidget";
 import { LoadBalancerMonitorWidget } from "@/components/risk/LoadBalancerMonitorWidget";
 import { SecurityThreatsPanel } from "@/components/risk/SecurityThreatsPanel";
+import { ConfigurationRisksWidget } from "@/components/risk/ConfigurationRisksWidget";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertTriangle, Activity, Globe, ShieldAlert } from "lucide-react";
 
@@ -34,7 +35,13 @@ const RiskPanel = () => {
   } = useSecurityThreats();
   
   const selectedCluster = clusters.find(c => c.id === selectedClusterId);
-  const hasActiveThreats = threats.filter(t => t.status === 'active').length > 0;
+  
+  // Only count REAL ATTACKS for the badge, not configuration risks
+  const activeAttacks = threats.filter(t => t.status === 'active' && t.is_attack !== false);
+  const hasActiveAttacks = activeAttacks.length > 0;
+  
+  // Configuration risks go to Risks tab
+  const configRisks = threats.filter(t => t.is_attack === false && t.status === 'active');
 
   if (loading) {
     return (
@@ -94,20 +101,25 @@ const RiskPanel = () => {
         </div>
 
         {/* Tabs */}
-        <Tabs defaultValue={hasActiveThreats ? "threats" : "risks"} className="space-y-6">
+        <Tabs defaultValue={hasActiveAttacks ? "threats" : "risks"} className="space-y-6">
           <TabsList className="grid w-full max-w-2xl grid-cols-4">
             <TabsTrigger value="threats" className="flex items-center gap-2 relative">
               <ShieldAlert className="h-4 w-4" />
               Ameaças
-              {hasActiveThreats && (
+              {hasActiveAttacks && (
                 <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center animate-pulse">
-                  {threats.filter(t => t.status === 'active').length}
+                  {activeAttacks.length}
                 </span>
               )}
             </TabsTrigger>
-            <TabsTrigger value="risks" className="flex items-center gap-2">
+            <TabsTrigger value="risks" className="flex items-center gap-2 relative">
               <AlertTriangle className="h-4 w-4" />
               Riscos
+              {configRisks.length > 0 && (
+                <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-orange-500 text-white text-xs flex items-center justify-center">
+                  {configRisks.length}
+                </span>
+              )}
             </TabsTrigger>
             <TabsTrigger value="loadbalancer" className="flex items-center gap-2">
               <Globe className="h-4 w-4" />
@@ -135,6 +147,15 @@ const RiskPanel = () => {
 
           {/* Tab: Análise de Riscos */}
           <TabsContent value="risks" className="space-y-6">
+            {/* Configuration Risks from Security Threats */}
+            {configRisks.length > 0 && (
+              <ConfigurationRisksWidget
+                risks={configRisks}
+                onResolve={mitigateThreat}
+                onMarkFalsePositive={markAsFalsePositive}
+              />
+            )}
+            
             {/* Risk Categories */}
             <RisksOverview risks={analysis.risks} />
 
