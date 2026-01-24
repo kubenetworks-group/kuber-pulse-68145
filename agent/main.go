@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -22,7 +23,7 @@ import (
 )
 
 // Agent version - update this when releasing new versions
-const AgentVersion = "v0.0.51"
+const AgentVersion = "v0.0.52"
 
 // ---------------------------------------------
 // CONFIG
@@ -1809,7 +1810,16 @@ func executeCommands(clientset *kubernetes.Clientset, config AgentConfig, comman
 func deletePod(clientset *kubernetes.Clientset, params map[string]interface{}) (map[string]interface{}, error) {
 	podName := params["pod_name"].(string)
 	namespace := params["namespace"].(string)
+	commandID, _ := params["command_id"].(string)
+	reason, _ := params["reason"].(string)
+	if reason == "" {
+		reason = "manual_restart"
+	}
 
+	// Collect pod info and logs BEFORE deleting for audit
+	auditData := collectPodAuditData(clientset, namespace, podName, reason)
+
+	// Delete the pod
 	err := clientset.CoreV1().Pods(namespace).Delete(
 		context.Background(),
 		podName,
@@ -1820,12 +1830,139 @@ func deletePod(clientset *kubernetes.Clientset, params map[string]interface{}) (
 		return nil, err
 	}
 
+	// Send audit data to backend (async, don't block on failure)
+	go sendPodRestartAudit(auditData, commandID)
+
 	return map[string]interface{}{
-		"action":    "pod_deleted",
-		"pod":       podName,
-		"namespace": namespace,
-		"message":   "Pod deleted successfully. Kubernetes will recreate it.",
+		"action":       "pod_deleted",
+		"pod":          podName,
+		"namespace":    namespace,
+		"message":      "Pod deleted successfully. Kubernetes will recreate it.",
+		"audit_logged": true,
 	}, nil
+}
+
+// collectPodAuditData collects pod state and logs before restart for auditing
+func collectPodAuditData(clientset *kubernetes.Clientset, namespace, podName, reason string) map[string]interface{} {
+	auditData := map[string]interface{}{
+		"pod_name":       podName,
+		"namespace":      namespace,
+		"restart_reason": reason,
+		"collected_at":   time.Now().UTC().Format(time.RFC3339),
+	}
+
+	// Get pod details
+	pod, err := clientset.CoreV1().Pods(namespace).Get(context.Background(), podName, metav1.GetOptions{})
+	if err != nil {
+		log.Printf("⚠️  Could not get pod details for audit: %v", err)
+		return auditData
+	}
+
+	// Extract container info and previous state
+	if len(pod.Status.ContainerStatuses) > 0 {
+		for _, cs := range pod.Status.ContainerStatuses {
+			auditData["container_name"] = cs.Name
+			auditData["restart_count"] = cs.RestartCount
+
+			// Get previous state (termination info)
+			if cs.LastTerminationState.Terminated != nil {
+				term := cs.LastTerminationState.Terminated
+				auditData["exit_code"] = term.ExitCode
+				auditData["terminated_at"] = term.FinishedAt.Format(time.RFC3339)
+				auditData["previous_state"] = map[string]interface{}{
+					"reason":      term.Reason,
+					"message":     term.Message,
+					"exit_code":   term.ExitCode,
+					"signal":      term.Signal,
+					"started_at":  term.StartedAt.Format(time.RFC3339),
+					"finished_at": term.FinishedAt.Format(time.RFC3339),
+				}
+			}
+
+			// Get container logs (last 100 lines)
+			logs := getContainerLogs(clientset, namespace, podName, cs.Name, 100)
+			if logs != "" {
+				auditData["logs"] = logs
+			}
+
+			break // Just get first container for now
+		}
+	}
+
+	return auditData
+}
+
+// getContainerLogs fetches the last N lines of logs from a container
+func getContainerLogs(clientset *kubernetes.Clientset, namespace, podName, containerName string, tailLines int64) string {
+	logsReq := clientset.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{
+		Container: containerName,
+		TailLines: &tailLines,
+		Previous:  true, // Get logs from previous container instance if it crashed
+	})
+
+	logsStream, err := logsReq.Stream(context.Background())
+	if err != nil {
+		// Try current logs if previous doesn't exist
+		logsReq = clientset.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{
+			Container: containerName,
+			TailLines: &tailLines,
+			Previous:  false,
+		})
+		logsStream, err = logsReq.Stream(context.Background())
+		if err != nil {
+			log.Printf("⚠️  Could not get logs for %s/%s: %v", namespace, podName, err)
+			return ""
+		}
+	}
+	defer logsStream.Close()
+
+	buf := new(bytes.Buffer)
+	_, err = io.Copy(buf, logsStream)
+	if err != nil {
+		log.Printf("⚠️  Error reading logs: %v", err)
+		return ""
+	}
+
+	return buf.String()
+}
+
+// sendPodRestartAudit sends the audit data to the backend
+func sendPodRestartAudit(auditData map[string]interface{}, commandID string) {
+	config := loadConfig()
+	if config.APIEndpoint == "" {
+		log.Printf("⚠️  Cannot send audit: API endpoint not configured")
+		return
+	}
+
+	if commandID != "" {
+		auditData["command_id"] = commandID
+	}
+
+	body, err := json.Marshal(auditData)
+	if err != nil {
+		log.Printf("⚠️  Failed to marshal audit data: %v", err)
+		return
+	}
+
+	url := fmt.Sprintf("%s/collect-pod-logs", config.APIEndpoint)
+	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-agent-key", config.APIKey)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("⚠️  Failed to send pod restart audit: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 200 {
+		log.Printf("📋 Pod restart audit sent successfully for %s/%s", auditData["namespace"], auditData["pod_name"])
+	} else {
+		respBody, _ := ioutil.ReadAll(resp.Body)
+		log.Printf("⚠️  Audit endpoint returned %d: %s", resp.StatusCode, string(respBody))
+	}
 }
 
 func scaleDeployment(clientset *kubernetes.Clientset, params map[string]interface{}) (map[string]interface{}, error) {

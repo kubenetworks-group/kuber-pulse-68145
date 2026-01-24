@@ -1097,6 +1097,105 @@ export type Database = {
           },
         ]
       }
+      pod_restart_audit: {
+        Row: {
+          analysis_summary: string | null
+          cluster_id: string
+          command_id: string | null
+          container_logs: string | null
+          container_logs_tail: number | null
+          container_name: string | null
+          created_at: string
+          exit_code: number | null
+          id: string
+          namespace: string
+          pod_name: string
+          previous_state: Json | null
+          restart_count: number | null
+          restart_reason: string
+          terminated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          analysis_summary?: string | null
+          cluster_id: string
+          command_id?: string | null
+          container_logs?: string | null
+          container_logs_tail?: number | null
+          container_name?: string | null
+          created_at?: string
+          exit_code?: number | null
+          id?: string
+          namespace: string
+          pod_name: string
+          previous_state?: Json | null
+          restart_count?: number | null
+          restart_reason: string
+          terminated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          analysis_summary?: string | null
+          cluster_id?: string
+          command_id?: string | null
+          container_logs?: string | null
+          container_logs_tail?: number | null
+          container_name?: string | null
+          created_at?: string
+          exit_code?: number | null
+          id?: string
+          namespace?: string
+          pod_name?: string
+          previous_state?: Json | null
+          restart_count?: number | null
+          restart_reason?: string
+          terminated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      pod_restart_daily_reports: {
+        Row: {
+          ai_analysis: string | null
+          cluster_id: string
+          created_at: string
+          id: string
+          namespaces_affected: string[] | null
+          pods_affected: number | null
+          pods_summary: Json | null
+          report_date: string
+          top_restart_reasons: Json | null
+          total_restarts: number | null
+          user_id: string
+        }
+        Insert: {
+          ai_analysis?: string | null
+          cluster_id: string
+          created_at?: string
+          id?: string
+          namespaces_affected?: string[] | null
+          pods_affected?: number | null
+          pods_summary?: Json | null
+          report_date?: string
+          top_restart_reasons?: Json | null
+          total_restarts?: number | null
+          user_id: string
+        }
+        Update: {
+          ai_analysis?: string | null
+          cluster_id?: string
+          created_at?: string
+          id?: string
+          namespaces_affected?: string[] | null
+          pods_affected?: number | null
+          pods_summary?: Json | null
+          report_date?: string
+          top_restart_reasons?: Json | null
+          total_restarts?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null

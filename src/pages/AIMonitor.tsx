@@ -11,11 +11,12 @@ import { SecurityThreatCard } from "@/components/SecurityThreatCard";
 import { ContainerTerminalAlert } from "@/components/ContainerTerminalAlert";
 import { AgentUpdateBanner } from "@/components/AgentUpdateBanner";
 import { useSecurityThreats } from "@/hooks/useSecurityThreats";
-import { Bot, Activity, CheckCircle, Shield, Zap, AlertCircle, History, ShieldAlert, Settings, Clock, Server, AlertTriangle, RefreshCw, Search } from "lucide-react";
+import { Bot, Activity, CheckCircle, Shield, Zap, AlertCircle, History, ShieldAlert, Settings, Clock, Server, AlertTriangle, RefreshCw, Search, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AutoHealConfig } from "@/components/AutoHealConfig";
 import { AutoHealActionsLog } from "@/components/AutoHealActionsLog";
 import { ClusterSecurityAnalysis } from "@/components/ClusterSecurityAnalysis";
+import { PodRestartAuditTab } from "@/components/PodRestartAuditTab";
 import { toast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -591,6 +592,10 @@ export default function AIMonitor() {
             <TabsTrigger value="autoheal" className="flex items-center gap-2 text-sm whitespace-nowrap px-3 py-2">
               <Settings className="h-4 w-4" />
               <span>Auto-Heal</span>
+            </TabsTrigger>
+            <TabsTrigger value="audit" className="flex items-center gap-2 text-sm whitespace-nowrap px-3 py-2">
+              <FileText className="h-4 w-4" />
+              <span>Auditoria</span>
             </TabsTrigger>
           </TabsList>
 
@@ -1338,6 +1343,11 @@ export default function AIMonitor() {
               <AutoHealConfig />
               <AutoHealActionsLog />
             </div>
+          </TabsContent>
+
+          {/* Audit Tab */}
+          <TabsContent value="audit" className="space-y-4">
+            <PodRestartAuditTab />
           </TabsContent>
         </Tabs>
       </div>
