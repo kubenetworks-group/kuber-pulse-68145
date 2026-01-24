@@ -939,6 +939,133 @@ export type Database = {
         }
         Relationships: []
       }
+      loadbalancer_services: {
+        Row: {
+          cluster_id: string
+          created_at: string
+          external_ip: string
+          first_seen_at: string
+          has_network_policy: boolean | null
+          id: string
+          last_seen_at: string
+          last_suspicious_at: string | null
+          namespace: string
+          ports: Json | null
+          service_name: string
+          suspicious_requests: number | null
+          total_requests: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cluster_id: string
+          created_at?: string
+          external_ip: string
+          first_seen_at?: string
+          has_network_policy?: boolean | null
+          id?: string
+          last_seen_at?: string
+          last_suspicious_at?: string | null
+          namespace: string
+          ports?: Json | null
+          service_name: string
+          suspicious_requests?: number | null
+          total_requests?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cluster_id?: string
+          created_at?: string
+          external_ip?: string
+          first_seen_at?: string
+          has_network_policy?: boolean | null
+          id?: string
+          last_seen_at?: string
+          last_suspicious_at?: string | null
+          namespace?: string
+          ports?: Json | null
+          service_name?: string
+          suspicious_requests?: number | null
+          total_requests?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loadbalancer_services_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      loadbalancer_traffic_logs: {
+        Row: {
+          cluster_id: string
+          created_at: string
+          external_ip: string
+          id: string
+          is_suspicious: boolean | null
+          namespace: string
+          request_method: string | null
+          request_path: string | null
+          request_timestamp: string
+          service_name: string
+          source_ip: string | null
+          status_code: number | null
+          threat_level: string | null
+          threat_reason: string | null
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          cluster_id: string
+          created_at?: string
+          external_ip: string
+          id?: string
+          is_suspicious?: boolean | null
+          namespace: string
+          request_method?: string | null
+          request_path?: string | null
+          request_timestamp?: string
+          service_name: string
+          source_ip?: string | null
+          status_code?: number | null
+          threat_level?: string | null
+          threat_reason?: string | null
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          cluster_id?: string
+          created_at?: string
+          external_ip?: string
+          id?: string
+          is_suspicious?: boolean | null
+          namespace?: string
+          request_method?: string | null
+          request_path?: string | null
+          request_timestamp?: string
+          service_name?: string
+          source_ip?: string | null
+          status_code?: number | null
+          threat_level?: string | null
+          threat_reason?: string | null
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loadbalancer_traffic_logs_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mfa_backup_codes: {
         Row: {
           code_hash: string

@@ -13,8 +13,9 @@ import { ResourceMisuseWidget } from "@/components/risk/ResourceMisuseWidget";
 import { MissingProbesWidget } from "@/components/risk/MissingProbesWidget";
 import { ProblematicVolumesWidget } from "@/components/risk/ProblematicVolumesWidget";
 import { CertificatesWidget } from "@/components/risk/CertificatesWidget";
+import { LoadBalancerMonitorWidget } from "@/components/risk/LoadBalancerMonitorWidget";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertTriangle, Activity } from "lucide-react";
+import { AlertTriangle, Activity, Globe } from "lucide-react";
 
 const RiskPanel = () => {
   const { analysis, loading } = useRiskAnalysis();
@@ -81,14 +82,18 @@ const RiskPanel = () => {
 
         {/* Tabs */}
         <Tabs defaultValue="risks" className="space-y-6">
-          <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsList className="grid w-full max-w-lg grid-cols-3">
             <TabsTrigger value="risks" className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4" />
-              Análise de Riscos
+              Riscos
+            </TabsTrigger>
+            <TabsTrigger value="loadbalancer" className="flex items-center gap-2">
+              <Globe className="h-4 w-4" />
+              LoadBalancers
             </TabsTrigger>
             <TabsTrigger value="health" className="flex items-center gap-2">
               <Activity className="h-4 w-4" />
-              Health Manager
+              Health
             </TabsTrigger>
           </TabsList>
 
@@ -108,6 +113,14 @@ const RiskPanel = () => {
 
             {/* Trend Chart */}
             <ProblemTrendChart trends={analysis.trends} />
+          </TabsContent>
+
+          {/* Tab: LoadBalancer Monitoring */}
+          <TabsContent value="loadbalancer" className="space-y-6">
+            <LoadBalancerMonitorWidget />
+            
+            {/* Also show public exposures for context */}
+            <PublicExposuresWidget exposures={analysis.publicExposures} />
           </TabsContent>
 
           {/* Tab: Kubernetes Health Manager */}
