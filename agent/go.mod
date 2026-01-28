@@ -3,6 +3,9 @@ module kodo-agent
 go 1.22.0
 
 require (
+	github.com/gorilla/websocket v1.5.0
+	github.com/moby/spdystream v0.2.0
+	github.com/mxk/go-flowrate v0.0.0-20140419014527-cca7078d478f
 	k8s.io/apimachinery v0.30.0
 	k8s.io/client-go v0.30.0
 	k8s.io/metrics v0.30.0
