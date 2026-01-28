@@ -57,7 +57,21 @@ O agente coleta automaticamente:
 - **Pods**: Status (running, pending, failed)
 - **Nodes**: Total e status de saúde
 - **Events**: Warnings e erros recentes
-- **PVCs**: Uso de storage (futuro)
+- **PVCs**: Uso real de storage via Kubelet Stats API ou fallback via `df` exec
+
+### 🔍 Coleta de Uso Real de PVCs
+
+O agente usa duas estratégias para coletar uso real de storage:
+
+1. **Kubelet Stats API (preferencial)**: Coleta métricas de volume diretamente do Kubelet
+2. **Fallback via `df` exec**: Para storage providers que não expõem métricas (ex: OpenStack Cinder), o agente executa `df -B1` dentro dos containers para obter uso real
+
+**Limitações do fallback:**
+- Só funciona em pods com status `Running`
+- Containers distroless (sem `df`) não são suportados
+- Namespaces de sistema são ignorados por segurança
+- Máximo de 10 exec calls por ciclo de coleta
+- Resultados são cacheados por 5 minutos
 
 ## 🔧 Configuração
 
@@ -73,8 +87,9 @@ COLLECT_INTERVAL: 30  # segundos entre coletas
 ## 🛡️ Permissões
 
 O agente requer:
-- `get`, `list`, `watch` em nodes, pods, events
+- `get`, `list`, `watch` em nodes, pods, events, PVCs, PVs, etc.
 - `delete` em pods (para restart automático)
+- `create` em pods/exec (para coletar uso real de PVCs via `df`)
 - `update` em deployments (para scaling)
 
 ## 🏗️ Build e Deploy
