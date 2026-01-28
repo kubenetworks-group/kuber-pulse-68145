@@ -461,6 +461,7 @@ export const StorageChart = ({ total, allocated, used, available, pvcs }: Storag
                     const allocatedGB = pvc.requested_bytes / (1024 ** 3);
                     const usedGB = pvc.used_bytes / (1024 ** 3);
                     const usagePercent = allocatedGB > 0 ? (usedGB / allocatedGB) * 100 : 0;
+                    const hasUsageData = pvc.used_bytes > 0;
                     
                     return (
                       <div 
@@ -485,35 +486,50 @@ export const StorageChart = ({ total, allocated, used, available, pvcs }: Storag
                           </div>
                         </div>
                         
-                        {/* Usage Progress Bar - Only show if real usage data is available */}
-                        {hasRealUsageData && (
-                          <div className="space-y-1">
-                            <div className="flex items-center justify-between text-[10px] sm:text-xs">
-                              <span className="text-muted-foreground">Real Usage</span>
+                        {/* Usage Progress Bar - Always show, with N/A for PVCs without usage data */}
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-[10px] sm:text-xs">
+                            <span className="text-muted-foreground flex items-center gap-1">
+                              <HardDrive className="w-3 h-3" />
+                              Uso Real (df)
+                            </span>
+                            {hasUsageData ? (
                               <span className={`font-medium ${getUsageColor(usagePercent)}`}>
                                 {usedGB.toFixed(2)} GB / {allocatedGB.toFixed(2)} GB ({usagePercent.toFixed(0)}%)
                               </span>
-                            </div>
-                            <div className="relative h-2 bg-muted/50 rounded-full overflow-hidden">
-                              <div 
-                                className={`absolute left-0 top-0 h-full rounded-full transition-all duration-500 ${getProgressColor(usagePercent)}`}
-                                style={{ width: `${Math.min(usagePercent, 100)}%` }}
-                              />
-                            </div>
-                            {usagePercent < 20 && usedGB > 0 && (
-                              <p className="text-[10px] text-warning flex items-center gap-1">
-                                <AlertTriangle className="w-3 h-3" />
-                                Low usage - consider resizing
-                              </p>
-                            )}
-                            {usagePercent >= 90 && (
-                              <p className="text-[10px] text-destructive flex items-center gap-1">
-                                <AlertTriangle className="w-3 h-3" />
-                                Near capacity - consider expanding
-                              </p>
+                            ) : (
+                              <span className="text-muted-foreground italic">
+                                Aguardando métricas...
+                              </span>
                             )}
                           </div>
-                        )}
+                          {hasUsageData ? (
+                            <>
+                              <div className="relative h-2 bg-muted/50 rounded-full overflow-hidden">
+                                <div 
+                                  className={`absolute left-0 top-0 h-full rounded-full transition-all duration-500 ${getProgressColor(usagePercent)}`}
+                                  style={{ width: `${Math.min(usagePercent, 100)}%` }}
+                                />
+                              </div>
+                              {usagePercent < 20 && usedGB > 0 && (
+                                <p className="text-[10px] text-warning flex items-center gap-1">
+                                  <AlertTriangle className="w-3 h-3" />
+                                  Baixo uso - considere redimensionar
+                                </p>
+                              )}
+                              {usagePercent >= 90 && (
+                                <p className="text-[10px] text-destructive flex items-center gap-1">
+                                  <AlertTriangle className="w-3 h-3" />
+                                  Quase cheio - considere expandir
+                                </p>
+                              )}
+                            </>
+                          ) : (
+                            <div className="relative h-2 bg-muted/30 rounded-full overflow-hidden">
+                              <div className="absolute inset-0 bg-gradient-to-r from-muted/20 via-muted/40 to-muted/20 animate-pulse" />
+                            </div>
+                          )}
+                        </div>
                       </div>
                     );
                   })
