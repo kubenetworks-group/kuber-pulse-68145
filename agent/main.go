@@ -10,7 +10,10 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -18,12 +21,286 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/remotecommand"
 	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
 )
 
 // Agent version - update this when releasing new versions
-const AgentVersion = "v0.0.52"
+const AgentVersion = "v0.0.53"
+
+// ---------------------------------------------
+// PVC USAGE VIA DF COMMAND (EXEC IN CONTAINERS)
+// ---------------------------------------------
+
+// PVCDfUsage stores PVC usage collected via df command
+type PVCDfUsage struct {
+	MountPath      string
+	UsedBytes      int64
+	AvailableBytes int64
+	TotalBytes     int64
+	UsePercent     int
+}
+
+// pvcDfCache stores cached df results to avoid excessive exec calls
+type pvcDfCache struct {
+	sync.RWMutex
+	data      map[string]PVCDfUsage // key: namespace/pvcName
+	timestamp time.Time
+	ttl       time.Duration
+}
+
+var dfCache = &pvcDfCache{
+	data: make(map[string]PVCDfUsage),
+	ttl:  5 * time.Minute, // Cache results for 5 minutes
+}
+
+// blockedNamespaces are system namespaces where we won't exec into containers
+var blockedNamespaces = map[string]bool{
+	"kube-system":     true,
+	"kube-public":     true,
+	"kube-node-lease": true,
+	"calico-system":   true,
+	"tigera-operator": true,
+	"istio-system":    true,
+	"linkerd":         true,
+	"cert-manager":    true,
+	"ingress-nginx":   true,
+	"kodo":            true, // Don't exec into our own namespace
+}
+
+// isValidForDfExec checks if we should attempt df exec on this namespace
+func isValidForDfExec(namespace string) bool {
+	return !blockedNamespaces[namespace]
+}
+
+// findPVCMountInPod finds the container and mount path for a PVC in a pod
+func findPVCMountInPod(pod *corev1.Pod, pvcName string) (containerName, mountPath string, found bool) {
+	// Find the volume that references the PVC
+	var volumeName string
+	for _, vol := range pod.Spec.Volumes {
+		if vol.PersistentVolumeClaim != nil && vol.PersistentVolumeClaim.ClaimName == pvcName {
+			volumeName = vol.Name
+			break
+		}
+	}
+
+	if volumeName == "" {
+		return "", "", false
+	}
+
+	// Find the container and mount path
+	for _, container := range pod.Spec.Containers {
+		for _, mount := range container.VolumeMounts {
+			if mount.Name == volumeName {
+				return container.Name, mount.MountPath, true
+			}
+		}
+	}
+	return "", "", false
+}
+
+// execDfInContainer executes df -B1 command inside a container to get real disk usage
+func execDfInContainer(clientset *kubernetes.Clientset, restConfig *rest.Config,
+	namespace, podName, containerName, mountPath string) (*PVCDfUsage, error) {
+
+	// Build the exec request
+	req := clientset.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace(namespace).
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: containerName,
+			Command:   []string{"df", "-B1", mountPath},
+			Stdout:    true,
+			Stderr:    true,
+		}, scheme.ParameterCodec)
+
+	// Create executor with 5 second timeout
+	exec, err := remotecommand.NewSPDYExecutor(restConfig, "POST", req.URL())
+	if err != nil {
+		return nil, fmt.Errorf("failed to create executor: %v", err)
+	}
+
+	// Create buffers for output
+	var stdout, stderr bytes.Buffer
+
+	// Execute with timeout context
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err = exec.StreamWithContext(ctx, remotecommand.StreamOptions{
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+
+	if err != nil {
+		// Check if it's a "command not found" type error (distroless containers)
+		if strings.Contains(err.Error(), "executable file not found") ||
+			strings.Contains(stderr.String(), "not found") {
+			return nil, fmt.Errorf("df command not available in container")
+		}
+		return nil, fmt.Errorf("exec failed: %v, stderr: %s", err, stderr.String())
+	}
+
+	// Parse df output
+	// Format: Filesystem 1B-blocks Used Available Use% Mounted on
+	// Example: /dev/sda1 107374182400 21474836480 85899345920 20% /data
+	return parseDfOutput(stdout.String(), mountPath)
+}
+
+// parseDfOutput parses the output of df -B1 command
+func parseDfOutput(output, mountPath string) (*PVCDfUsage, error) {
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	if len(lines) < 2 {
+		return nil, fmt.Errorf("unexpected df output format")
+	}
+
+	// Skip header, parse data line(s)
+	// Sometimes mount paths wrap to next line, so we need to handle that
+	for i := 1; i < len(lines); i++ {
+		line := strings.TrimSpace(lines[i])
+		if line == "" {
+			continue
+		}
+
+		// Use regex to extract numbers more reliably
+		// Pattern: filesystem total used available use% mountpoint
+		fields := strings.Fields(line)
+		if len(fields) < 5 {
+			continue
+		}
+
+		// Find the line with our mount path or just use the first data line
+		var total, used, available int64
+		var usePercent int
+
+		// Parse based on field positions
+		// fields[1] = total, fields[2] = used, fields[3] = available, fields[4] = use%
+		var err error
+
+		// Handle case where filesystem name is very long and wraps
+		offset := 0
+		if len(fields) == 5 {
+			// Normal case: all fields on one line but first field might be empty
+			offset = 0
+		} else if len(fields) >= 6 {
+			// Full line with filesystem name
+			offset = 1
+		}
+
+		if len(fields) > offset+3 {
+			total, err = strconv.ParseInt(fields[offset], 10, 64)
+			if err != nil {
+				continue
+			}
+			used, err = strconv.ParseInt(fields[offset+1], 10, 64)
+			if err != nil {
+				continue
+			}
+			available, err = strconv.ParseInt(fields[offset+2], 10, 64)
+			if err != nil {
+				continue
+			}
+
+			// Parse use percentage (remove % sign)
+			useStr := strings.TrimSuffix(fields[offset+3], "%")
+			if pct, err := strconv.Atoi(useStr); err == nil {
+				usePercent = pct
+			}
+
+			return &PVCDfUsage{
+				MountPath:      mountPath,
+				TotalBytes:     total,
+				UsedBytes:      used,
+				AvailableBytes: available,
+				UsePercent:     usePercent,
+			}, nil
+		}
+	}
+
+	return nil, fmt.Errorf("could not parse df output for mount path %s", mountPath)
+}
+
+// collectPVCUsageViaDf tries to collect PVC usage by executing df in containers
+func collectPVCUsageViaDf(clientset *kubernetes.Clientset, restConfig *rest.Config,
+	pvcNamespace, pvcName string) (*PVCDfUsage, error) {
+
+	// Check cache first
+	cacheKey := pvcNamespace + "/" + pvcName
+	dfCache.RLock()
+	if cached, exists := dfCache.data[cacheKey]; exists && time.Since(dfCache.timestamp) < dfCache.ttl {
+		dfCache.RUnlock()
+		return &cached, nil
+	}
+	dfCache.RUnlock()
+
+	// Skip blocked namespaces
+	if !isValidForDfExec(pvcNamespace) {
+		return nil, fmt.Errorf("namespace %s is blocked for df exec", pvcNamespace)
+	}
+
+	// Find pods that use this PVC
+	pods, err := clientset.CoreV1().Pods(pvcNamespace).List(context.Background(), metav1.ListOptions{
+		FieldSelector: "status.phase=Running",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list pods: %v", err)
+	}
+
+	// Try each running pod that uses this PVC
+	for _, pod := range pods.Items {
+		containerName, mountPath, found := findPVCMountInPod(&pod, pvcName)
+		if !found {
+			continue
+		}
+
+		// Skip if pod is not fully running
+		if pod.Status.Phase != corev1.PodRunning {
+			continue
+		}
+
+		// Check if container is ready
+		containerReady := false
+		for _, cs := range pod.Status.ContainerStatuses {
+			if cs.Name == containerName && cs.Ready {
+				containerReady = true
+				break
+			}
+		}
+		if !containerReady {
+			continue
+		}
+
+		// Try to exec df in this container
+		usage, err := execDfInContainer(clientset, restConfig, pvcNamespace, pod.Name, containerName, mountPath)
+		if err != nil {
+			log.Printf("   ⚠️  df exec failed for PVC %s in pod %s: %v", pvcName, pod.Name, err)
+			continue
+		}
+
+		// Cache the result
+		dfCache.Lock()
+		dfCache.data[cacheKey] = *usage
+		dfCache.timestamp = time.Now()
+		dfCache.Unlock()
+
+		log.Printf("   ✅ PVC %s: df exec successful - used=%.2fGB, total=%.2fGB (%d%%)",
+			cacheKey,
+			float64(usage.UsedBytes)/(1024*1024*1024),
+			float64(usage.TotalBytes)/(1024*1024*1024),
+			usage.UsePercent)
+
+		return usage, nil
+	}
+
+	return nil, fmt.Errorf("no suitable pod found for PVC %s/%s", pvcNamespace, pvcName)
+}
+
+// Compile regex once for performance
+var dfFieldsRegex = regexp.MustCompile(`\s+`)
 
 // ---------------------------------------------
 // CONFIG
@@ -89,7 +366,7 @@ func main() {
 	for {
 		select {
 		case <-ticker.C:
-			sendMetrics(clientset, metricsClient, config)
+			sendMetrics(clientset, metricsClient, kubeconfig, config)
 			getCommands(clientset, config)
 		}
 	}
@@ -357,9 +634,9 @@ func collectPVCVolumeStats(clientset *kubernetes.Clientset) map[string]PVCVolume
 }
 
 // ---------------------------------------------
-// PVC COLLECTION
+// PVC COLLECTION (with df fallback for real usage)
 // ---------------------------------------------
-func collectPVCs(clientset *kubernetes.Clientset) []map[string]interface{} {
+func collectPVCs(clientset *kubernetes.Clientset, restConfig *rest.Config) []map[string]interface{} {
 	pvcs, err := clientset.CoreV1().PersistentVolumeClaims("").List(context.Background(), metav1.ListOptions{})
 	if err != nil {
 		log.Printf("⚠️  Error collecting PVCs: %v", err)
@@ -385,6 +662,10 @@ func collectPVCs(clientset *kubernetes.Clientset) []map[string]interface{} {
 	}
 
 	var pvcDetails []map[string]interface{}
+	
+	// Track PVCs that need df fallback (limit to avoid too many execs)
+	dfFallbackCount := 0
+	maxDfFallbacks := 10 // Maximum exec calls per collection cycle
 
 	for _, pvc := range pvcs.Items {
 		requestedBytes := int64(0)
@@ -397,6 +678,7 @@ func collectPVCs(clientset *kubernetes.Clientset) []map[string]interface{} {
 		usedBytes := int64(0)
 		capacityBytes := int64(0)
 		actualCapacity := int64(0)
+		usageSource := "none"
 		
 		// Get actual capacity from the bound PV
 		if pvc.Spec.VolumeName != "" {
@@ -409,13 +691,36 @@ func collectPVCs(clientset *kubernetes.Clientset) []map[string]interface{} {
 
 		// Try to get real usage from Kubelet stats first
 		pvcKey := pvc.Namespace + "/" + pvc.Name
-		if stats, exists := pvcVolumeStats[pvcKey]; exists {
+		if stats, exists := pvcVolumeStats[pvcKey]; exists && stats.UsedBytes > 0 {
 			usedBytes = stats.UsedBytes
 			capacityBytes = stats.CapacityBytes
-			log.Printf("📊 PVC %s: real usage = %.2f GB / %.2f GB", 
+			usageSource = "kubelet"
+			log.Printf("📊 PVC %s: real usage from Kubelet = %.2f GB / %.2f GB", 
 				pvcKey, float64(usedBytes)/(1024*1024*1024), float64(capacityBytes)/(1024*1024*1024))
+		} else if restConfig != nil && dfFallbackCount < maxDfFallbacks && pvc.Status.Phase == corev1.ClaimBound {
+			// Fallback: Try df command via exec if Kubelet stats returned 0 or missing
+			dfUsage, err := collectPVCUsageViaDf(clientset, restConfig, pvc.Namespace, pvc.Name)
+			if err == nil && dfUsage.UsedBytes > 0 {
+				usedBytes = dfUsage.UsedBytes
+				capacityBytes = dfUsage.TotalBytes
+				usageSource = "df_exec"
+				dfFallbackCount++
+				log.Printf("📊 PVC %s: real usage from df exec = %.2f GB / %.2f GB", 
+					pvcKey, float64(usedBytes)/(1024*1024*1024), float64(capacityBytes)/(1024*1024*1024))
+			} else {
+				// No data available from df either
+				if pvc.Status.Capacity != nil {
+					if storage, ok := pvc.Status.Capacity[corev1.ResourceStorage]; ok {
+						capacityBytes = storage.Value()
+					}
+				}
+				if actualCapacity > 0 && capacityBytes == 0 {
+					capacityBytes = actualCapacity
+				}
+				usedBytes = 0
+			}
 		} else {
-			// Fallback: Use PVC status capacity if available
+			// Final fallback: Use PVC status capacity if available
 			if pvc.Status.Capacity != nil {
 				if storage, ok := pvc.Status.Capacity[corev1.ResourceStorage]; ok {
 					capacityBytes = storage.Value()
@@ -428,7 +733,6 @@ func collectPVCs(clientset *kubernetes.Clientset) []map[string]interface{} {
 			}
 			
 			// For fallback, we don't have real usage data, so set to 0
-			// This is better than reporting allocated as used
 			usedBytes = 0
 		}
 
@@ -447,6 +751,7 @@ func collectPVCs(clientset *kubernetes.Clientset) []map[string]interface{} {
 			"capacity_bytes":  capacityBytes,
 			"volume_name":     pvc.Spec.VolumeName,
 			"created_at":      pvc.CreationTimestamp.Time,
+			"usage_source":    usageSource, // Track how we got usage data
 		})
 		
 		// Mark PV as bound
@@ -455,8 +760,8 @@ func collectPVCs(clientset *kubernetes.Clientset) []map[string]interface{} {
 		}
 	}
 
-	log.Printf("📦 Collected %d PVCs (matched with %d PVs, %d with real usage data)", 
-		len(pvcDetails), len(pvMap), len(pvcVolumeStats))
+	log.Printf("📦 Collected %d PVCs (Kubelet stats: %d, df fallback: %d)", 
+		len(pvcDetails), len(pvcVolumeStats), dfFallbackCount)
 	return pvcDetails
 }
 
@@ -1423,7 +1728,7 @@ func getPodResourcesOnNode(pods []corev1.Pod, nodeName string) (cpuMillis int64,
 // ---------------------------------------------
 // MÉTRICAS
 // ---------------------------------------------
-func sendMetrics(clientset *kubernetes.Clientset, metricsClient *metricsv.Clientset, config AgentConfig) {
+func sendMetrics(clientset *kubernetes.Clientset, metricsClient *metricsv.Clientset, restConfig *rest.Config, config AgentConfig) {
 	log.Println("📊 Collecting metrics...")
 
 	nodes, _ := clientset.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
@@ -1538,7 +1843,7 @@ func sendMetrics(clientset *kubernetes.Clientset, metricsClient *metricsv.Client
 		{
 			"type": "pvcs",
 			"data": map[string]interface{}{
-				"pvcs": collectPVCs(clientset),
+				"pvcs": collectPVCs(clientset, restConfig),
 			},
 			"collected_at": time.Now().UTC().Format(time.RFC3339),
 		},
