@@ -18,6 +18,7 @@ import {
   PanelLeftClose,
   Sparkles,
   AlertTriangle,
+  Activity,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -40,6 +41,7 @@ export const Sidebar = ({ collapsed = false, onNavigate, onToggleCollapse, onCol
   const navigation = [
     { name: t('common.dashboard'), href: "/dashboard", icon: LayoutDashboard },
     { name: "Painel de Risco", href: "/risk", icon: AlertTriangle },
+    { name: "Observabilidade", href: "/observability", icon: Activity },
     { name: t('common.storage'), href: "/storage", icon: HardDrive },
     { name: t('common.aiMonitor'), href: "/ai-monitor", icon: Bot },
     ...(isPro ? [{ name: "Economia com IA", href: "/ai-savings", icon: Sparkles }] : []),
