@@ -20,6 +20,7 @@ import Storage from "./pages/Storage";
 import Settings from "./pages/Settings";
 import Agents from "./pages/Agents";
 import AISavings from "./pages/AISavings";
+import Observability from "./pages/Observability";
 import PlansComparison from "./pages/PlansComparison";
 import Pricing from "./pages/Pricing";
 import TermsOfService from "./pages/TermsOfService";
@@ -126,6 +127,14 @@ const App = () => (
                   element={
                     <ProtectedRoute>
                       <AISavings />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/observability"
+                  element={
+                    <ProtectedRoute>
+                      <Observability />
                     </ProtectedRoute>
                   }
                 />
