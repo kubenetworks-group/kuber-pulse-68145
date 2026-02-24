@@ -447,6 +447,137 @@ export type Database = {
         }
         Relationships: []
       }
+      alert_instances: {
+        Row: {
+          acknowledged: boolean | null
+          acknowledged_at: string | null
+          alert_rule_id: string | null
+          cluster_id: string
+          created_at: string
+          id: string
+          message: string
+          metric_value: number | null
+          resolved_at: string | null
+          severity: string
+          source: string
+          status: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          acknowledged?: boolean | null
+          acknowledged_at?: string | null
+          alert_rule_id?: string | null
+          cluster_id: string
+          created_at?: string
+          id?: string
+          message: string
+          metric_value?: number | null
+          resolved_at?: string | null
+          severity?: string
+          source?: string
+          status?: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          acknowledged?: boolean | null
+          acknowledged_at?: string | null
+          alert_rule_id?: string | null
+          cluster_id?: string
+          created_at?: string
+          id?: string
+          message?: string
+          metric_value?: number | null
+          resolved_at?: string | null
+          severity?: string
+          source?: string
+          status?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alert_instances_alert_rule_id_fkey"
+            columns: ["alert_rule_id"]
+            isOneToOne: false
+            referencedRelation: "alert_rules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "alert_instances_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      alert_rules: {
+        Row: {
+          cluster_id: string
+          condition: string
+          cooldown_minutes: number
+          created_at: string
+          description: string | null
+          enabled: boolean
+          id: string
+          metric_type: string
+          name: string
+          severity: string
+          target_name: string | null
+          target_namespace: string | null
+          target_type: string
+          threshold: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cluster_id: string
+          condition?: string
+          cooldown_minutes?: number
+          created_at?: string
+          description?: string | null
+          enabled?: boolean
+          id?: string
+          metric_type?: string
+          name: string
+          severity?: string
+          target_name?: string | null
+          target_namespace?: string | null
+          target_type?: string
+          threshold?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cluster_id?: string
+          condition?: string
+          cooldown_minutes?: number
+          created_at?: string
+          description?: string | null
+          enabled?: boolean
+          id?: string
+          metric_type?: string
+          name?: string
+          severity?: string
+          target_name?: string | null
+          target_namespace?: string | null
+          target_type?: string
+          threshold?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alert_rules_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_logs: {
         Row: {
           action: string
@@ -1763,6 +1894,62 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      webhook_configs: {
+        Row: {
+          cluster_id: string
+          created_at: string
+          enabled: boolean
+          headers: Json | null
+          id: string
+          last_error: string | null
+          last_triggered_at: string | null
+          name: string
+          severity_filter: string[] | null
+          updated_at: string
+          url: string
+          user_id: string
+          webhook_type: string
+        }
+        Insert: {
+          cluster_id: string
+          created_at?: string
+          enabled?: boolean
+          headers?: Json | null
+          id?: string
+          last_error?: string | null
+          last_triggered_at?: string | null
+          name: string
+          severity_filter?: string[] | null
+          updated_at?: string
+          url: string
+          user_id: string
+          webhook_type?: string
+        }
+        Update: {
+          cluster_id?: string
+          created_at?: string
+          enabled?: boolean
+          headers?: Json | null
+          id?: string
+          last_error?: string | null
+          last_triggered_at?: string | null
+          name?: string
+          severity_filter?: string[] | null
+          updated_at?: string
+          url?: string
+          user_id?: string
+          webhook_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "webhook_configs_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       weekly_reports: {
         Row: {
