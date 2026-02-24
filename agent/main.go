@@ -2097,6 +2097,9 @@ func executeCommands(clientset *kubernetes.Clientset, config AgentConfig, comman
 			log.Printf("   → Self-updating agent...")
 			result, err = selfUpdate(clientset, cmd.CommandParams)
 			// After successful update, the pod will restart and won't continue execution
+		case "get_pod_logs":
+			log.Printf("   → Fetching pod logs...")
+			result, err = getPodLogs(clientset, cmd.CommandParams)
 		default:
 			err = fmt.Errorf("unknown command type: %s", cmd.CommandType)
 			log.Printf("   ❌ Unknown command type!")
@@ -2229,6 +2232,71 @@ func getContainerLogs(clientset *kubernetes.Clientset, namespace, podName, conta
 	}
 
 	return buf.String()
+}
+
+// getPodLogs fetches logs for a specific pod (on-demand command)
+func getPodLogs(clientset *kubernetes.Clientset, params map[string]interface{}) (map[string]interface{}, error) {
+	podName, _ := params["pod_name"].(string)
+	namespace, _ := params["namespace"].(string)
+	tailLinesF, _ := params["tail_lines"].(float64)
+	containerName, _ := params["container_name"].(string)
+
+	if podName == "" || namespace == "" {
+		return nil, fmt.Errorf("missing required params: pod_name, namespace")
+	}
+
+	tailLines := int64(100)
+	if tailLinesF > 0 {
+		tailLines = int64(tailLinesF)
+	}
+
+	// If no container specified, get first container
+	if containerName == "" {
+		pod, err := clientset.CoreV1().Pods(namespace).Get(context.Background(), podName, metav1.GetOptions{})
+		if err != nil {
+			return nil, fmt.Errorf("failed to get pod: %v", err)
+		}
+		if len(pod.Spec.Containers) > 0 {
+			containerName = pod.Spec.Containers[0].Name
+		}
+	}
+
+	// Fetch current logs
+	logs := getContainerLogs(clientset, namespace, podName, containerName, tailLines)
+
+	// Also try to get previous logs if container crashed
+	previousLogs := ""
+	prevReq := clientset.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{
+		Container: containerName,
+		TailLines: &tailLines,
+		Previous:  true,
+	})
+	prevStream, err := prevReq.Stream(context.Background())
+	if err == nil {
+		defer prevStream.Close()
+		buf := new(bytes.Buffer)
+		io.Copy(buf, prevStream)
+		previousLogs = buf.String()
+	}
+
+	output := logs
+	if previousLogs != "" && previousLogs != logs {
+		output = "=== PREVIOUS CONTAINER LOGS ===\n" + previousLogs + "\n\n=== CURRENT CONTAINER LOGS ===\n" + logs
+	}
+
+	if output == "" {
+		output = "No logs available for this container."
+	}
+
+	log.Printf("📋 Fetched %d bytes of logs for %s/%s", len(output), namespace, podName)
+
+	return map[string]interface{}{
+		"logs":      output,
+		"pod":       podName,
+		"namespace": namespace,
+		"container": containerName,
+		"lines":     tailLines,
+	}, nil
 }
 
 // sendPodRestartAudit sends the audit data to the backend
