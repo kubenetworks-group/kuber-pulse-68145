@@ -544,19 +544,48 @@ const Settings = () => {
                   <Database className="h-6 w-6 text-primary" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-lg font-semibold mb-2">Gerar Dados de Demonstração</h3>
+                  <h3 className="text-lg font-semibold mb-2">Dados de Demonstração</h3>
                   <p className="text-muted-foreground mb-4">
                     Popule sua plataforma com dados realistas incluindo 8 clusters de múltiplos provedores,
                     incidentes detectados por IA com ações de auto-healing.
                   </p>
-                  <Button 
-                    onClick={handleGenerateDemoData} 
-                    disabled={demoLoading}
-                    className="gap-2"
-                  >
-                    {demoLoading && <Loader2 className="h-4 w-4 animate-spin" />}
-                    {demoLoading ? 'Gerando...' : 'Gerar Dados Demo'}
-                  </Button>
+                  <div className="flex gap-3">
+                    <Button 
+                      onClick={handleGenerateDemoData} 
+                      disabled={demoLoading || demoDeleteLoading}
+                      className="gap-2"
+                    >
+                      {demoLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+                      {demoLoading ? 'Gerando...' : 'Gerar Dados Demo'}
+                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button 
+                          variant="destructive"
+                          disabled={demoLoading || demoDeleteLoading}
+                          className="gap-2"
+                        >
+                          {demoDeleteLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+                          {demoDeleteLoading ? 'Removendo...' : 'Remover Dados Demo'}
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Remover todos os dados demo?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Isso irá deletar todos os clusters, incidentes, custos e PVCs marcados como demo. 
+                            Seus dados reais serão mantidos intactos.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction onClick={handleDeleteDemoData}>
+                            Confirmar Remoção
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
                 </div>
               </div>
             </Card>
