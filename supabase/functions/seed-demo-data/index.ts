@@ -487,6 +487,7 @@ serve(async (req) => {
           id: crypto.randomUUID(),
           cluster_id: cluster.id,
           user_id: user.id,
+          is_demo: true,
           name: `${pvcNames[i % pvcNames.length]}-${cluster.environment}-${Math.floor(Math.random() * 100)}`,
           namespace: namespaces[Math.floor(Math.random() * namespaces.length)],
           storage_class: storageClasses[Math.floor(Math.random() * storageClasses.length)],
