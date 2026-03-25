@@ -25,15 +25,12 @@ serve(async (req) => {
       });
     }
 
-    // Delete existing demo data (cascade will handle related records)
-    await supabaseClient.from('ai_cost_savings').delete().eq('user_id', user.id);
-    await supabaseClient.from('cost_calculations').delete().eq('user_id', user.id);
-    await supabaseClient.from('ai_incidents').delete().eq('user_id', user.id);
-    await supabaseClient.from('cluster_events').delete().eq('user_id', user.id);
-    await supabaseClient.from('security_audits').delete().eq('user_id', user.id);
-    await supabaseClient.from('storage_recommendations').delete().eq('user_id', user.id);
-    await supabaseClient.from('pvcs').delete().eq('user_id', user.id);
-    await supabaseClient.from('clusters').delete().eq('user_id', user.id);
+    // Delete existing demo data only (keep real data)
+    await supabaseClient.from('ai_cost_savings').delete().eq('user_id', user.id).eq('is_demo', true);
+    await supabaseClient.from('cost_calculations').delete().eq('user_id', user.id).eq('is_demo', true);
+    await supabaseClient.from('ai_incidents').delete().eq('user_id', user.id).eq('is_demo', true);
+    await supabaseClient.from('pvcs').delete().eq('user_id', user.id).eq('is_demo', true);
+    await supabaseClient.from('clusters').delete().eq('user_id', user.id).eq('is_demo', true);
 
     // Insert 8 demo clusters
     const clusters = [
@@ -47,6 +44,7 @@ serve(async (req) => {
         region: 'us-east-1',
         api_endpoint: 'https://api.prod-us-east-1.k8s.aws',
         status: 'healthy',
+        is_demo: true,
         nodes: 8,
         pods: 150,
         cpu_usage: 65.2,
@@ -68,6 +66,7 @@ serve(async (req) => {
         region: 'us-west-2',
         api_endpoint: 'https://api.prod-us-west-2.k8s.aws',
         status: 'warning',
+        is_demo: true,
         nodes: 6,
         pods: 98,
         cpu_usage: 87.8,
@@ -89,6 +88,7 @@ serve(async (req) => {
         region: 'europe-west1',
         api_endpoint: 'https://api.prod-eu-west-1.gcp',
         status: 'healthy',
+        is_demo: true,
         nodes: 5,
         pods: 76,
         cpu_usage: 45.5,
@@ -109,7 +109,8 @@ serve(async (req) => {
         environment: 'production',
         region: 'asia-southeast1',
         api_endpoint: 'https://api.prod-asia-1.gcp',
-        status: 'critical',
+        status: 'error',
+        is_demo: true,
         nodes: 4,
         pods: 45,
         cpu_usage: 62.3,
@@ -131,6 +132,7 @@ serve(async (req) => {
         region: 'eastus',
         api_endpoint: 'https://api.staging-us-1.azure',
         status: 'healthy',
+        is_demo: true,
         nodes: 3,
         pods: 32,
         cpu_usage: 38.5,
@@ -152,6 +154,7 @@ serve(async (req) => {
         region: 'ams3',
         api_endpoint: 'https://api.staging-eu-1.do',
         status: 'warning',
+        is_demo: true,
         nodes: 2,
         pods: 28,
         cpu_usage: 42.1,
@@ -173,6 +176,7 @@ serve(async (req) => {
         region: 'us-central',
         api_endpoint: 'https://api.dev-us-1.magalu',
         status: 'healthy',
+        is_demo: true,
         nodes: 2,
         pods: 12,
         cpu_usage: 25.3,
@@ -194,6 +198,7 @@ serve(async (req) => {
         region: 'br-south',
         api_endpoint: 'https://api.dev-br-1.magalu',
         status: 'warning',
+        is_demo: true,
         nodes: 2,
         pods: 18,
         cpu_usage: 52.8,
@@ -218,6 +223,7 @@ serve(async (req) => {
       {
         cluster_id: clusters[3].id,
         user_id: user.id,
+        is_demo: true,
         incident_type: 'high_memory',
         severity: 'critical',
         title: 'Critical: Memory usage at 94.7% in prod-asia-1',
@@ -242,6 +248,7 @@ serve(async (req) => {
       {
         cluster_id: clusters[1].id,
         user_id: user.id,
+        is_demo: true,
         incident_type: 'pod_crash',
         severity: 'critical',
         title: 'Critical: Payment API pods crashing in prod-us-west-2',
@@ -266,6 +273,7 @@ serve(async (req) => {
       {
         cluster_id: clusters[7].id,
         user_id: user.id,
+        is_demo: true,
         incident_type: 'deployment_stuck',
         severity: 'critical',
         title: 'Critical: MongoDB deployment stuck in dev-br-1',
@@ -285,6 +293,7 @@ serve(async (req) => {
       {
         cluster_id: clusters[1].id,
         user_id: user.id,
+        is_demo: true,
         incident_type: 'high_cpu',
         severity: 'high',
         title: 'High CPU usage (87.8%) in prod-us-west-2',
@@ -309,6 +318,7 @@ serve(async (req) => {
       {
         cluster_id: clusters[3].id,
         user_id: user.id,
+        is_demo: true,
         incident_type: 'disk_full',
         severity: 'high',
         title: 'Disk usage at 88% in prod-asia-1',
@@ -347,6 +357,7 @@ serve(async (req) => {
       return {
         user_id: user.id,
         cluster_id: cluster.id,
+        is_demo: true,
         compute_cost: Number((cluster.monthly_cost * computePercentage).toFixed(2)),
         storage_cost: Number((cluster.monthly_cost * storagePercentage).toFixed(2)),
         network_cost: Number((cluster.monthly_cost * networkPercentage).toFixed(2)),
@@ -419,8 +430,9 @@ serve(async (req) => {
 
       return {
         user_id: user.id,
-        incident_id: inc.cluster_id, // This will be replaced with actual incident ID
+        incident_id: inc.cluster_id,
         cluster_id: inc.cluster_id,
+        is_demo: true,
         downtime_avoided_minutes: downtimeAvoidedMinutes,
         cost_per_minute: Number(costPerMinute.toFixed(4)),
         estimated_savings: estimatedSavings,
@@ -433,7 +445,8 @@ serve(async (req) => {
     const { data: insertedIncidents } = await supabaseClient
       .from('ai_incidents')
       .select('id, cluster_id')
-      .eq('user_id', user.id);
+      .eq('user_id', user.id)
+      .eq('is_demo', true);
 
     // Map savings to correct incident IDs
     const finalSavings = aiSavings.map((saving, index) => {
@@ -472,6 +485,7 @@ serve(async (req) => {
           id: crypto.randomUUID(),
           cluster_id: cluster.id,
           user_id: user.id,
+          is_demo: true,
           name: `${pvcNames[i % pvcNames.length]}-${cluster.environment}-${Math.floor(Math.random() * 100)}`,
           namespace: namespaces[Math.floor(Math.random() * namespaces.length)],
           storage_class: storageClasses[Math.floor(Math.random() * storageClasses.length)],
