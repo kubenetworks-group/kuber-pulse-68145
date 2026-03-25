@@ -445,7 +445,8 @@ serve(async (req) => {
     const { data: insertedIncidents } = await supabaseClient
       .from('ai_incidents')
       .select('id, cluster_id')
-      .eq('user_id', user.id);
+      .eq('user_id', user.id)
+      .eq('is_demo', true);
 
     // Map savings to correct incident IDs
     const finalSavings = aiSavings.map((saving, index) => {
