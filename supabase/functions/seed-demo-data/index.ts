@@ -226,6 +226,7 @@ serve(async (req) => {
       {
         cluster_id: clusters[3].id,
         user_id: user.id,
+        is_demo: true,
         incident_type: 'high_memory',
         severity: 'critical',
         title: 'Critical: Memory usage at 94.7% in prod-asia-1',
