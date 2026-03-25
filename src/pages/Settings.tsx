@@ -38,6 +38,7 @@ const Settings = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [demoLoading, setDemoLoading] = useState(false);
+  const [demoDeleteLoading, setDemoDeleteLoading] = useState(false);
   const [savingsLoading, setSavingsLoading] = useState(false);
   const [cancelLoading, setCancelLoading] = useState(false);
   const [usernameError, setUsernameError] = useState("");
