@@ -360,6 +360,7 @@ serve(async (req) => {
       return {
         user_id: user.id,
         cluster_id: cluster.id,
+        is_demo: true,
         compute_cost: Number((cluster.monthly_cost * computePercentage).toFixed(2)),
         storage_cost: Number((cluster.monthly_cost * storagePercentage).toFixed(2)),
         network_cost: Number((cluster.monthly_cost * networkPercentage).toFixed(2)),
