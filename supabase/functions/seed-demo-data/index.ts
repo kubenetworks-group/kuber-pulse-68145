@@ -296,6 +296,7 @@ serve(async (req) => {
       {
         cluster_id: clusters[1].id,
         user_id: user.id,
+        is_demo: true,
         incident_type: 'high_cpu',
         severity: 'high',
         title: 'High CPU usage (87.8%) in prod-us-west-2',
