@@ -47,6 +47,7 @@ serve(async (req) => {
         region: 'us-east-1',
         api_endpoint: 'https://api.prod-us-east-1.k8s.aws',
         status: 'healthy',
+        is_demo: true,
         nodes: 8,
         pods: 150,
         cpu_usage: 65.2,
