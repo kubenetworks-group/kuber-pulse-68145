@@ -276,6 +276,7 @@ serve(async (req) => {
       {
         cluster_id: clusters[7].id,
         user_id: user.id,
+        is_demo: true,
         incident_type: 'deployment_stuck',
         severity: 'critical',
         title: 'Critical: MongoDB deployment stuck in dev-br-1',
