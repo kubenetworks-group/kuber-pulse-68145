@@ -1784,6 +1784,72 @@ export type Database = {
           },
         ]
       }
+      storage_recommendations: {
+        Row: {
+          applied_at: string | null
+          cluster_id: string
+          created_at: string | null
+          current_size_gb: number
+          days_analyzed: number
+          id: string
+          potential_savings: number
+          pvc_id: string
+          reasoning: string | null
+          recommendation_type: string
+          recommended_size_gb: number
+          status: string
+          usage_percentage: number
+          user_id: string
+        }
+        Insert: {
+          applied_at?: string | null
+          cluster_id: string
+          created_at?: string | null
+          current_size_gb?: number
+          days_analyzed?: number
+          id?: string
+          potential_savings?: number
+          pvc_id: string
+          reasoning?: string | null
+          recommendation_type: string
+          recommended_size_gb?: number
+          status?: string
+          usage_percentage?: number
+          user_id: string
+        }
+        Update: {
+          applied_at?: string | null
+          cluster_id?: string
+          created_at?: string | null
+          current_size_gb?: number
+          days_analyzed?: number
+          id?: string
+          potential_savings?: number
+          pvc_id?: string
+          reasoning?: string | null
+          recommendation_type?: string
+          recommended_size_gb?: number
+          status?: string
+          usage_percentage?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "storage_recommendations_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "storage_recommendations_pvc_id_fkey"
+            columns: ["pvc_id"]
+            isOneToOne: false
+            referencedRelation: "pvcs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       subscriptions: {
         Row: {
           ai_analyses_reset_at: string
