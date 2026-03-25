@@ -25,15 +25,12 @@ serve(async (req) => {
       });
     }
 
-    // Delete existing demo data (cascade will handle related records)
-    await supabaseClient.from('ai_cost_savings').delete().eq('user_id', user.id);
-    await supabaseClient.from('cost_calculations').delete().eq('user_id', user.id);
-    await supabaseClient.from('ai_incidents').delete().eq('user_id', user.id);
-    await supabaseClient.from('cluster_events').delete().eq('user_id', user.id);
-    await supabaseClient.from('security_audits').delete().eq('user_id', user.id);
-    await supabaseClient.from('storage_recommendations').delete().eq('user_id', user.id);
-    await supabaseClient.from('pvcs').delete().eq('user_id', user.id);
-    await supabaseClient.from('clusters').delete().eq('user_id', user.id);
+    // Delete existing demo data only (keep real data)
+    await supabaseClient.from('ai_cost_savings').delete().eq('user_id', user.id).eq('is_demo', true);
+    await supabaseClient.from('cost_calculations').delete().eq('user_id', user.id).eq('is_demo', true);
+    await supabaseClient.from('ai_incidents').delete().eq('user_id', user.id).eq('is_demo', true);
+    await supabaseClient.from('pvcs').delete().eq('user_id', user.id).eq('is_demo', true);
+    await supabaseClient.from('clusters').delete().eq('user_id', user.id).eq('is_demo', true);
 
     // Insert 8 demo clusters
     const clusters = [
