@@ -83,12 +83,26 @@ const Settings = () => {
     try {
       const { data, error } = await supabase.functions.invoke('seed-demo-data');
       if (error) throw error;
-      toast.success(`Generated ${data.clusters} clusters and ${data.incidents} AI incidents!`);
+      toast.success(`Gerado ${data.clusters} clusters e ${data.incidents} incidentes IA!`);
       setTimeout(() => window.location.href = '/', 2000);
     } catch (error: any) {
-      toast.error(error.message || "Failed to generate demo data");
+      toast.error(error.message || "Falha ao gerar dados demo");
     } finally {
       setDemoLoading(false);
+    }
+  };
+
+  const handleDeleteDemoData = async () => {
+    setDemoDeleteLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('delete-demo-data');
+      if (error) throw error;
+      toast.success(`Removidos: ${data.deleted.clusters} clusters, ${data.deleted.incidents} incidentes demo`);
+      setTimeout(() => window.location.href = '/', 2000);
+    } catch (error: any) {
+      toast.error(error.message || "Falha ao remover dados demo");
+    } finally {
+      setDemoDeleteLoading(false);
     }
   };
 
