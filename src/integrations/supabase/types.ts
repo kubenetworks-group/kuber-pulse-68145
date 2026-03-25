@@ -301,6 +301,7 @@ export type Database = {
           estimated_savings: number
           id: string
           incident_id: string
+          is_demo: boolean | null
           saving_type: string
           user_id: string
         }
@@ -313,6 +314,7 @@ export type Database = {
           estimated_savings?: number
           id?: string
           incident_id: string
+          is_demo?: boolean | null
           saving_type: string
           user_id: string
         }
@@ -325,6 +327,7 @@ export type Database = {
           estimated_savings?: number
           id?: string
           incident_id?: string
+          is_demo?: boolean | null
           saving_type?: string
           user_id?: string
         }
@@ -356,6 +359,7 @@ export type Database = {
           description: string
           id: string
           incident_type: string
+          is_demo: boolean | null
           resolved_at: string | null
           severity: string
           title: string
@@ -371,6 +375,7 @@ export type Database = {
           description: string
           id?: string
           incident_type: string
+          is_demo?: boolean | null
           resolved_at?: string | null
           severity: string
           title: string
@@ -386,6 +391,7 @@ export type Database = {
           description?: string
           id?: string
           incident_type?: string
+          is_demo?: boolean | null
           resolved_at?: string | null
           severity?: string
           title?: string
@@ -896,6 +902,7 @@ export type Database = {
           created_at: string | null
           environment: string
           id: string
+          is_demo: boolean | null
           is_local: boolean | null
           last_cost_calculation: string | null
           last_sync: string | null
@@ -928,6 +935,7 @@ export type Database = {
           created_at?: string | null
           environment: string
           id?: string
+          is_demo?: boolean | null
           is_local?: boolean | null
           last_cost_calculation?: string | null
           last_sync?: string | null
@@ -960,6 +968,7 @@ export type Database = {
           created_at?: string | null
           environment?: string
           id?: string
+          is_demo?: boolean | null
           is_local?: boolean | null
           last_cost_calculation?: string | null
           last_sync?: string | null
@@ -988,6 +997,7 @@ export type Database = {
           compute_cost: number
           created_at: string | null
           id: string
+          is_demo: boolean | null
           network_cost: number
           period_end: string
           period_start: string
@@ -1002,6 +1012,7 @@ export type Database = {
           compute_cost?: number
           created_at?: string | null
           id?: string
+          is_demo?: boolean | null
           network_cost?: number
           period_end: string
           period_start: string
@@ -1016,6 +1027,7 @@ export type Database = {
           compute_cost?: number
           created_at?: string | null
           id?: string
+          is_demo?: boolean | null
           network_cost?: number
           period_end?: string
           period_start?: string
@@ -1555,6 +1567,7 @@ export type Database = {
           cluster_id: string
           created_at: string | null
           id: string
+          is_demo: boolean | null
           last_sync: string | null
           name: string
           namespace: string
@@ -1569,6 +1582,7 @@ export type Database = {
           cluster_id: string
           created_at?: string | null
           id?: string
+          is_demo?: boolean | null
           last_sync?: string | null
           name: string
           namespace: string
@@ -1583,6 +1597,7 @@ export type Database = {
           cluster_id?: string
           created_at?: string | null
           id?: string
+          is_demo?: boolean | null
           last_sync?: string | null
           name?: string
           namespace?: string
