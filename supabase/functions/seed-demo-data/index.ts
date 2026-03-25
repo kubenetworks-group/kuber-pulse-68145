@@ -433,8 +433,9 @@ serve(async (req) => {
 
       return {
         user_id: user.id,
-        incident_id: inc.cluster_id, // This will be replaced with actual incident ID
+        incident_id: inc.cluster_id,
         cluster_id: inc.cluster_id,
+        is_demo: true,
         downtime_avoided_minutes: downtimeAvoidedMinutes,
         cost_per_minute: Number(costPerMinute.toFixed(4)),
         estimated_savings: estimatedSavings,
