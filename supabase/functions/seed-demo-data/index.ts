@@ -321,6 +321,7 @@ serve(async (req) => {
       {
         cluster_id: clusters[3].id,
         user_id: user.id,
+        is_demo: true,
         incident_type: 'disk_full',
         severity: 'high',
         title: 'Disk usage at 88% in prod-asia-1',
