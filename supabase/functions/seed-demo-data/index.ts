@@ -251,6 +251,7 @@ serve(async (req) => {
       {
         cluster_id: clusters[1].id,
         user_id: user.id,
+        is_demo: true,
         incident_type: 'pod_crash',
         severity: 'critical',
         title: 'Critical: Payment API pods crashing in prod-us-west-2',
