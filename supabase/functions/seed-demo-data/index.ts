@@ -91,6 +91,7 @@ serve(async (req) => {
         region: 'europe-west1',
         api_endpoint: 'https://api.prod-eu-west-1.gcp',
         status: 'healthy',
+        is_demo: true,
         nodes: 5,
         pods: 76,
         cpu_usage: 45.5,
