@@ -19,7 +19,14 @@
       "WebFetch(domain:magalu.cloud)",
       "Bash(cat:*)",
       "mcp__ide__getDiagnostics",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(chmod:*)",
+      "Bash(supabase functions:*)",
+      "Bash(npx supabase:*)",
+      "Bash(brew install:*)",
+      "Bash(supabase:*)",
+      "Bash(ls -1t /Users/denercavalcante/Workspace/Pessoal/kuber-pulse-68145/supabase/migrations/*.sql)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

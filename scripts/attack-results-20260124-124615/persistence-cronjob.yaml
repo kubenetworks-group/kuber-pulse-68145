@@ -1,0 +1,20 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: persistence-test
+  namespace: pentest-lab
+spec:
+  schedule: "*/5 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: persist
+            image: curlimages/curl:latest
+            command: ["/bin/sh", "-c"]
+            args:
+            - |
+              echo "Persistence mechanism executed at $(date)"
+              # In a real attack, this would phone home or maintain access
+          restartPolicy: Never

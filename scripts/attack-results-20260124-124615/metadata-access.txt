@@ -1,0 +1,10 @@
+=== Cloud Metadata Service Test ===
+
+=== AWS IMDS Test ===
+Protected: AWS IMDS not accessible or not AWS
+
+=== GCP Metadata Test ===
+Protected: GCP Metadata not accessible or not GCP
+
+=== Azure IMDS Test ===
+Protected: Azure IMDS not accessible or not Azure

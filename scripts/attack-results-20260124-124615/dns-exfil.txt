@@ -1,0 +1,9 @@
+=== DNS Exfiltration Capability Test ===
+Testing external DNS resolution...
+Simulated exfil data: test-data-1769269624
+RISK: External DNS resolution works - potential exfil vector
+
+DNS Configuration:
+search pentest-lab.svc.cluster.local svc.cluster.local cluster.local
+nameserver 10.152.183.10
+options ndots:5

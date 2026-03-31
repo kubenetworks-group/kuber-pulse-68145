@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: privileged-escape-test
+  namespace: pentest-lab
+spec:
+  hostPID: true
+  hostNetwork: true
+  hostIPC: true
+  containers:
+  - name: escape-test
+    image: alpine:latest
+    command: ["/bin/sh", "-c"]
+    args:
+    - |
+      echo "=== Container Escape Test ===" > /tmp/escape-results.txt
+      echo "hostPID: Enabled" >> /tmp/escape-results.txt
+      echo "hostNetwork: Enabled" >> /tmp/escape-results.txt
+      echo "hostIPC: Enabled" >> /tmp/escape-results.txt
+
+      echo "" >> /tmp/escape-results.txt
+      echo "=== Host Process Visibility ===" >> /tmp/escape-results.txt
+      ps aux | head -20 >> /tmp/escape-results.txt
+
+      echo "" >> /tmp/escape-results.txt
+      echo "=== Network Interfaces (Host) ===" >> /tmp/escape-results.txt
+      ip addr 2>/dev/null | head -30 >> /tmp/escape-results.txt || ifconfig 2>/dev/null | head -30 >> /tmp/escape-results.txt
+
+      cat /tmp/escape-results.txt
+      sleep 300
+    securityContext:
+      privileged: true
+  restartPolicy: Never

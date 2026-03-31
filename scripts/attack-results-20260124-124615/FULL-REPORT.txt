@@ -1,0 +1,171 @@
+═══════════════════════════════════════════════════════════════════
+            KUBERNETES ATTACK SIMULATION REPORT
+            Generated: Sat Jan 24 12:47:45 -03 2026
+═══════════════════════════════════════════════════════════════════
+
+NAMESPACE DE TESTE: pentest-lab
+
+TESTES EXECUTADOS:
+1. Service Account Token Theft
+2. Container Escape via Privileged Pod
+3. Secrets Enumeration
+4. Lateral Movement via Pod Creation
+5. DNS Exfiltration Capability
+6. Cloud Metadata Service Access
+7. Internal Network Scanning
+8. Resource Abuse Detection
+9. Persistence via CronJob
+10. RBAC Privilege Escalation
+
+═══════════════════════════════════════════════════════════════════
+RESULTADOS INDIVIDUAIS:
+═══════════════════════════════════════════════════════════════════
+
+--- dns-exfil.txt ---
+=== DNS Exfiltration Capability Test ===
+Testing external DNS resolution...
+Simulated exfil data: test-data-1769269624
+RISK: External DNS resolution works - potential exfil vector
+
+DNS Configuration:
+search pentest-lab.svc.cluster.local svc.cluster.local cluster.local
+nameserver 10.152.183.10
+options ndots:5
+
+--- escape-attempt.txt ---
+pod/privileged-escape-test created
+=== Container Escape Test ===
+hostPID: Enabled
+hostNetwork: Enabled
+hostIPC: Enabled
+
+=== Host Process Visibility ===
+PID   USER     TIME  COMMAND
+    1 root      0:09 {systemd} /sbin/init
+    2 root      0:00 [kthreadd]
+    3 root      0:00 [rcu_gp]
+    4 root      0:00 [rcu_par_gp]
+    5 root      0:00 [slub_flushwq]
+    6 root      0:00 [netns]
+    8 root      0:00 [kworker/0:0H-ev]
+   10 root      0:00 [mm_percpu_wq]
+   11 root      0:00 [rcu_tasks_rude_]
+   12 root      0:00 [rcu_tasks_trace]
+   13 root      0:02 [ksoftirqd/0]
+   14 root      0:07 [rcu_sched]
+   15 root      0:00 [migration/0]
+   16 root      0:00 [idle_inject/0]
+   18 root      0:00 [cpuhp/0]
+   19 root      0:00 [cpuhp/1]
+   20 root      0:00 [idle_inject/1]
+   21 root      0:00 [migration/1]
+   22 root      0:01 [ksoftirqd/1]
+
+=== Network Interfaces (Host) ===
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host 
+       valid_lft forever preferred_lft forever
+2: enp0s1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP qlen 1000
+    link/ether 52:54:00:fa:bc:a8 brd ff:ff:ff:ff:ff:ff
+    inet 192.168.2.4/24 brd 192.168.2.255 scope global dynamic enp0s1
+       valid_lft 3498sec preferred_lft 3498sec
+    inet6 fda3:a33d:3b2f:a5fe:5054:ff:fefa:bca8/64 scope global dynamic noprefixroute flags 100 
+       valid_lft 2591990sec preferred_lft 604790sec
+    inet6 fe80::5054:ff:fefa:bca8/64 scope link 
+       valid_lft forever preferred_lft forever
+3: cali820a9fe7bd1@enp0s1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue state UP qlen 1000
+    link/ether ee:ee:ee:ee:ee:ee brd ff:ff:ff:ff:ff:ff
+    inet6 fe80::ecee:eeff:feee:eeee/64 scope link 
+       valid_lft forever preferred_lft forever
+5: cali96d40af8718@enp0s1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue state UP qlen 1000
+    link/ether ee:ee:ee:ee:ee:ee brd ff:ff:ff:ff:ff:ff
+    inet6 fe80::ecee:eeff:feee:eeee/64 scope link 
+       valid_lft forever preferred_lft forever
+7: vxlan.calico: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue state UNKNOWN qlen 1000
+    link/ether 66:cf:fe:aa:2d:d5 brd ff:ff:ff:ff:ff:ff
+    inet 10.1.11.0/32 scope global vxlan.calico
+       valid_lft forever preferred_lft forever
+    inet6 fe80::64cf:feff:feaa:2dd5/64 scope link 
+       valid_lft forever preferred_lft forever
+10: cali0d1271105a5@enp0s1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1450 qdisc noqueue state UP qlen 1000
+    link/ether ee:ee:ee:ee:ee:ee brd ff:ff:ff:ff:ff:ff
+
+--- lateral-movement.txt ---
+
+--- metadata-access.txt ---
+=== Cloud Metadata Service Test ===
+
+=== AWS IMDS Test ===
+Protected: AWS IMDS not accessible or not AWS
+
+=== GCP Metadata Test ===
+Protected: GCP Metadata not accessible or not GCP
+
+=== Azure IMDS Test ===
+Protected: Azure IMDS not accessible or not Azure
+
+--- network-scan.txt ---
+
+--- persistence-test.txt ---
+cronjob.batch/persistence-test created
+
+--- rbac-escalation-result.txt ---
+clusterrolebinding.rbac.authorization.k8s.io/escalation-test created
+
+--- resource-abuse.txt ---
+
+--- sa-token-theft.txt ---
+
+--- secrets-enum.txt ---
+=== Secrets Enumeration Test ===
+Attempting to list secrets in all namespaces...
+
+=== Namespace: default ===
+Protected: Cannot access secrets in default
+
+=== Namespace: kube-system ===
+Protected: Cannot access secrets in kube-system
+
+=== Namespace: kube-public ===
+Protected: Cannot access secrets in kube-public
+
+
+═══════════════════════════════════════════════════════════════════
+RECOMENDAÇÕES DE SEGURANÇA:
+═══════════════════════════════════════════════════════════════════
+
+1. Pod Security Standards:
+   - Implementar 'restricted' PSS em namespaces de produção
+   - Bloquear pods privilegiados, hostPID, hostNetwork
+
+2. RBAC:
+   - Aplicar princípio de menor privilégio
+   - Auditar regularmente ClusterRoleBindings
+   - Desabilitar automountServiceAccountToken
+
+3. Network Policies:
+   - Implementar default-deny em todos os namespaces
+   - Bloquear acesso ao metadata service (169.254.169.254)
+   - Segmentar comunicação entre namespaces
+
+4. Secrets Management:
+   - Usar external secrets operators (Vault, AWS Secrets Manager)
+   - Encriptar secrets at rest
+   - Rotacionar secrets regularmente
+
+5. Runtime Security:
+   - Instalar Falco ou similar para detecção de ameaças
+   - Implementar admission controllers (OPA/Gatekeeper)
+   - Monitorar comportamento anômalo de containers
+
+6. Monitoring:
+   - Configurar alertas para eventos de segurança
+   - Habilitar audit logging no API server
+   - Monitorar uso de recursos para detectar cryptomining
+
+═══════════════════════════════════════════════════════════════════
+FIM DO RELATÓRIO
+═══════════════════════════════════════════════════════════════════
