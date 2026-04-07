@@ -162,7 +162,7 @@ const Settings = () => {
     if (!user) return;
     setDeleteAccountLoading(true);
     try {
-      const { error } = await supabase.rpc("delete_user_account");
+      const { error } = await supabase.rpc("delete_user_account" as any);
       if (error) throw error;
       await supabase.auth.signOut();
       toast.success("Conta excluída com sucesso.");
