@@ -1064,7 +1064,8 @@ serve(async (req) => {
     ];
 
     const { error: incidentsError } = await supabaseClient.from('ai_incidents').insert(incidents);
-    if (incidentsError) throw incidentsError;
+    if (incidentsError) console.error('ai_incidents error:', incidentsError);
+    const incidentsOk = !incidentsError;
 
     // ── Historical cost calculations (60 days, daily) ─────────────────────
     const allCostEntries: any[] = [];
@@ -1079,39 +1080,43 @@ serve(async (req) => {
     }
 
     // ── AI savings ────────────────────────────────────────────────────────
-    const resolvedIncidents = incidents.filter(inc => inc.action_taken && inc.resolved_at);
-    const { data: insertedIncidents } = await supabaseClient
-      .from('ai_incidents')
-      .select('id, cluster_id')
-      .eq('user_id', user.id)
-      .eq('is_demo', true);
+    if (incidentsOk) {
+      const resolvedIncidents = incidents.filter(inc => inc.action_taken && inc.resolved_at);
+      const { data: insertedIncidents } = await supabaseClient
+        .from('ai_incidents')
+        .select('id, cluster_id')
+        .eq('user_id', user.id)
+        .eq('is_demo', true);
 
-    const aiSavings = resolvedIncidents.map((inc, index) => {
-      const cluster = clusters.find(c => c.id === inc.cluster_id)!;
-      const costPerMinute = cluster.monthly_cost / (30 * 24 * 60);
-      const incidentRow = insertedIncidents?.find(r => r.cluster_id === inc.cluster_id);
-      const downtimeAvoidedMinutes = inc.severity === 'critical' ? 30 : 15;
-      const estimatedSavings = Number((downtimeAvoidedMinutes * costPerMinute * 10).toFixed(2));
+      const aiSavings = resolvedIncidents.map((inc, index) => {
+        const cluster = clusters.find(c => c.id === inc.cluster_id)!;
+        const costPerMinute = cluster.monthly_cost / (30 * 24 * 60);
+        const incidentRow = insertedIncidents?.find(r => r.cluster_id === inc.cluster_id);
+        const downtimeAvoidedMinutes = inc.severity === 'critical' ? 30 : 15;
+        const estimatedSavings = Number((downtimeAvoidedMinutes * costPerMinute * 10).toFixed(2));
 
-      return {
-        user_id: user.id,
-        incident_id: incidentRow?.id || insertedIncidents?.[index]?.id || inc.cluster_id,
-        cluster_id: inc.cluster_id,
-        is_demo: true,
-        downtime_avoided_minutes: downtimeAvoidedMinutes,
-        cost_per_minute: Number(costPerMinute.toFixed(4)),
-        estimated_savings: estimatedSavings,
-        saving_type: 'downtime_prevention',
-        calculation_details: {
-          severity: inc.severity,
-          revenue_multiplier: 10,
-          assumption: 'Based on downtime avoided and revenue impact',
-        },
-      };
-    });
+        return {
+          user_id: user.id,
+          incident_id: incidentRow?.id || insertedIncidents?.[index]?.id,
+          cluster_id: inc.cluster_id,
+          is_demo: true,
+          downtime_avoided_minutes: downtimeAvoidedMinutes,
+          cost_per_minute: Number(costPerMinute.toFixed(4)),
+          estimated_savings: estimatedSavings,
+          saving_type: 'downtime_prevention',
+          calculation_details: {
+            severity: inc.severity,
+            revenue_multiplier: 10,
+            assumption: 'Based on downtime avoided and revenue impact',
+          },
+        };
+      }).filter(s => s.incident_id); // only insert if we have a valid incident_id FK
 
-    const { error: savingsError } = await supabaseClient.from('ai_cost_savings').insert(aiSavings);
-    if (savingsError) throw savingsError;
+      if (aiSavings.length > 0) {
+        const { error: savingsError } = await supabaseClient.from('ai_cost_savings').insert(aiSavings);
+        if (savingsError) console.error('ai_cost_savings error:', savingsError);
+      }
+    }
 
     // ── PVCs ──────────────────────────────────────────────────────────────
     const storageClasses = ['gp3', 'gp2', 'io1', 'io2', 'standard', 'fast-ssd', 'ssd', 'hdd'];
@@ -1144,11 +1149,12 @@ serve(async (req) => {
     });
 
     const { error: pvcsError } = await supabaseClient.from('pvcs').insert(allPvcs);
-    if (pvcsError) throw pvcsError;
+    if (pvcsError) console.error('pvcs error:', pvcsError);
+    const pvcsOk = !pvcsError;
 
     // ── Storage recommendations ───────────────────────────────────────────
     const storageRecs: any[] = [];
-    allPvcs.filter((_, idx) => idx % 2 === 0).slice(0, 8).forEach((pvc, index) => {
+    if (pvcsOk) allPvcs.filter((_, idx) => idx % 2 === 0).slice(0, 8).forEach((pvc, index) => {
       const usagePct    = (pvc.used_bytes / pvc.requested_bytes) * 100;
       const requestedGb = pvc.requested_bytes / (1024 ** 3);
       const usedGb      = pvc.used_bytes / (1024 ** 3);
