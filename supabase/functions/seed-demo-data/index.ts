@@ -736,7 +736,7 @@ serve(async (req) => {
         environment: 'production',
         region: 'asia-southeast1',
         api_endpoint: 'https://api.prod-asia-1.gcp',
-        status: 'error',
+        status: 'critical',
         is_demo: true,
         nodes: 4,
         pods: 45,
@@ -860,7 +860,7 @@ serve(async (req) => {
       api_key: `kp_demo_${cluster.id.replace(/-/g, '').slice(0, 32)}`,
       api_key_prefix: `kp_demo_${cluster.name.slice(0, 10)}...`,
       last_seen: cluster.agent_last_seen_at,
-      is_active: cluster.status !== 'error',
+      is_active: cluster.status !== 'critical' && cluster.status !== 'disconnected',
     }));
     const { error: agentKeysError } = await supabaseClient.from('agent_api_keys').insert(agentKeys);
     if (agentKeysError) console.error('agent_api_keys error:', agentKeysError);
@@ -1156,39 +1156,50 @@ serve(async (req) => {
       let recommendationType: string;
       let recommendedSizeGb: number;
       let potentialSavings: number;
-      let reasoning: string;
+      let aiReasoning: string;
+      let priority: string;
 
       if (usagePct < 20) {
-        recommendationType = 'resize_down';
+        recommendationType = 'downsize';
         recommendedSizeGb  = Math.ceil(usedGb * 1.5);
         potentialSavings   = (requestedGb - recommendedSizeGb) * 0.10;
-        reasoning          = `Volume usa apenas ${usagePct.toFixed(1)}% dos ${requestedGb}GB. Reduzir para ${recommendedSizeGb}GB economiza $${potentialSavings.toFixed(2)}/mês.`;
+        aiReasoning        = `Volume usa apenas ${usagePct.toFixed(1)}% dos ${requestedGb}GB. Reduzir para ${recommendedSizeGb}GB economiza $${potentialSavings.toFixed(2)}/mês.`;
+        priority           = 'medium';
       } else if (usagePct > 85) {
-        recommendationType = 'resize_up';
+        recommendationType = 'upsize';
         recommendedSizeGb  = Math.ceil(requestedGb * 1.3);
         potentialSavings   = 0;
-        reasoning          = `Volume em ${usagePct.toFixed(1)}% de uso. Risco de volume cheio. Aumentar para ${recommendedSizeGb}GB previne falhas.`;
+        aiReasoning        = `Volume em ${usagePct.toFixed(1)}% de uso. Risco de volume cheio. Aumentar para ${recommendedSizeGb}GB previne falhas.`;
+        priority           = usagePct > 95 ? 'critical' : 'high';
       } else if (usagePct < 40) {
-        recommendationType = 'underutilized';
+        recommendationType = 'downsize';
         recommendedSizeGb  = Math.ceil(usedGb * 2);
         potentialSavings   = (requestedGb - recommendedSizeGb) * 0.10;
-        reasoning          = `Volume subutilizado (${usagePct.toFixed(1)}%). Ajustar para ${recommendedSizeGb}GB pode economizar $${potentialSavings.toFixed(2)}/mês.`;
+        aiReasoning        = `Volume subutilizado (${usagePct.toFixed(1)}%). Ajustar para ${recommendedSizeGb}GB pode economizar $${potentialSavings.toFixed(2)}/mês.`;
+        priority           = 'low';
       } else {
         return;
       }
 
+      const recStatus = index < 2 ? 'applied' : index < 4 ? 'accepted' : 'pending';
       storageRecs.push({
         id: crypto.randomUUID(),
         user_id: user.id,
         cluster_id: pvc.cluster_id,
-        pvc_id: pvc.id,
+        pvc_name: pvc.name,
+        namespace: pvc.namespace,
         recommendation_type: recommendationType,
-        current_size_gb: requestedGb,
-        recommended_size_gb: recommendedSizeGb,
-        potential_savings: potentialSavings,
-        usage_percentage: usagePct,
-        reasoning,
-        status: index < 2 ? 'applied' : index < 4 ? 'dismissed' : 'pending',
+        current_size_gb: Number(requestedGb.toFixed(2)),
+        recommended_size_gb: Number(recommendedSizeGb.toFixed(2)),
+        current_usage_gb: Number(usedGb.toFixed(2)),
+        avg_usage_percent: Number(usagePct.toFixed(2)),
+        max_usage_percent: Number(Math.min(usagePct * 1.1, 100).toFixed(2)),
+        p95_usage_percent: Number(Math.min(usagePct * 1.05, 100).toFixed(2)),
+        potential_savings_month: Number(Math.max(potentialSavings, 0).toFixed(2)),
+        ai_reasoning: aiReasoning,
+        ai_confidence: Number((0.80 + Math.random() * 0.15).toFixed(2)),
+        priority,
+        status: recStatus,
         days_analyzed: 7,
         created_at: new Date(Date.now() - Math.random() * 7 * 24 * 3600000).toISOString(),
         applied_at: index < 2 ? minutesAgo(randInt(60, 2880)) : null,
@@ -1196,7 +1207,7 @@ serve(async (req) => {
     });
 
     const { error: recsError } = await supabaseClient.from('storage_recommendations').insert(storageRecs);
-    if (recsError) throw recsError;
+    if (recsError) console.error('storage_recommendations error:', recsError);
 
     return new Response(
       JSON.stringify({

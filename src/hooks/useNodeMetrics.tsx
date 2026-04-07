@@ -50,7 +50,7 @@ export const useNodeMetrics = (clusterId: string | undefined) => {
           .eq('metric_type', 'nodes')
           .order('collected_at', { ascending: false })
           .limit(1)
-          .single();
+          .maybeSingle();
 
         // Fetch CPU and Memory usage
         const { data: cpuData } = await supabase
@@ -74,7 +74,7 @@ export const useNodeMetrics = (clusterId: string | undefined) => {
         if (nodesData?.metric_data) {
           const nodeMetrics = nodesData.metric_data as any;
           const nodes = nodeMetrics.nodes || [];
-          
+
           // Calculate total CPU and memory from capacity and usage
           let totalCPUCapacity = 0;
           let totalCPUUsage = 0;
@@ -97,9 +97,9 @@ export const useNodeMetrics = (clusterId: string | undefined) => {
 
             // Determine pool from labels and name
             let pool = 'worker';
-            
+
             if (node.labels) {
-              if (node.labels['node-role.kubernetes.io/control-plane'] || 
+              if (node.labels['node-role.kubernetes.io/control-plane'] ||
                   node.labels['node-role.kubernetes.io/master']) {
                 pool = 'control-plane';
               } else if (node.labels['agentpool']) {
@@ -108,7 +108,7 @@ export const useNodeMetrics = (clusterId: string | undefined) => {
                 pool = node.labels['pool'];
               }
             }
-            
+
             // Fallback to name-based detection for pool
             if (pool === 'worker' && node.name) {
               if (node.name.includes('control-plane') || node.name.includes('master')) {
@@ -157,6 +157,8 @@ export const useNodeMetrics = (clusterId: string | undefined) => {
             memoryUsage: overallMemoryUsage,
             loading: false,
           });
+        } else {
+          setMetrics(prev => ({ ...prev, loading: false }));
         }
       } catch (error) {
         console.error('Error fetching node metrics:', error);
