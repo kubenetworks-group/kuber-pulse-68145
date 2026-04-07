@@ -639,6 +639,7 @@ serve(async (req) => {
     if (existingDemo && existingDemo.length > 0) {
       const ids = existingDemo.map((c: any) => c.id);
       for (const cid of ids) {
+        await supabaseClient.from('agent_api_keys').delete().eq('cluster_id', cid);
         await supabaseClient.from('agent_metrics').delete().eq('cluster_id', cid);
         await supabaseClient.from('storage_recommendations').delete().eq('cluster_id', cid);
         await supabaseClient.from('cluster_validation_results').delete().eq('cluster_id', cid);
@@ -851,13 +852,30 @@ serve(async (req) => {
     const { error: clustersError } = await supabaseClient.from('clusters').insert(clusters);
     if (clustersError) throw clustersError;
 
+    // ── Agent API Keys ────────────────────────────────────────────────────
+    const agentKeys = clusters.map(cluster => ({
+      user_id: user.id,
+      cluster_id: cluster.id,
+      name: `agent-${cluster.name}`,
+      api_key: `kp_demo_${cluster.id.replace(/-/g, '').slice(0, 32)}`,
+      api_key_prefix: `kp_demo_${cluster.name.slice(0, 10)}...`,
+      last_seen: cluster.agent_last_seen_at,
+      is_active: cluster.status !== 'error',
+    }));
+    const { error: agentKeysError } = await supabaseClient.from('agent_api_keys').insert(agentKeys);
+    if (agentKeysError) console.error('agent_api_keys error:', agentKeysError);
+
     // ── Agent metrics ─────────────────────────────────────────────────────
     const allMetrics: any[] = [];
     for (const cluster of clusters) {
       allMetrics.push(...buildAgentMetrics(cluster));
     }
-    const { error: metricsError } = await supabaseClient.from('agent_metrics').insert(allMetrics);
-    if (metricsError) console.error('agent_metrics error:', metricsError);
+    // Insert one cluster's metrics at a time to avoid payload size limits
+    for (let i = 0; i < allMetrics.length; i += 8) {
+      const batch = allMetrics.slice(i, i + 8);
+      const { error: metricsError } = await supabaseClient.from('agent_metrics').insert(batch);
+      if (metricsError) console.error('agent_metrics batch error:', metricsError);
+    }
 
     // ── Security threats ──────────────────────────────────────────────────
     const allThreats: any[] = [];
@@ -1185,6 +1203,7 @@ serve(async (req) => {
         success: true,
         message: 'Demo data created successfully',
         clusters:                clusters.length,
+        agent_api_keys:          agentKeys.length,
         agent_metrics:           allMetrics.length,
         security_threats:        allThreats.length,
         agent_anomalies:         allAnomalies.length,
