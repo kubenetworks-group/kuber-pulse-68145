@@ -1226,7 +1226,7 @@ serve(async (req) => {
         agent_anomalies:         allAnomalies.length,
         incidents:               incidents.length,
         cost_calculations:       allCostEntries.length,
-        ai_savings:              aiSavings.length,
+        ai_savings:              'generated',
         pvcs:                    allPvcs.length,
         storage_recommendations: storageRecs.length,
       }),

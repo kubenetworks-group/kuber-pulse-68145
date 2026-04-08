@@ -268,7 +268,7 @@ export const NotificationBell = () => {
                   ? Loader2
                   : isSecurity
                   ? ShieldAlert
-                  : notificationIcons[notification.type];
+                  : notificationIcons[notification.type as keyof typeof notificationIcons] || Info;
                 const isProcessing = notification.related_entity_type === 'cluster_deletion';
 
                 return (
