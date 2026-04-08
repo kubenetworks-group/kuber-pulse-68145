@@ -3,10 +3,11 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { AuthProvider } from "@/contexts/AuthContext";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ClusterProvider } from "@/contexts/ClusterContext";
 import { SubscriptionProvider } from "@/contexts/SubscriptionContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { SessionExpiredDialog } from "@/components/SessionExpiredDialog";
 import { AdminProtectedRoute } from "@/components/AdminProtectedRoute";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
@@ -31,6 +32,21 @@ import { CookieBanner } from "@/components/CookieBanner";
 
 const queryClient = new QueryClient();
 
+// Must be inside AuthProvider to access context
+const SessionGuard = ({ children }: { children: React.ReactNode }) => {
+  const { sessionExpired, onSessionRenewed, signOut } = useAuth();
+  return (
+    <>
+      {children}
+      <SessionExpiredDialog
+        open={sessionExpired}
+        onRenewed={onSessionRenewed}
+        onSignOut={signOut}
+      />
+    </>
+  );
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -39,6 +55,7 @@ const App = () => (
       <BrowserRouter>
         <CookieBanner />
         <AuthProvider>
+          <SessionGuard>
           <SubscriptionProvider>
             <ClusterProvider>
               <Routes>
@@ -155,6 +172,7 @@ const App = () => (
               </Routes>
             </ClusterProvider>
           </SubscriptionProvider>
+          </SessionGuard>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>

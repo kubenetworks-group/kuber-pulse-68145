@@ -2,7 +2,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Navigate } from "react-router-dom";
 
 export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const { user, loading } = useAuth();
+  const { user, loading, sessionExpired } = useAuth();
 
   if (loading) {
     return (
@@ -15,7 +15,9 @@ export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  if (!user) {
+  // If the session expired, keep rendering children (the dialog will appear on top)
+  // Only redirect if there's truly no user and it wasn't an expiry event
+  if (!user && !sessionExpired) {
     return <Navigate to="/auth" replace />;
   }
 

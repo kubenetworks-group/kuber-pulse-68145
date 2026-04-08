@@ -8,9 +8,26 @@ const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
+// Dual storage: writes to both localStorage and sessionStorage.
+// If localStorage is cleared (cache wipe), sessionStorage still has the session.
+// If sessionStorage is cleared (tab close), localStorage still has it.
+const dualStorage = {
+  getItem: (key: string): string | null => {
+    return localStorage.getItem(key) ?? sessionStorage.getItem(key);
+  },
+  setItem: (key: string, value: string): void => {
+    try { localStorage.setItem(key, value); } catch { /* quota exceeded */ }
+    try { sessionStorage.setItem(key, value); } catch { /* quota exceeded */ }
+  },
+  removeItem: (key: string): void => {
+    localStorage.removeItem(key);
+    sessionStorage.removeItem(key);
+  },
+};
+
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
-    storage: localStorage,
+    storage: dualStorage,
     persistSession: true,
     autoRefreshToken: true,
   }

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
@@ -13,6 +13,8 @@ interface AuthContextType {
   signInWithGoogle: () => Promise<{ error: any }>;
   signOut: () => Promise<void>;
   loading: boolean;
+  sessionExpired: boolean;
+  onSessionRenewed: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -21,22 +23,42 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [sessionExpired, setSessionExpired] = useState(false);
+  // Track whether the sign-out was triggered manually by the user
+  const manualSignOut = useRef(false);
   const navigate = useNavigate();
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        if (event === 'SIGNED_OUT') {
+          if (manualSignOut.current) {
+            // User clicked "Sign out" — clear state and redirect
+            manualSignOut.current = false;
+            setSession(null);
+            setUser(null);
+          } else {
+            // Session expired or was invalidated externally — show renewal dialog
+            // Keep the previous user state visible so the app doesn't flash blank
+            setSessionExpired(true);
+          }
+          return;
+        }
+
+        if (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN') {
+          setSessionExpired(false);
+        }
+
         setSession(session);
         setUser(session?.user ?? null);
-        
-        // Log OAuth login events
+
         if (event === 'SIGNED_IN' && session?.user) {
           const provider = session.user.app_metadata?.provider;
           if (provider && provider !== 'email') {
             setTimeout(() => {
-              logAuditEvent(session.user.id, 'oauth_login', 'user', session.user.id, { 
+              logAuditEvent(session.user.id, 'oauth_login', 'user', session.user.id, {
                 provider,
-                email: session.user.email 
+                email: session.user.email,
               });
             }, 0);
           }
@@ -53,17 +75,24 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return () => subscription.unsubscribe();
   }, []);
 
+  const onSessionRenewed = () => {
+    // Re-read session from Supabase after a successful refreshSession() call
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      setSessionExpired(false);
+    });
+  };
+
   const signUp = async (email: string, password: string, fullName: string) => {
     const redirectUrl = `${window.location.origin}/`;
-    
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         emailRedirectTo: redirectUrl,
-        data: {
-          full_name: fullName,
-        },
+        data: { full_name: fullName },
       },
     });
 
@@ -72,7 +101,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       return { error };
     }
 
-    // Log signup event
     if (data.user) {
       await logAuditEvent(data.user.id, 'signup', 'user', data.user.id, { email });
     }
@@ -83,17 +111,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const signIn = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
       toast.error(error.message);
       return { error };
     }
 
-    // Log login event
     if (data.user) {
       await logAuditEvent(data.user.id, 'login', 'user', data.user.id, { email });
     }
@@ -125,22 +149,22 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signOut = async () => {
     try {
-      // Log logout event before signing out
       if (user) {
         await logAuditEvent(user.id, 'logout', 'user', user.id, { email: user.email }).catch(() => {});
       }
 
+      manualSignOut.current = true;
       await supabase.auth.signOut({ scope: 'local' });
-      
-      // Force clear local state even if signOut fails
+
       setUser(null);
       setSession(null);
-      
+      setSessionExpired(false);
+
       toast.success("Saiu com sucesso!");
       navigate("/");
     } catch (error) {
       console.error("Sign out error:", error);
-      // Even on error, clear local state and redirect
+      manualSignOut.current = false;
       setUser(null);
       setSession(null);
       navigate("/");
@@ -148,7 +172,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, signUp, signIn, signInWithGoogle, signOut, loading }}>
+    <AuthContext.Provider value={{
+      user,
+      session,
+      signUp,
+      signIn,
+      signInWithGoogle,
+      signOut,
+      loading,
+      sessionExpired,
+      onSessionRenewed,
+    }}>
       {children}
     </AuthContext.Provider>
   );
