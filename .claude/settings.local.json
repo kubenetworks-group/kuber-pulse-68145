@@ -27,7 +27,12 @@
       "Bash(supabase:*)",
       "Bash(ls -1t /Users/denercavalcante/Workspace/Pessoal/kuber-pulse-68145/supabase/migrations/*.sql)",
       "Bash(npx tsc:*)",
-      "Bash(ls /Users/denercavalcante/Workspace/Pessoal/kuber-pulse-68145/.env*)"
+      "Bash(ls /Users/denercavalcante/Workspace/Pessoal/kuber-pulse-68145/.env*)",
+      "Bash(/opt/homebrew/bin/supabase functions:*)",
+      "Bash(echo:*)",
+      "Read(//Users/denercavalcante/.config/supabase/**)",
+      "Read(//Users/denercavalcante/.supabase/**)",
+      "Bash(/opt/homebrew/bin/supabase login:*)"
     ]
   }
 }

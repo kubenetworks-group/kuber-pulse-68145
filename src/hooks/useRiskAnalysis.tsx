@@ -192,9 +192,9 @@ export const useRiskAnalysis = () => {
         .select("metric_data")
         .eq("cluster_id", selectedClusterId)
         .eq("metric_type", "security")
-        .order("created_at", { ascending: false })
+        .order("collected_at", { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
       // Fetch pod details
       const { data: podMetrics } = await supabase
@@ -202,9 +202,9 @@ export const useRiskAnalysis = () => {
         .select("metric_data")
         .eq("cluster_id", selectedClusterId)
         .eq("metric_type", "pod_details")
-        .order("created_at", { ascending: false })
+        .order("collected_at", { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
       // Fetch node metrics
       const { data: nodeMetrics } = await supabase
@@ -212,9 +212,9 @@ export const useRiskAnalysis = () => {
         .select("metric_data")
         .eq("cluster_id", selectedClusterId)
         .eq("metric_type", "nodes")
-        .order("created_at", { ascending: false })
+        .order("collected_at", { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
       // Fetch events
       const { data: eventsMetrics } = await supabase
@@ -222,9 +222,9 @@ export const useRiskAnalysis = () => {
         .select("metric_data")
         .eq("cluster_id", selectedClusterId)
         .eq("metric_type", "events")
-        .order("created_at", { ascending: false })
+        .order("collected_at", { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
       // Fetch PVCs
       const { data: pvcs } = await supabase
@@ -290,7 +290,7 @@ export const useRiskAnalysis = () => {
           const podPhase = pod.phase || pod.Phase || pod.Status;
           const podName = pod.name || pod.Name;
           const podNamespace = pod.namespace || pod.Namespace;
-          const podTotalRestarts = pod.total_restarts || pod.RestartCount || 0;
+          const podTotalRestarts = pod.total_restarts || pod.RestartCount || pod.restarts || 0;
           const podContainers = pod.containers || pod.Containers || [];
           
           if (podPhase === "Running") {

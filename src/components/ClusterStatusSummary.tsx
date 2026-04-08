@@ -67,27 +67,37 @@ export const ClusterStatusSummary = ({ clusterData }: ClusterStatusSummaryProps)
       if (error) throw error;
 
       if (data?.metric_data) {
-        const pods = Array.isArray(data.metric_data) ? data.metric_data : [];
-        let healthy = 0, warning = 0, critical = 0;
+        const md = data.metric_data as any;
+        let healthy = 0, warning = 0, critical = 0, total = 0;
 
-        pods.forEach((pod: any) => {
-          const phase = pod.status?.phase?.toLowerCase() || '';
-          const containerStatuses = pod.status?.containerStatuses || [];
-          const hasRestarts = containerStatuses.some((c: any) => c.restartCount > 3);
-          const allReady = containerStatuses.every((c: any) => c.ready);
+        if (Array.isArray(md)) {
+          // Full pod list format
+          md.forEach((pod: any) => {
+            const phase = pod.status?.phase?.toLowerCase() || '';
+            const containerStatuses = pod.status?.containerStatuses || [];
+            const hasRestarts = containerStatuses.some((c: any) => c.restartCount > 3);
+            const allReady = containerStatuses.every((c: any) => c.ready);
 
-          if (phase === 'running' && allReady && !hasRestarts) {
-            healthy++;
-          } else if (phase === 'pending' || hasRestarts) {
-            warning++;
-          } else if (phase === 'failed' || phase === 'unknown') {
-            critical++;
-          } else {
-            healthy++;
-          }
-        });
+            if (phase === 'running' && allReady && !hasRestarts) {
+              healthy++;
+            } else if (phase === 'pending' || hasRestarts) {
+              warning++;
+            } else if (phase === 'failed' || phase === 'unknown') {
+              critical++;
+            } else {
+              healthy++;
+            }
+          });
+          total = md.length;
+        } else if (md.total !== undefined) {
+          // Summary object format: { total, running, pending, failed }
+          healthy = md.running || 0;
+          warning = md.pending || 0;
+          critical = md.failed || 0;
+          total = md.total || 0;
+        }
 
-        setPodStatus({ healthy, warning, critical, total: pods.length });
+        setPodStatus({ healthy, warning, critical, total });
       }
     } catch (error) {
       console.error('Error fetching pod status:', error);

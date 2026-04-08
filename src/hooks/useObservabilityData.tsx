@@ -86,7 +86,7 @@ export const useObservabilityData = () => {
       }
 
       // Parse pods data
-      const podsMetric = latestByType["pods"] || latestByType["pod_status"];
+      const podsMetric = latestByType["pod_details"] || latestByType["pods"] || latestByType["pod_status"];
       if (podsMetric) {
         const data = podsMetric.metric_data as any;
         const podList: PodData[] = [];
