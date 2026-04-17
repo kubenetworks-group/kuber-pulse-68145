@@ -12,6 +12,7 @@ import { useSubscription, PLAN_LIMITS } from "@/contexts/SubscriptionContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Database, Loader2, Sparkles, GraduationCap, Crown, Clock, Brain, Server, User, Check, Shield, MessageSquare, XCircle, Info, FileText, Lock, Download, Trash2, ExternalLink } from "lucide-react";
+import { seedDemoData, deleteDemoData } from "@/services/demoDataSeeder";
 import { AIUsageWidget } from "@/components/AIUsageWidget";
 import { useNavigate, Link } from "react-router-dom";
 import { AvatarUpload } from "@/components/AvatarUpload";
@@ -176,9 +177,8 @@ const Settings = () => {
   const handleGenerateDemoData = async () => {
     setDemoLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('seed-demo-data');
-      if (error) throw error;
-      toast.success(`Gerado ${data.clusters} clusters e ${data.incidents} incidentes IA!`);
+      const result = await seedDemoData();
+      toast.success(`Gerado ${result.clusters} clusters, ${result.incidents} incidentes IA e ${result.agent_metrics} métricas!`);
       setTimeout(() => window.location.href = '/', 2000);
     } catch (error: any) {
       toast.error(error.message || "Falha ao gerar dados demo");
@@ -190,9 +190,8 @@ const Settings = () => {
   const handleDeleteDemoData = async () => {
     setDemoDeleteLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('delete-demo-data');
-      if (error) throw error;
-      toast.success(`Removidos: ${data.deleted.clusters} clusters, ${data.deleted.incidents} incidentes demo`);
+      const result = await deleteDemoData();
+      toast.success(`Removidos: ${result.clusters} clusters e ${result.incidents} incidentes demo`);
       setTimeout(() => window.location.href = '/', 2000);
     } catch (error: any) {
       toast.error(error.message || "Falha ao remover dados demo");

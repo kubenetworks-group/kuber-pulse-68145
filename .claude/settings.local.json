@@ -32,7 +32,9 @@
       "Bash(echo:*)",
       "Read(//Users/denercavalcante/.config/supabase/**)",
       "Read(//Users/denercavalcante/.supabase/**)",
-      "Bash(/opt/homebrew/bin/supabase login:*)"
+      "Bash(/opt/homebrew/bin/supabase login:*)",
+      "Bash(wc:*)",
+      "Bash(ls /Users/denercavalcante/Workspace/Pessoal/kuber-pulse-68145/*.env*)"
     ]
   }
 }
