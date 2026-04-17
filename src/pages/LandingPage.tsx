@@ -1,607 +1,630 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Footer } from "@/components/Footer";
 import kodoLogo from "@/assets/kodo-logo.png";
 import { useEffect, useState, useRef } from "react";
-import { Shield, Zap, Brain, DollarSign, Activity, Wrench, ArrowRight, Check, Sparkles, Server, Lock, BarChart3, Upload, Settings, LineChart, BellRing, Terminal, Cpu, Database, GitBranch, Boxes, Network } from "lucide-react";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import {
+  Shield,
+  Zap,
+  Brain,
+  DollarSign,
+  Activity,
+  Wrench,
+  ArrowRight,
+  Check,
+  Sparkles,
+  Server,
+  LineChart,
+  BellRing,
+  Upload,
+  Settings,
+  Play,
+  Cpu,
+  AlertTriangle,
+  CheckCircle2,
+  Circle,
+  Menu,
+  X,
+} from "lucide-react";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 
-// Animated counter hook
-const useCounter = (end: number, duration: number = 2000, start: number = 0) => {
-  const [count, setCount] = useState(start);
-  const [isVisible, setIsVisible] = useState(false);
+/* ───────────── Animated counter ───────────── */
+const useCounter = (end: number, duration = 2000, decimals = 0) => {
+  const [count, setCount] = useState(0);
+  const [visible, setVisible] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) {
-        setIsVisible(true);
-      }
-    }, {
-      threshold: 0.1
-    });
-    if (ref.current) {
-      observer.observe(ref.current);
-    }
-    return () => observer.disconnect();
+    const obs = new IntersectionObserver(
+      ([e]) => { if (e.isIntersecting) setVisible(true); },
+      { threshold: 0.1 }
+    );
+    if (ref.current) obs.observe(ref.current);
+    return () => obs.disconnect();
   }, []);
+
   useEffect(() => {
-    if (!isVisible) return;
-    let startTime: number;
-    const animate = (currentTime: number) => {
-      if (!startTime) startTime = currentTime;
-      const progress = Math.min((currentTime - startTime) / duration, 1);
-      setCount(Math.floor(progress * (end - start) + start));
-      if (progress < 1) {
-        requestAnimationFrame(animate);
-      }
+    if (!visible) return;
+    let start: number;
+    const tick = (now: number) => {
+      if (!start) start = now;
+      const p = Math.min((now - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setCount(parseFloat((eased * end).toFixed(decimals)));
+      if (p < 1) requestAnimationFrame(tick);
     };
-    requestAnimationFrame(animate);
-  }, [isVisible, end, duration, start]);
-  return {
-    count,
-    ref
-  };
+    requestAnimationFrame(tick);
+  }, [visible, end, duration, decimals]);
+
+  return { count, ref };
 };
 
-// Matrix code rain component
-const MatrixRain = () => {
-  const chars = "01アイウエオカキクケコサシスセソタチツテト";
-  const columns = 20;
-  return <div className="absolute inset-0 overflow-hidden opacity-10 pointer-events-none">
-      {Array.from({
-      length: columns
-    }).map((_, i) => <div key={i} className="absolute text-primary text-xs font-mono whitespace-nowrap" style={{
-      left: `${i / columns * 100}%`,
-      animation: `matrix-fall ${8 + Math.random() * 4}s linear infinite`,
-      animationDelay: `${Math.random() * 5}s`
-    }}>
-          {Array.from({
-        length: 30
-      }).map((_, j) => <div key={j} style={{
-        opacity: 1 - j * 0.03
-      }}>
-              {chars[Math.floor(Math.random() * chars.length)]}
-            </div>)}
-        </div>)}
-    </div>;
-};
+/* ───────────── Dashboard mockup ───────────── */
+const DashboardMockup = () => (
+  <div className="relative w-full max-w-4xl mx-auto">
+    {/* Glow behind the card */}
+    <div className="absolute inset-0 -z-10 bg-gradient-to-r from-blue-600/30 via-violet-600/20 to-cyan-500/20 blur-[80px] scale-90" />
 
-// Floating tech icons
-const FloatingTechIcons = () => {
-  const icons = [Cpu, Database, GitBranch, Boxes, Network, Terminal];
-  return <div className="absolute inset-0 overflow-hidden pointer-events-none">
-      {icons.map((Icon, i) => <div key={i} className="absolute animate-float-tech opacity-20" style={{
-      left: `${10 + i * 15}%`,
-      top: `${20 + i % 3 * 25}%`,
-      animationDelay: `${i * 0.5}s`,
-      animationDuration: `${5 + i}s`
-    }}>
-          <Icon className="w-8 h-8 text-primary" />
-        </div>)}
-    </div>;
-};
+    <div className="rounded-2xl border border-white/10 bg-[#0d1117]/90 backdrop-blur-xl overflow-hidden shadow-2xl shadow-black/60">
+      {/* Window bar */}
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-white/5 bg-white/[0.02]">
+        <div className="flex gap-1.5">
+          <div className="w-3 h-3 rounded-full bg-red-500/70" />
+          <div className="w-3 h-3 rounded-full bg-yellow-500/70" />
+          <div className="w-3 h-3 rounded-full bg-green-500/70" />
+        </div>
+        <div className="flex-1 mx-4">
+          <div className="w-48 h-5 rounded-md bg-white/5 flex items-center px-3">
+            <span className="text-[10px] text-white/30">app.kodo.io/dashboard</span>
+          </div>
+        </div>
+      </div>
 
-// Typing effect component
-const TypingText = ({
-  texts
-}: {
-  texts: string[];
-}) => {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [displayText, setDisplayText] = useState("");
-  const [isDeleting, setIsDeleting] = useState(false);
-  useEffect(() => {
-    const currentText = texts[currentIndex];
-    const timeout = setTimeout(() => {
-      if (!isDeleting) {
-        if (displayText.length < currentText.length) {
-          setDisplayText(currentText.slice(0, displayText.length + 1));
-        } else {
-          setTimeout(() => setIsDeleting(true), 2000);
-        }
-      } else {
-        if (displayText.length > 0) {
-          setDisplayText(displayText.slice(0, -1));
-        } else {
-          setIsDeleting(false);
-          setCurrentIndex(prev => (prev + 1) % texts.length);
-        }
-      }
-    }, isDeleting ? 50 : 100);
-    return () => clearTimeout(timeout);
-  }, [displayText, isDeleting, currentIndex, texts]);
-  return <span className="text-primary">
-      {displayText}
-      <span className="animate-pulse">|</span>
-    </span>;
-};
-const features = [{
-  icon: Brain,
-  title: "Monitor IA",
-  description: "Analise inteligente e deteccao de anomalias com machine learning para prevenir incidentes antes que acontecam.",
-  color: "text-primary",
-  gradient: "from-primary/20 to-violet-500/20"
-}, {
-  icon: Shield,
-  title: "Seguranca",
-  description: "Analise completa de RBAC, Network Policies, Pod Security e muito mais. Identifique vulnerabilidades automaticamente.",
-  color: "text-success",
-  gradient: "from-success/20 to-emerald-500/20"
-}, {
-  icon: DollarSign,
-  title: "FinOps",
-  description: "Controle de custos multi-cloud com insights detalhados. Economize ate 40% na sua infraestrutura.",
-  color: "text-warning",
-  gradient: "from-warning/20 to-amber-500/20"
-}, {
-  icon: Activity,
-  title: "Observabilidade",
-  description: "Metricas em tempo real de CPU, memoria, storage e rede. Dashboards personalizados para cada necessidade.",
-  color: "text-chart-4",
-  gradient: "from-violet-500/20 to-purple-500/20"
-}, {
-  icon: Wrench,
-  title: "Auto-Healing",
-  description: "Correcoes automaticas de problemas detectados. Reinicie pods, escale recursos e muito mais.",
-  color: "text-destructive",
-  gradient: "from-destructive/20 to-red-500/20"
-}, {
-  icon: Server,
-  title: "Multi-Cluster",
-  description: "Gerencie multiplos clusters Kubernetes de diferentes provedores em uma unica interface unificada.",
-  color: "text-primary",
-  gradient: "from-blue-500/20 to-cyan-500/20"
-}];
-const stats = [{
-  value: 99.9,
-  suffix: "%",
-  label: "Uptime garantido"
-}, {
-  value: 40,
-  suffix: "%",
-  label: "Economia media"
-}, {
-  value: 5,
-  suffix: "min",
-  label: "Setup rapido"
-}, {
-  value: 24,
-  suffix: "/7",
-  label: "Monitoramento"
-}];
-const howItWorks = [{
-  step: 1,
-  icon: Upload,
-  title: "Conecte seu Cluster",
-  description: "Instale o agente Kodo no seu cluster Kubernetes em menos de 5 minutos."
-}, {
-  step: 2,
-  icon: Settings,
-  title: "Configure Preferencias",
-  description: "Defina alertas personalizados e politicas de auto-healing."
-}, {
-  step: 3,
-  icon: LineChart,
-  title: "Monitore em Tempo Real",
-  description: "Acompanhe metricas e anomalias em dashboards interativos."
-}, {
-  step: 4,
-  icon: BellRing,
-  title: "Receba Insights",
-  description: "Seja notificado antes que problemas afetem seus usuarios."
-}];
-const faqs = [{
-  question: "O que e o Kodo?",
-  answer: "Kodo e uma plataforma de gestao Kubernetes com inteligencia artificial que oferece auto-healing automatico, analise de seguranca, FinOps e observabilidade em tempo real para seus clusters K8s."
-}, {
-  question: "Como funciona o auto-healing do Kodo?",
-  answer: "O auto-healing do Kodo usa IA para detectar anomalias e problemas em seus clusters Kubernetes automaticamente. Quando um problema e identificado, o sistema pode reiniciar pods, escalar deployments ou aplicar correcoes sem intervencao manual."
-}, {
-  question: "O Kodo funciona com qualquer provedor de cloud?",
-  answer: "Sim! O Kodo e multi-cloud e funciona com AWS EKS, Google GKE, Azure AKS, DigitalOcean Kubernetes, e clusters on-premises."
-}, {
-  question: "Quanto tempo leva para configurar o Kodo?",
-  answer: "A configuracao do Kodo leva menos de 5 minutos. Basta instalar nosso agente no seu cluster usando kubectl ou helm."
-}, {
-  question: "O Kodo e seguro?",
-  answer: "Sim, seguranca e nossa prioridade. O Kodo coleta apenas metadados e metricas de performance dos seus clusters, nunca dados de aplicacao ou secrets."
-}, {
-  question: "Posso testar o Kodo gratuitamente?",
-  answer: "Sim! Oferecemos um plano gratuito permanente que inclui 1 cluster e 5 analises de IA por mes. Nao pedimos cartao de credito."
-}];
-const pricingPlans = [{
-  name: "Free",
-  price: "R$0",
-  period: "/mes",
-  description: "Para comecar a explorar",
-  features: ["1 cluster", "5 analises IA/mes", "Metricas basicas", "Suporte comunidade"],
-  cta: "Comecar Gratis",
-  popular: false
-}, {
-  name: "Pro",
-  price: "R$149",
-  period: "/mes",
-  description: "Para times em crescimento",
-  features: ["Ate 10 clusters", "Analises IA ilimitadas", "Auto-Healing", "Alertas avancados", "Suporte prioritario"],
-  cta: "Comecar Agora",
-  popular: true
-}];
-export default function LandingPage() {
-  const stat1 = useCounter(99.9, 2000, 0);
-  const stat2 = useCounter(40, 2000, 0);
-  const stat3 = useCounter(5, 1500, 0);
-  const stat4 = useCounter(24, 1500, 0);
-  return <div className="min-h-screen bg-background relative overflow-hidden">
-      {/* Advanced Background Effects */}
-      <div className="absolute inset-0 bg-grid-pattern opacity-[0.02]" />
-      <div className="absolute inset-0 code-bg" />
-      <MatrixRain />
-      <FloatingTechIcons />
-      
-      {/* Animated gradient orbs */}
-      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/20 rounded-full blur-[100px] animate-pulse" style={{
-      animationDuration: '4s'
-    }} />
-      <div className="absolute bottom-1/3 right-1/4 w-[500px] h-[500px] bg-violet-500/15 rounded-full blur-[120px] animate-pulse" style={{
-      animationDuration: '6s'
-    }} />
-      <div className="absolute top-2/3 left-1/2 w-72 h-72 bg-cyan-500/10 rounded-full blur-[80px] animate-pulse" style={{
-      animationDuration: '5s'
-    }} />
-
-      {/* Header */}
-      <header className="relative z-20 border-b border-border/50 bg-background/60 backdrop-blur-xl sticky top-0">
-        <nav className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-3 group">
-            <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-r from-primary to-violet-500 rounded-full blur-lg opacity-50 group-hover:opacity-75 transition-opacity animate-pulse" />
-              <div className="absolute -inset-1 bg-primary/20 rounded-full animate-pulse-ring" />
-              <img src={kodoLogo} alt="Kodo" className="w-10 h-10 object-contain relative z-10" />
+      {/* Content */}
+      <div className="p-4 grid grid-cols-3 gap-3">
+        {/* Sidebar */}
+        <div className="col-span-1 space-y-1">
+          {["Dashboard", "Clusters", "AI Monitor", "FinOps", "Security", "Agents"].map((item, i) => (
+            <div
+              key={item}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-colors ${
+                i === 0
+                  ? "bg-blue-500/20 text-blue-400 font-medium"
+                  : "text-white/40 hover:text-white/60"
+              }`}
+            >
+              <div className={`w-1.5 h-1.5 rounded-full ${i === 0 ? "bg-blue-400" : "bg-white/20"}`} />
+              {item}
             </div>
-            <span className="text-2xl font-bold animate-text-shimmer">
-              Kodo
-            </span>
-          </Link>
-          
-          <div className="hidden md:flex items-center gap-8">
-            {["Recursos", "Como Funciona", "Precos", "FAQ"].map((item, i) => <a key={item} href={`#${item.toLowerCase().replace(" ", "-")}`} className="text-muted-foreground hover:text-primary transition-all hover:scale-105 relative group">
-                {item}
-                <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-primary to-violet-500 group-hover:w-full transition-all duration-300" />
-              </a>)}
+          ))}
+        </div>
+
+        {/* Main content */}
+        <div className="col-span-2 space-y-3">
+          {/* Metric cards */}
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { label: "Uptime", value: "99.9%", color: "text-emerald-400", bg: "bg-emerald-500/10" },
+              { label: "Savings", value: "R$4.2k", color: "text-blue-400", bg: "bg-blue-500/10" },
+              { label: "Incidents", value: "0", color: "text-violet-400", bg: "bg-violet-500/10" },
+            ].map((m) => (
+              <div key={m.label} className={`rounded-lg p-2 ${m.bg} border border-white/5`}>
+                <p className="text-[9px] text-white/40 mb-1">{m.label}</p>
+                <p className={`text-sm font-bold ${m.color}`}>{m.value}</p>
+              </div>
+            ))}
           </div>
 
-          <div className="flex items-center gap-3">
+          {/* Chart */}
+          <div className="rounded-lg bg-white/[0.02] border border-white/5 p-3 h-20 flex items-end gap-1">
+            {[30, 55, 40, 70, 50, 85, 65, 90, 75, 95, 80, 100].map((h, i) => (
+              <div
+                key={i}
+                className="flex-1 rounded-t"
+                style={{
+                  height: `${h}%`,
+                  background: `linear-gradient(to top, rgba(59,130,246,0.8), rgba(139,92,246,0.4))`,
+                  opacity: 0.7 + i * 0.025,
+                }}
+              />
+            ))}
+          </div>
+
+          {/* Alerts */}
+          <div className="space-y-1.5">
+            {[
+              { status: "ok", msg: "All pods healthy — production-cluster", time: "now" },
+              { status: "warn", msg: "CPU spike detected — auto-healing triggered", time: "2m" },
+              { status: "ok", msg: "Cost anomaly resolved — saved R$320", time: "5m" },
+            ].map((a, i) => (
+              <div key={i} className="flex items-center gap-2 rounded-lg bg-white/[0.02] border border-white/5 px-3 py-1.5">
+                {a.status === "ok"
+                  ? <CheckCircle2 className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+                  : <AlertTriangle className="w-3 h-3 text-yellow-400 flex-shrink-0" />}
+                <span className="text-[10px] text-white/50 flex-1 truncate">{a.msg}</span>
+                <span className="text-[9px] text-white/25">{a.time}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+/* ───────────── Data ───────────── */
+const features = [
+  {
+    icon: Brain,
+    title: "Monitor com IA",
+    description: "Machine learning detecta anomalias e previne incidentes antes que afetem seus usuários.",
+    accent: "from-blue-500/20 to-blue-600/5",
+    iconColor: "text-blue-400",
+    iconBg: "bg-blue-500/10",
+    border: "hover:border-blue-500/30",
+  },
+  {
+    icon: Shield,
+    title: "Segurança",
+    description: "Análise completa de RBAC, Network Policies e Pod Security. Vulnerabilidades identificadas automaticamente.",
+    accent: "from-emerald-500/20 to-emerald-600/5",
+    iconColor: "text-emerald-400",
+    iconBg: "bg-emerald-500/10",
+    border: "hover:border-emerald-500/30",
+  },
+  {
+    icon: DollarSign,
+    title: "FinOps",
+    description: "Controle de custos multi-cloud com insights detalhados. Economize até 40% na sua infraestrutura.",
+    accent: "from-amber-500/20 to-amber-600/5",
+    iconColor: "text-amber-400",
+    iconBg: "bg-amber-500/10",
+    border: "hover:border-amber-500/30",
+  },
+  {
+    icon: Activity,
+    title: "Observabilidade",
+    description: "Métricas em tempo real de CPU, memória, storage e rede. Dashboards personalizados.",
+    accent: "from-violet-500/20 to-violet-600/5",
+    iconColor: "text-violet-400",
+    iconBg: "bg-violet-500/10",
+    border: "hover:border-violet-500/30",
+  },
+  {
+    icon: Wrench,
+    title: "Auto-Healing",
+    description: "Correções automáticas quando problemas são detectados — sem intervenção manual.",
+    accent: "from-rose-500/20 to-rose-600/5",
+    iconColor: "text-rose-400",
+    iconBg: "bg-rose-500/10",
+    border: "hover:border-rose-500/30",
+  },
+  {
+    icon: Server,
+    title: "Multi-Cluster",
+    description: "AWS EKS, GKE, AKS e on-premises em uma única interface unificada e inteligente.",
+    accent: "from-cyan-500/20 to-cyan-600/5",
+    iconColor: "text-cyan-400",
+    iconBg: "bg-cyan-500/10",
+    border: "hover:border-cyan-500/30",
+  },
+];
+
+const steps = [
+  { n: "01", icon: Upload, title: "Conecte o Cluster", desc: "Instale o agente Kodo em menos de 5 minutos via kubectl ou Helm." },
+  { n: "02", icon: Settings, title: "Configure Alertas", desc: "Defina políticas de auto-healing e thresholds personalizados." },
+  { n: "03", icon: LineChart, title: "Monitore em Tempo Real", desc: "Dashboards interativos com métricas e anomalias ao vivo." },
+  { n: "04", icon: BellRing, title: "Receba Insights", desc: "Notificações inteligentes antes que problemas impactem usuários." },
+];
+
+const faqs = [
+  { q: "O que é o Kodo?", a: "Kodo é uma plataforma de gestão Kubernetes com inteligência artificial que oferece auto-healing automático, análise de segurança, FinOps e observabilidade em tempo real." },
+  { q: "Como funciona o auto-healing?", a: "O Kodo usa IA para detectar anomalias em seus clusters e aplica correções automaticamente — reiniciando pods, escalando deployments ou ajustando recursos sem intervenção manual." },
+  { q: "Funciona com qualquer cloud?", a: "Sim! Kodo é multi-cloud: AWS EKS, Google GKE, Azure AKS, DigitalOcean Kubernetes e clusters on-premises." },
+  { q: "Quanto tempo leva para configurar?", a: "Menos de 5 minutos. Basta instalar nosso agente no seu cluster usando kubectl ou Helm." },
+  { q: "O Kodo é seguro?", a: "Segurança é nossa prioridade. Coletamos apenas metadados e métricas de performance — nunca dados de aplicação ou secrets." },
+  { q: "Como posso fazer uma demonstração?", a: "Entre em contato conosco para agendar uma demonstração personalizada da plataforma com nossa equipe." },
+];
+
+
+/* ───────────── Component ───────────── */
+export default function LandingPage() {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+
+  const s1 = useCounter(99.9, 2000, 1);
+  const s2 = useCounter(40, 1800);
+  const s3 = useCounter(5, 1500);
+  const s4 = useCounter(500, 2000);
+
+  useEffect(() => {
+    const fn = () => setScrolled(window.scrollY > 20);
+    window.addEventListener("scroll", fn);
+    return () => window.removeEventListener("scroll", fn);
+  }, []);
+
+  return (
+    <div className="min-h-screen bg-[#060912] text-white overflow-x-hidden">
+
+      {/* ── Background ── */}
+      <div className="fixed inset-0 -z-10">
+        {/* Radial gradient center */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,rgba(59,130,246,0.15),transparent)]" />
+        {/* Grid */}
+        <div
+          className="absolute inset-0 opacity-[0.04]"
+          style={{
+            backgroundImage:
+              "linear-gradient(rgba(255,255,255,.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.5) 1px, transparent 1px)",
+            backgroundSize: "60px 60px",
+          }}
+        />
+      </div>
+
+      {/* ── Navigation ── */}
+      <header
+        className={`sticky top-0 z-50 transition-all duration-300 ${
+          scrolled ? "bg-[#060912]/80 backdrop-blur-xl border-b border-white/5" : ""
+        }`}
+      >
+        <nav className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+          {/* Logo */}
+          <Link to="/" className="flex items-center gap-3">
+            <img src={kodoLogo} alt="Kodo" className="w-8 h-8 object-contain" />
+            <span className="text-xl font-bold tracking-tight">Kodo</span>
+          </Link>
+
+          {/* Desktop nav */}
+          <div className="hidden md:flex items-center gap-8">
+            {["Recursos", "Como Funciona", "FAQ"].map((item) => (
+              <a
+                key={item}
+                href={`#${item.toLowerCase().replace(" ", "-")}`}
+                className="text-sm text-white/50 hover:text-white transition-colors"
+              >
+                {item}
+              </a>
+            ))}
+          </div>
+
+          {/* CTA */}
+          <div className="hidden md:flex items-center gap-3">
             <Link to="/auth">
-              <Button variant="ghost" className="hidden sm:flex hover:bg-primary/10">
-                Login
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-white/60 hover:text-white hover:bg-white/5"
+              >
+                Entrar
               </Button>
             </Link>
             <Link to="/auth?tab=signup">
-              <Button className="bg-gradient-to-r from-primary to-violet-500 hover:opacity-90 transition-all hover:scale-105 animate-glow-pulse">
-                <Zap className="w-4 h-4 mr-2" />
-                Comecar Agora
+              <Button
+                size="sm"
+                className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl px-5"
+              >
+                Começar agora
               </Button>
             </Link>
           </div>
+
+          {/* Mobile menu toggle */}
+          <button
+            className="md:hidden p-2 text-white/60 hover:text-white"
+            onClick={() => setMenuOpen(!menuOpen)}
+          >
+            {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
         </nav>
+
+        {/* Mobile menu */}
+        {menuOpen && (
+          <div className="md:hidden border-t border-white/5 bg-[#060912]/95 backdrop-blur-xl px-6 py-4 space-y-4">
+            {["Recursos", "Como Funciona", "FAQ"].map((item) => (
+              <a
+                key={item}
+                href={`#${item.toLowerCase().replace(" ", "-")}`}
+                className="block text-sm text-white/60 hover:text-white transition-colors"
+                onClick={() => setMenuOpen(false)}
+              >
+                {item}
+              </a>
+            ))}
+            <div className="pt-2 flex flex-col gap-2">
+              <Link to="/auth" onClick={() => setMenuOpen(false)}>
+                <Button variant="outline" size="sm" className="w-full border-white/10 text-white/70 hover:bg-white/5">Entrar</Button>
+              </Link>
+              <Link to="/auth?tab=signup" onClick={() => setMenuOpen(false)}>
+                <Button size="sm" className="w-full bg-blue-600 hover:bg-blue-500">Começar agora</Button>
+              </Link>
+            </div>
+          </div>
+        )}
       </header>
 
       <main>
-        {/* Hero Section */}
-        <section className="relative z-10 container mx-auto px-4 pt-20 pb-32">
-          <div className="max-w-5xl mx-auto text-center space-y-8">
-            {/* Terminal-style badge */}
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-card/50 border border-border/50 font-mono text-sm">
-              <Terminal className="w-4 h-4" />
-              <span className="text-muted-foreground">$</span>
-              <span>kubectl get kodo --status=</span>
-              <span className="text-success">active</span>
-            </div>
-            
-            <h1 className="text-4xl sm:text-5xl lg:text-7xl font-bold leading-tight animate-in fade-in slide-in-from-bottom-4 duration-700 delay-100">
-              <span className="block mb-2">Gerencie Kubernetes com</span>
-              <span className="relative inline-block">
-                <span className="bg-gradient-to-r from-primary via-violet-500 to-cyan-400 bg-clip-text text-transparent">
-                  <TypingText texts={["Inteligencia Artificial", "Auto-Healing", "Observabilidade", "FinOps Inteligente"]} />
+        {/* ═══════════════════ HERO ═══════════════════ */}
+        <section className="relative pt-24 pb-16 px-6">
+          <div className="max-w-7xl mx-auto">
+            <div className="text-center max-w-4xl mx-auto mb-16">
+              {/* Badge */}
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-sm mb-8">
+                <Sparkles className="w-3.5 h-3.5" />
+                Kubernetes com Inteligência Artificial
+              </div>
+
+              {/* Headline */}
+              <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold leading-[1.05] tracking-tight mb-6">
+                Gerencie seus{" "}
+                <span className="bg-gradient-to-r from-blue-400 via-violet-400 to-cyan-400 bg-clip-text text-transparent">
+                  clusters K8s
                 </span>
-              </span>
-            </h1>
-            
-            <p className="text-xl text-muted-foreground max-w-3xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700 delay-200 leading-relaxed">
-              Plataforma cloud-native que combina <span className="text-primary font-semibold">machine learning</span>, 
-              auto-remediacao e analise de custos para transformar sua operacao K8s.
-            </p>
+                <br />
+                sem esforço
+              </h1>
 
-            {/* CTA Buttons */}
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-6 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300">
-              <Link to="/auth?tab=signup">
-                <Button size="lg" className="bg-gradient-to-r from-primary to-violet-500 hover:opacity-90 transition-all hover:scale-105 gap-2 text-lg px-8 py-7 shadow-xl shadow-primary/20 group">
-                  <Sparkles className="w-5 h-5 group-hover:animate-spin" />
-                  Comecar Gratis
-                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                </Button>
-              </Link>
-              <a href="#como-funciona">
-                <Button size="lg" variant="outline" className="gap-2 text-lg px-8 py-7 border-primary/30 hover:bg-primary/10 hover:border-primary/50 transition-all">
-                  <Terminal className="w-5 h-5" />
-                  Ver Demo
-                </Button>
-              </a>
-            </div>
-
-            {/* Stats Section */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 pt-16 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-400">
-              <div ref={stat1.ref} className="p-6 rounded-xl bg-card/50 backdrop-blur-sm border border-border/50 hover:border-primary/30 transition-all group">
-                <div className="text-4xl font-bold text-primary mb-1 group-hover:scale-110 transition-transform">
-                  {stat1.count.toFixed(1)}%
-                </div>
-                <div className="text-sm text-muted-foreground">Uptime garantido</div>
-              </div>
-              <div ref={stat2.ref} className="p-6 rounded-xl bg-card/50 backdrop-blur-sm border border-border/50 hover:border-success/30 transition-all group">
-                <div className="text-4xl font-bold text-success mb-1 group-hover:scale-110 transition-transform">
-                  {stat2.count}%
-                </div>
-                <div className="text-sm text-muted-foreground">Economia media</div>
-              </div>
-              <div ref={stat3.ref} className="p-6 rounded-xl bg-card/50 backdrop-blur-sm border border-border/50 hover:border-warning/30 transition-all group">
-                <div className="text-4xl font-bold text-warning mb-1 group-hover:scale-110 transition-transform">
-                  {stat3.count}min
-                </div>
-                <div className="text-sm text-muted-foreground">Setup rapido</div>
-              </div>
-              <div ref={stat4.ref} className="p-6 rounded-xl bg-card/50 backdrop-blur-sm border border-border/50 hover:border-violet-500/30 transition-all group">
-                <div className="text-4xl font-bold text-violet-500 mb-1 group-hover:scale-110 transition-transform">
-                  {stat4.count}/7
-                </div>
-                <div className="text-sm text-muted-foreground">Monitoramento</div>
-              </div>
-            </div>
-
-            {/* Trust Badges */}
-            <div className="flex flex-wrap items-center justify-center gap-8 pt-8 text-muted-foreground animate-in fade-in slide-in-from-bottom-4 duration-700 delay-500">
-              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-card/50 border border-border/50">
-                <Lock className="w-4 h-4 text-success" />
-                <span className="text-sm font-medium">SOC 2 Compliant</span>
-              </div>
-              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-card/50 border border-border/50">
-                <Shield className="w-4 h-4 text-success" />
-                <span className="text-sm font-medium">LGPD Ready</span>
-              </div>
-              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-card/50 border border-border/50">
-                <BarChart3 className="w-4 h-4 text-success" />
-                <span className="text-sm font-medium">Enterprise Grade</span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Features Section */}
-        <section id="recursos" className="relative z-10 py-24 bg-gradient-to-b from-muted/50 to-background">
-          <div className="container mx-auto px-4">
-            <div className="text-center mb-16">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm mb-4">
-                <Cpu className="w-4 h-4" />
-                Recursos
-              </div>
-              <h2 className="text-3xl sm:text-5xl font-bold mb-4">
-                Tudo que voce precisa para{" "}
-                <span className="bg-gradient-to-r from-primary to-violet-500 bg-clip-text text-transparent">
-                  dominar Kubernetes
-                </span>
-              </h2>
-              <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                Plataforma completa com IA para simplificar sua operacao cloud-native.
+              <p className="text-lg text-white/50 max-w-2xl mx-auto mb-10 leading-relaxed">
+                Plataforma cloud-native com IA que monitora, protege e otimiza
+                seus clusters Kubernetes — com auto-healing e FinOps integrados.
               </p>
-            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {features.map((feature, index) => <Card key={feature.title} className="group p-6 bg-card/50 backdrop-blur-sm border-border/50 hover:border-primary/50 transition-all duration-500 hover:shadow-xl hover:shadow-primary/10 hover:-translate-y-2 relative overflow-hidden">
-                  {/* Animated background gradient */}
-                  <div className={`absolute inset-0 bg-gradient-to-br ${feature.gradient} opacity-0 group-hover:opacity-100 transition-opacity duration-500`} />
-                  
-                  <div className="relative z-10">
-                    <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center mb-4 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300`}>
-                      <feature.icon className={`w-7 h-7 ${feature.color}`} />
-                    </div>
-                    <h3 className="text-xl font-bold mb-2 group-hover:text-primary transition-colors">{feature.title}</h3>
-                    <p className="text-muted-foreground text-sm leading-relaxed">{feature.description}</p>
-                  </div>
-
-                  {/* Corner decoration */}
-                  <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-bl from-primary/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                </Card>)}
-            </div>
-          </div>
-        </section>
-
-        {/* How It Works Section */}
-        <section id="como-funciona" className="relative z-10 py-24">
-          <div className="container mx-auto px-4">
-            <div className="text-center mb-16">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-success/10 text-success text-sm mb-4">
-                <GitBranch className="w-4 h-4" />
-                Workflow
-              </div>
-              <h2 className="text-3xl sm:text-5xl font-bold mb-4">
-                Setup em{" "}
-                <span className="bg-gradient-to-r from-success to-emerald-400 bg-clip-text text-transparent">
-                  4 passos simples
-                </span>
-              </h2>
-            </div>
-
-            <div className="relative max-w-5xl mx-auto">
-              {/* Connection line */}
-              <div className="hidden lg:block absolute top-1/2 left-0 right-0 h-1 bg-gradient-to-r from-primary via-violet-500 to-success transform -translate-y-1/2 rounded-full" />
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-                {howItWorks.map((item, index) => <div key={item.step} className="relative group">
-                    <Card className="p-6 bg-card/80 backdrop-blur-sm border-border/50 hover:border-primary/50 transition-all duration-300 h-full hover:shadow-xl hover:shadow-primary/10 hover:-translate-y-2">
-                      <div className="flex flex-col items-center text-center">
-                        {/* Step number with glow */}
-                        <div className="relative mb-4">
-                          <div className="absolute inset-0 bg-primary/30 rounded-full blur-xl animate-pulse" />
-                          <div className="relative w-16 h-16 rounded-full bg-gradient-to-br from-primary to-violet-500 flex items-center justify-center text-primary-foreground font-bold text-xl shadow-lg">
-                            {item.step}
-                          </div>
-                        </div>
-                        
-                        <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">
-                          <item.icon className="w-6 h-6 text-primary" />
-                        </div>
-                        
-                        <h3 className="text-lg font-bold mb-2">{item.title}</h3>
-                        <p className="text-sm text-muted-foreground">{item.description}</p>
-                      </div>
-                    </Card>
-                  </div>)}
-              </div>
-            </div>
-
-            <div className="text-center mt-12">
-              <Link to="/auth">
-                <Button size="lg" className="bg-gradient-to-r from-primary to-violet-500 hover:opacity-90 transition-all hover:scale-105 gap-2 group">
-                  Comecar em 5 Minutos
-                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                </Button>
-              </Link>
-            </div>
-          </div>
-        </section>
-
-        {/* Pricing Section */}
-        <section id="precos" className="relative z-10 py-24 bg-gradient-to-b from-muted/50 to-background">
-          <div className="container mx-auto px-4">
-            <div className="text-center mb-16">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-warning/10 text-warning text-sm mb-4">
-                <DollarSign className="w-4 h-4" />
-                Pricing
-              </div>
-              <h2 className="text-3xl sm:text-5xl font-bold mb-4">
-                Planos{" "}
-                <span className="bg-gradient-to-r from-warning to-amber-400 bg-clip-text text-transparent">
-                  transparentes
-                </span>
-              </h2>
-              <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                Comece gratis e escale conforme sua necessidade.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-              {pricingPlans.map(plan => <Card key={plan.name} className={`p-8 relative overflow-hidden transition-all duration-300 hover:-translate-y-2 ${plan.popular ? 'border-primary/50 bg-gradient-to-br from-primary/10 to-violet-500/10 shadow-xl shadow-primary/10' : 'bg-card/50 backdrop-blur-sm border-border/50 hover:border-primary/30'}`}>
-                  {plan.popular && <>
-                      <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary to-violet-500" />
-                      <div className="absolute top-4 right-4 px-3 py-1 rounded-full bg-gradient-to-r from-primary to-violet-500 text-primary-foreground text-xs font-bold animate-pulse">
-                        Popular
-                      </div>
-                    </>}
-                  
-                  <h3 className="text-2xl font-bold mb-2">{plan.name}</h3>
-                  <p className="text-muted-foreground mb-4">{plan.description}</p>
-                  
-                  <div className="flex items-baseline gap-1 mb-6">
-                    <span className="text-5xl font-bold bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">{plan.price}</span>
-                    <span className="text-muted-foreground">{plan.period}</span>
-                  </div>
-
-                  <ul className="space-y-3 mb-8">
-                    {plan.features.map(feature => <li key={feature} className="flex items-center gap-3">
-                        <div className="w-5 h-5 rounded-full bg-success/20 flex items-center justify-center flex-shrink-0">
-                          <Check className="w-3 h-3 text-success" />
-                        </div>
-                        <span className="text-sm">{feature}</span>
-                      </li>)}
-                  </ul>
-
-                  <Link to="/auth" className="block">
-                    <Button className={`w-full transition-all ${plan.popular ? 'bg-gradient-to-r from-primary to-violet-500 hover:opacity-90' : 'hover:bg-primary/10'}`} variant={plan.popular ? "default" : "outline"}>
-                      {plan.cta}
-                    </Button>
-                  </Link>
-                </Card>)}
-            </div>
-
-            <div className="text-center mt-8">
-              <Link to="/plans" className="text-primary hover:text-violet-500 transition-colors inline-flex items-center gap-2">
-                Ver comparacao completa
-                <ArrowRight className="w-4 h-4" />
-              </Link>
-            </div>
-          </div>
-        </section>
-
-        {/* FAQ Section */}
-        <section id="faq" className="relative z-10 py-24">
-          <div className="container mx-auto px-4">
-            <div className="text-center mb-16">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-violet-500/10 text-violet-500 text-sm mb-4">
-                <Sparkles className="w-4 h-4" />
-                FAQ
-              </div>
-              <h2 className="text-3xl sm:text-5xl font-bold mb-4">
-                Perguntas{" "}
-                <span className="bg-gradient-to-r from-violet-500 to-purple-400 bg-clip-text text-transparent">
-                  Frequentes
-                </span>
-              </h2>
-            </div>
-
-            <div className="max-w-3xl mx-auto">
-              <Accordion type="single" collapsible className="space-y-4">
-                {faqs.map((faq, index) => <AccordionItem key={index} value={`item-${index}`} className="bg-card/50 backdrop-blur-sm border border-border/50 rounded-xl px-6 data-[state=open]:border-primary/50 data-[state=open]:shadow-lg data-[state=open]:shadow-primary/5 transition-all">
-                    <AccordionTrigger className="text-left hover:no-underline py-5">
-                      <span className="font-semibold text-lg">{faq.question}</span>
-                    </AccordionTrigger>
-                    <AccordionContent className="text-muted-foreground pb-5 leading-relaxed">
-                      {faq.answer}
-                    </AccordionContent>
-                  </AccordionItem>)}
-              </Accordion>
-            </div>
-          </div>
-        </section>
-
-        {/* CTA Section */}
-        <section className="relative z-10 py-24 bg-gradient-to-b from-muted/50 to-background">
-          <div className="container mx-auto px-4">
-            <Card className="max-w-4xl mx-auto p-12 text-center relative overflow-hidden border-primary/30">
-              {/* Animated background */}
-              <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-violet-500/10 to-cyan-500/20" />
-              <div className="absolute inset-0 bg-grid-pattern opacity-[0.03]" />
-              
-              <div className="relative z-10">
-                <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-primary to-violet-500 flex items-center justify-center shadow-xl shadow-primary/30">
-                  <Zap className="w-10 h-10 text-primary-foreground" />
-                </div>
-                
-                <h2 className="text-3xl sm:text-5xl font-bold mb-4">
-                  Pronto para transformar sua operacao?
-                </h2>
-                <p className="text-lg text-muted-foreground mb-8 max-w-xl mx-auto">
-                  Junte-se a centenas de empresas que ja automatizaram sua gestao Kubernetes com IA.
-                </p>
-                
-                <Link to="/auth">
-                  <Button size="lg" className="bg-gradient-to-r from-primary to-violet-500 hover:opacity-90 transition-all hover:scale-105 gap-2 text-lg px-10 py-7 shadow-xl shadow-primary/20 group">
-                    <Sparkles className="w-5 h-5 group-hover:animate-spin" />
-                    Comecar Gratuitamente
-                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              {/* CTAs */}
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                <Link to="/auth?tab=signup">
+                  <Button
+                    size="lg"
+                    className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl px-8 py-6 text-base font-medium shadow-xl shadow-blue-600/25 transition-all hover:shadow-blue-500/40 hover:-translate-y-0.5 group"
+                  >
+                    Começar agora
+                    <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
                   </Button>
                 </Link>
-                
-                <p className="text-sm text-muted-foreground mt-6 flex items-center justify-center gap-4 flex-wrap">
-                  <span className="flex items-center gap-1"><Check className="w-4 h-4 text-success" /> Sem cartao</span>
-                  <span className="flex items-center gap-1"><Check className="w-4 h-4 text-success" /> 5 min setup</span>
-                  <span className="flex items-center gap-1"><Check className="w-4 h-4 text-success" /> Cancele quando quiser</span>
+                <a href="#como-funciona">
+                  <Button
+                    size="lg"
+                    variant="ghost"
+                    className="text-white/60 hover:text-white hover:bg-white/5 rounded-xl px-8 py-6 text-base gap-2"
+                  >
+                    <Play className="w-4 h-4" />
+                    Ver como funciona
+                  </Button>
+                </a>
+              </div>
+
+              {/* Social proof mini */}
+              <div className="flex items-center justify-center gap-6 mt-10 text-sm text-white/30">
+                <span className="flex items-center gap-1.5">
+                  <Check className="w-4 h-4 text-emerald-500" />
+                  Setup em 5 minutos
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <Check className="w-4 h-4 text-emerald-500" />
+                  Multi-cloud
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <Check className="w-4 h-4 text-emerald-500" />
+                  Suporte dedicado
+                </span>
+              </div>
+            </div>
+
+            {/* Dashboard mockup */}
+            <DashboardMockup />
+          </div>
+        </section>
+
+        {/* ═══════════════════ STATS ═══════════════════ */}
+        <section className="py-20 px-6 border-y border-white/[0.04]">
+          <div className="max-w-5xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-8">
+            {[
+              { ref: s1.ref, value: `${s1.count}%`, label: "Uptime garantido", color: "text-blue-400" },
+              { ref: s2.ref, value: `${s2.count}%`, label: "Economia média", color: "text-emerald-400" },
+              { ref: s3.ref, value: `${s3.count} min`, label: "Setup rápido", color: "text-violet-400" },
+              { ref: s4.ref, value: `${s4.count}+`, label: "Clusters gerenciados", color: "text-amber-400" },
+            ].map(({ ref, value, label, color }) => (
+              <div key={label} ref={ref} className="text-center">
+                <div className={`text-4xl lg:text-5xl font-bold mb-2 ${color}`}>{value}</div>
+                <div className="text-sm text-white/40">{label}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* ═══════════════════ FEATURES ═══════════════════ */}
+        <section id="recursos" className="py-24 px-6">
+          <div className="max-w-7xl mx-auto">
+            {/* Section header */}
+            <div className="text-center mb-16">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-white/50 text-sm mb-5">
+                <Cpu className="w-3.5 h-3.5" />
+                Recursos
+              </div>
+              <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-4">
+                Tudo que você precisa para{" "}
+                <span className="bg-gradient-to-r from-blue-400 to-violet-400 bg-clip-text text-transparent">
+                  operar com confiança
+                </span>
+              </h2>
+              <p className="text-white/40 text-lg max-w-xl mx-auto">
+                Uma plataforma completa para simplificar e automatizar sua operação cloud-native.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {features.map((f) => (
+                <div
+                  key={f.title}
+                  className={`group relative rounded-2xl border border-white/[0.06] bg-white/[0.02] p-6 transition-all duration-300 hover:bg-white/[0.04] ${f.border}`}
+                >
+                  {/* Gradient hover bg */}
+                  <div className={`absolute inset-0 rounded-2xl bg-gradient-to-br ${f.accent} opacity-0 group-hover:opacity-100 transition-opacity duration-300`} />
+                  <div className="relative z-10">
+                    <div className={`inline-flex items-center justify-center w-10 h-10 rounded-xl ${f.iconBg} mb-4`}>
+                      <f.icon className={`w-5 h-5 ${f.iconColor}`} />
+                    </div>
+                    <h3 className="text-base font-semibold mb-2">{f.title}</h3>
+                    <p className="text-sm text-white/40 leading-relaxed">{f.description}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ═══════════════════ HOW IT WORKS ═══════════════════ */}
+        <section id="como-funciona" className="py-24 px-6">
+          <div className="max-w-7xl mx-auto">
+            <div className="text-center mb-16">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-white/50 text-sm mb-5">
+                <Zap className="w-3.5 h-3.5" />
+                Como funciona
+              </div>
+              <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-4">
+                Operacional em{" "}
+                <span className="bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
+                  minutos
+                </span>
+              </h2>
+              <p className="text-white/40 text-lg max-w-xl mx-auto">
+                Processo simples, resultado imediato.
+              </p>
+            </div>
+
+            <div className="relative grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {/* Connector line */}
+              <div className="hidden lg:block absolute top-10 left-[12.5%] right-[12.5%] h-px bg-gradient-to-r from-blue-500/30 via-violet-500/30 to-emerald-500/30" />
+
+              {steps.map((s, i) => (
+                <div key={s.n} className="relative flex flex-col items-center text-center group">
+                  {/* Number circle */}
+                  <div className="relative mb-6 z-10">
+                    <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-600/20 to-violet-600/10 border border-white/10 flex flex-col items-center justify-center gap-0.5 group-hover:border-blue-500/30 transition-colors">
+                      <span className="text-[10px] text-white/30 font-mono">{s.n}</span>
+                      <s.icon className="w-6 h-6 text-white/70" />
+                    </div>
+                  </div>
+                  <h3 className="text-sm font-semibold mb-2">{s.title}</h3>
+                  <p className="text-xs text-white/40 leading-relaxed max-w-[180px]">{s.desc}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="text-center mt-14">
+              <Link to="/auth">
+                <Button
+                  size="lg"
+                  className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl px-8 py-6 text-base shadow-xl shadow-blue-600/25 hover:-translate-y-0.5 transition-all group"
+                >
+                  Começar agora
+                  <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </section>
+
+        {/* ═══════════════════ SOCIAL PROOF STRIP ═══════════════════ */}
+        <section className="py-12 px-6 border-y border-white/[0.04] bg-white/[0.01]">
+          <div className="max-w-5xl mx-auto text-center">
+            <p className="text-sm text-white/30 mb-8 uppercase tracking-widest">Integra com as principais plataformas</p>
+            <div className="flex flex-wrap items-center justify-center gap-8">
+              {["AWS EKS", "Google GKE", "Azure AKS", "DigitalOcean", "Rancher", "OpenShift"].map((p) => (
+                <div
+                  key={p}
+                  className="px-5 py-2 rounded-lg bg-white/[0.03] border border-white/[0.06] text-sm text-white/40 hover:text-white/60 hover:border-white/10 transition-colors"
+                >
+                  {p}
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ═══════════════════ FAQ ═══════════════════ */}
+        <section id="faq" className="py-24 px-6">
+          <div className="max-w-3xl mx-auto">
+            <div className="text-center mb-16">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-white/50 text-sm mb-5">
+                <Circle className="w-3.5 h-3.5" />
+                FAQ
+              </div>
+              <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-4">
+                Perguntas{" "}
+                <span className="bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent">
+                  frequentes
+                </span>
+              </h2>
+            </div>
+
+            <Accordion type="single" collapsible className="space-y-3">
+              {faqs.map((faq, i) => (
+                <AccordionItem
+                  key={i}
+                  value={`faq-${i}`}
+                  className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-6 data-[state=open]:border-white/10 data-[state=open]:bg-white/[0.04] transition-all"
+                >
+                  <AccordionTrigger className="text-left hover:no-underline py-5 text-sm font-medium text-white/80 hover:text-white">
+                    {faq.q}
+                  </AccordionTrigger>
+                  <AccordionContent className="text-sm text-white/40 pb-5 leading-relaxed">
+                    {faq.a}
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
+          </div>
+        </section>
+
+        {/* ═══════════════════ FINAL CTA ═══════════════════ */}
+        <section className="py-24 px-6">
+          <div className="max-w-4xl mx-auto">
+            <div className="relative rounded-3xl overflow-hidden border border-white/[0.08] bg-gradient-to-br from-blue-950/60 via-[#0d1117] to-violet-950/40 p-16 text-center">
+              {/* Glow */}
+              <div className="absolute -top-20 left-1/2 -translate-x-1/2 w-80 h-40 bg-blue-600/20 blur-[80px] rounded-full" />
+              {/* Grid */}
+              <div
+                className="absolute inset-0 opacity-[0.03]"
+                style={{
+                  backgroundImage:
+                    "linear-gradient(rgba(255,255,255,.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.5) 1px, transparent 1px)",
+                  backgroundSize: "40px 40px",
+                }}
+              />
+              <div className="relative z-10">
+                <div className="inline-flex w-16 h-16 rounded-2xl bg-blue-600/20 border border-blue-500/30 items-center justify-center mb-6">
+                  <Zap className="w-8 h-8 text-blue-400" />
+                </div>
+                <h2 className="text-4xl sm:text-5xl font-bold mb-4 tracking-tight">
+                  Pronto para transformar<br />sua operação?
+                </h2>
+                <p className="text-white/40 text-lg mb-10 max-w-xl mx-auto">
+                  Junte-se a centenas de empresas que já automatizaram sua gestão Kubernetes com IA.
+                </p>
+                <Link to="/auth">
+                  <Button
+                    size="lg"
+                    className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl px-10 py-6 text-base font-medium shadow-2xl shadow-blue-600/30 hover:shadow-blue-500/40 hover:-translate-y-0.5 transition-all group"
+                  >
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    Começar agora
+                    <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
+                  </Button>
+                </Link>
+                <p className="mt-6 text-sm text-white/25">
+                  Setup em 5 min · Multi-cloud · Suporte dedicado
                 </p>
               </div>
-            </Card>
+            </div>
           </div>
         </section>
       </main>
 
       <Footer />
-    </div>;
+    </div>
+  );
 }
