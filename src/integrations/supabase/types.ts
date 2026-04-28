@@ -270,7 +270,9 @@ export type Database = {
           id: string
           is_latest: boolean | null
           is_required: boolean | null
+          min_compatible_version: string | null
           release_notes: string | null
+          release_type: string | null
           version: string
         }
         Insert: {
@@ -278,7 +280,9 @@ export type Database = {
           id?: string
           is_latest?: boolean | null
           is_required?: boolean | null
+          min_compatible_version?: string | null
           release_notes?: string | null
+          release_type?: string | null
           version: string
         }
         Update: {
@@ -286,7 +290,9 @@ export type Database = {
           id?: string
           is_latest?: boolean | null
           is_required?: boolean | null
+          min_compatible_version?: string | null
           release_notes?: string | null
+          release_type?: string | null
           version?: string
         }
         Relationships: []
@@ -770,6 +776,109 @@ export type Database = {
           },
         ]
       }
+      cluster_migrations: {
+        Row: {
+          ai_analysis: Json | null
+          compatibility_score: number | null
+          completed_at: string | null
+          created_at: string
+          current_step: string | null
+          description: string | null
+          error_message: string | null
+          id: string
+          issues_auto_fixed: number | null
+          issues_found: number | null
+          name: string
+          original_manifest_path: string | null
+          progress_percent: number | null
+          rollback_available: boolean | null
+          snapshot_id: string | null
+          source_cluster_id: string
+          started_at: string | null
+          status: string
+          steps_log: Json | null
+          target_cluster_id: string
+          transformation_log: Json | null
+          transformed_manifest_path: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ai_analysis?: Json | null
+          compatibility_score?: number | null
+          completed_at?: string | null
+          created_at?: string
+          current_step?: string | null
+          description?: string | null
+          error_message?: string | null
+          id?: string
+          issues_auto_fixed?: number | null
+          issues_found?: number | null
+          name: string
+          original_manifest_path?: string | null
+          progress_percent?: number | null
+          rollback_available?: boolean | null
+          snapshot_id?: string | null
+          source_cluster_id: string
+          started_at?: string | null
+          status?: string
+          steps_log?: Json | null
+          target_cluster_id: string
+          transformation_log?: Json | null
+          transformed_manifest_path?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ai_analysis?: Json | null
+          compatibility_score?: number | null
+          completed_at?: string | null
+          created_at?: string
+          current_step?: string | null
+          description?: string | null
+          error_message?: string | null
+          id?: string
+          issues_auto_fixed?: number | null
+          issues_found?: number | null
+          name?: string
+          original_manifest_path?: string | null
+          progress_percent?: number | null
+          rollback_available?: boolean | null
+          snapshot_id?: string | null
+          source_cluster_id?: string
+          started_at?: string | null
+          status?: string
+          steps_log?: Json | null
+          target_cluster_id?: string
+          transformation_log?: Json | null
+          transformed_manifest_path?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cluster_migrations_snapshot_id_fkey"
+            columns: ["snapshot_id"]
+            isOneToOne: false
+            referencedRelation: "cluster_snapshots"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cluster_migrations_source_cluster_id_fkey"
+            columns: ["source_cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cluster_migrations_target_cluster_id_fkey"
+            columns: ["target_cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cluster_security_scans: {
         Row: {
           ai_analysis: Json | null
@@ -837,6 +946,71 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "cluster_security_scans_cluster_id_fkey"
+            columns: ["cluster_id"]
+            isOneToOne: false
+            referencedRelation: "clusters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cluster_snapshots: {
+        Row: {
+          cluster_id: string
+          completed_at: string | null
+          created_at: string
+          description: string | null
+          error_message: string | null
+          id: string
+          manifest_count: number | null
+          name: string
+          namespace_count: number | null
+          resource_summary: Json | null
+          started_at: string | null
+          status: string
+          storage_path: string | null
+          storage_size_bytes: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cluster_id: string
+          completed_at?: string | null
+          created_at?: string
+          description?: string | null
+          error_message?: string | null
+          id?: string
+          manifest_count?: number | null
+          name: string
+          namespace_count?: number | null
+          resource_summary?: Json | null
+          started_at?: string | null
+          status?: string
+          storage_path?: string | null
+          storage_size_bytes?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cluster_id?: string
+          completed_at?: string | null
+          created_at?: string
+          description?: string | null
+          error_message?: string | null
+          id?: string
+          manifest_count?: number | null
+          name?: string
+          namespace_count?: number | null
+          resource_summary?: Json | null
+          started_at?: string | null
+          status?: string
+          storage_path?: string | null
+          storage_size_bytes?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cluster_snapshots_cluster_id_fkey"
             columns: ["cluster_id"]
             isOneToOne: false
             referencedRelation: "clusters"
@@ -1238,6 +1412,62 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      migration_validations: {
+        Row: {
+          actual: Json | null
+          created_at: string
+          detail: string | null
+          error_message: string | null
+          expected: Json | null
+          id: string
+          migration_id: string
+          namespace: string | null
+          ran_at: string | null
+          resource_name: string | null
+          status: string
+          user_id: string
+          validation_type: string
+        }
+        Insert: {
+          actual?: Json | null
+          created_at?: string
+          detail?: string | null
+          error_message?: string | null
+          expected?: Json | null
+          id?: string
+          migration_id: string
+          namespace?: string | null
+          ran_at?: string | null
+          resource_name?: string | null
+          status?: string
+          user_id: string
+          validation_type: string
+        }
+        Update: {
+          actual?: Json | null
+          created_at?: string
+          detail?: string | null
+          error_message?: string | null
+          expected?: Json | null
+          id?: string
+          migration_id?: string
+          namespace?: string | null
+          ran_at?: string | null
+          resource_name?: string | null
+          status?: string
+          user_id?: string
+          validation_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "migration_validations_migration_id_fkey"
+            columns: ["migration_id"]
+            isOneToOne: false
+            referencedRelation: "cluster_migrations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       notifications: {
         Row: {
@@ -1923,8 +2153,10 @@ export type Database = {
           id: string
           ip_address: string | null
           marketing_consent: boolean
+          policy_version: string
           privacy_policy_accepted: boolean
           terms_accepted: boolean
+          terms_version: string
           updated_at: string
           user_agent: string | null
           user_id: string
@@ -1935,8 +2167,10 @@ export type Database = {
           id?: string
           ip_address?: string | null
           marketing_consent?: boolean
+          policy_version?: string
           privacy_policy_accepted?: boolean
           terms_accepted?: boolean
+          terms_version?: string
           updated_at?: string
           user_agent?: string | null
           user_id: string
@@ -1947,8 +2181,10 @@ export type Database = {
           id?: string
           ip_address?: string | null
           marketing_consent?: boolean
+          policy_version?: string
           privacy_policy_accepted?: boolean
           terms_accepted?: boolean
+          terms_version?: string
           updated_at?: string
           user_agent?: string | null
           user_id?: string
@@ -2260,6 +2496,7 @@ export type Database = {
         Returns: string
       }
       delete_cluster_data: { Args: { p_cluster_id: string }; Returns: number }
+      delete_user_account: { Args: never; Returns: undefined }
       get_cron_jobs_status: {
         Args: never
         Returns: {
