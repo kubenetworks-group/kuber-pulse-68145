@@ -112,8 +112,7 @@ serve(async (req) => {
           command_params: {
             namespace: 'kodo',
             deployment_name: 'kodo-agent',
-            // Note: we don't specify new_image because the deployment uses :latest
-            // The rollout restart will pull the latest image
+            new_image: `ghcr.io/kubenetworks-group/kodo-agent:${latestVersion.version}`,
             trigger: 'auto_update',
             from_version: cluster.agent_version,
             to_version: latestVersion.version,

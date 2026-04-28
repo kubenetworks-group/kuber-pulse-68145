@@ -6,10 +6,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-agent-key, x-agent-version',
 };
 
-// Current latest agent version - update this when releasing new versions
-const LATEST_VERSION = 'v0.0.50';
-const RELEASE_NOTES = 'Melhorias de performance e correções de bugs';
-
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -77,6 +73,15 @@ serve(async (req) => {
       .update({ last_seen: new Date().toISOString() })
       .eq('api_key_hash', apiKeyData.api_key_hash);
 
+    // Fetch latest version from database
+    const { data: latestVersionData } = await supabase
+      .from('agent_versions')
+      .select('version, release_notes, release_type, is_required')
+      .eq('is_latest', true)
+      .single();
+
+    const latestVersion = latestVersionData?.version || 'unknown';
+
     // Compare versions
     const compareVersions = (v1: string, v2: string): number => {
       const normalize = (v: string) => v.replace(/^v/, '').split('.').map(Number);
@@ -88,17 +93,17 @@ serve(async (req) => {
       return patch1 - patch2;
     };
 
-    const needsUpdate = agentVersion !== 'unknown' &&
-      compareVersions(agentVersion, LATEST_VERSION) < 0;
+    const needsUpdate = agentVersion !== 'unknown' && latestVersion !== 'unknown' &&
+      compareVersions(agentVersion, latestVersion) < 0;
 
     return new Response(
       JSON.stringify({
         current_version: agentVersion,
-        latest_version: LATEST_VERSION,
+        latest_version: latestVersion,
         update_available: needsUpdate,
-        is_required: false,
-        release_notes: needsUpdate ? RELEASE_NOTES : null,
-        release_type: needsUpdate ? 'patch' : null,
+        is_required: needsUpdate ? (latestVersionData?.is_required || false) : false,
+        release_notes: needsUpdate ? latestVersionData?.release_notes : null,
+        release_type: needsUpdate ? latestVersionData?.release_type : null,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

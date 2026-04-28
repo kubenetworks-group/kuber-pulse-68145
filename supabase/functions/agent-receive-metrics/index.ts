@@ -189,6 +189,41 @@ serve(async (req) => {
       })
       .eq('id', cluster_id);
 
+    // Auto-create self_update command if agent is outdated
+    if (updateAvailable && latestVersionData) {
+      const { data: clusterData } = await supabaseClient
+        .from('clusters')
+        .select('user_id')
+        .eq('id', cluster_id)
+        .single();
+
+      const { data: existingCmd } = await supabaseClient
+        .from('agent_commands')
+        .select('id')
+        .eq('cluster_id', cluster_id)
+        .in('command_type', ['self_update', 'agent_update'])
+        .in('status', ['pending', 'sent'])
+        .maybeSingle();
+
+      if (!existingCmd && clusterData) {
+        await supabaseClient.from('agent_commands').insert({
+          cluster_id: cluster_id,
+          user_id: clusterData.user_id,
+          command_type: 'self_update',
+          command_params: {
+            namespace: 'kodo',
+            deployment_name: 'kodo-agent',
+            new_image: `ghcr.io/kubenetworks-group/kodo-agent:${latestVersionData.version}`,
+            trigger: 'auto_update_on_metrics',
+            from_version: agentVersion,
+            to_version: latestVersionData.version,
+          },
+          status: 'pending',
+        });
+        console.log(`Auto-update command created for cluster ${cluster_id}: ${agentVersion} → ${latestVersionData.version}`);
+      }
+    }
+
     // Parse and validate request body
     const body = await req.json();
     
