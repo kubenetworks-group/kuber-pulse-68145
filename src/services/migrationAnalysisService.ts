@@ -113,7 +113,7 @@ export async function createMigration(params: {
       .from("cluster_migrations")
       .update({
         status: "transforming",
-        ai_analysis: aiAnalysis as Record<string, unknown>,
+        ai_analysis: aiAnalysis as never,
         compatibility_score: calculateScore(issues),
         issues_found: issues.length,
         progress_percent: 55,
@@ -148,7 +148,7 @@ export async function createMigration(params: {
         status: "ready",
         original_manifest_path: origPath,
         transformed_manifest_path: transformedPath,
-        transformation_log: transformResult.log,
+        transformation_log: transformResult.log as never,
         issues_auto_fixed: transformResult.issuesFixed,
         rollback_available: true,
         progress_percent: 100,
@@ -187,6 +187,7 @@ export async function applyMigration(migration: ClusterMigration): Promise<void>
 
   await supabase.from("agent_commands").insert({
     cluster_id: migration.target_cluster_id,
+    user_id: migration.user_id,
     command_type: "apply_manifests",
     command_params: {
       migration_id: migration.id,
@@ -205,6 +206,7 @@ export async function runMigrationValidation(migration: ClusterMigration, namesp
 
   await supabase.from("agent_commands").insert({
     cluster_id: migration.target_cluster_id,
+    user_id: migration.user_id,
     command_type: "validate_migration",
     command_params: {
       migration_id: migration.id,
