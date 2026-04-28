@@ -28,7 +28,7 @@ import (
 )
 
 // Agent version - update this when releasing new versions
-const AgentVersion = "v0.0.54"
+const AgentVersion = "v0.0.55"
 
 // ---------------------------------------------
 // PVC USAGE VIA DF COMMAND (EXEC IN CONTAINERS)
