@@ -25,6 +25,7 @@ function mapAnomalyTypeToIncidentType(anomalyType: string): string {
   const typeMap: Record<string, string> = {
     'pod_restart': 'pod_restart',
     'pod_crash': 'pod_crash',
+    'crash_loop': 'pod_crash',
     'pod_pending': 'scheduling_issue',
     'image_pull_error': 'image_pull_error',
     'oom_killed': 'oom_killed',
@@ -35,7 +36,18 @@ function mapAnomalyTypeToIncidentType(anomalyType: string): string {
     'high_memory': 'resource_pressure',
     'resource_limit_too_low': 'resource_misconfiguration',
     'resource_limit_too_high': 'resource_misconfiguration',
+    'resource_misconfiguration': 'resource_misconfiguration',
     'incomplete_data': 'monitoring_issue',
+    'node_pressure': 'node_issue',
+    'node_not_ready': 'node_issue',
+    'pvc_pending': 'storage_issue',
+    'pvc_lost': 'storage_issue',
+    'hpa_issue': 'resource_misconfiguration',
+    'network_issue': 'network_issue',
+    'dns_issue': 'network_issue',
+    'rbac_issue': 'security_issue',
+    'quota_exceeded': 'resource_pressure',
+    'rollout_stuck': 'pod_crash',
   };
   return typeMap[anomalyType] || 'other';
 }
@@ -115,7 +127,7 @@ serve(async (req) => {
       );
     }
 
-    // Get recent metrics for the cluster
+    // Get recent metrics (last 15 min) for current state
     const { data: metrics, error: metricsError } = await supabaseClient
       .from('agent_metrics')
       .select('*')
@@ -130,16 +142,33 @@ serve(async (req) => {
 
     if (!metrics || metrics.length === 0) {
       return new Response(
-        JSON.stringify({ 
-          anomalies: [], 
+        JSON.stringify({
+          anomalies: [],
           summary: 'Nenhuma métrica recente encontrada. O agente pode não estar enviando dados.',
-          message: 'No recent metrics to analyze' 
+          message: 'No recent metrics to analyze'
         }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    // Get historical pod_details from last 24h to detect historical restarts
+    const { data: historicalMetrics } = await supabaseClient
+      .from('agent_metrics')
+      .select('metric_type, metric_data, collected_at')
+      .eq('cluster_id', cluster_id)
+      .eq('metric_type', 'pod_details')
+      .gte('collected_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+      .order('collected_at', { ascending: false })
+      .limit(10);
+
+    // Get recent auto-heal actions as context (last 6h)
+    const { data: recentActions } = await supabaseClient
+      .from('auto_heal_actions_log')
+      .select('action_type, trigger_reason, action_details, status, created_at')
+      .eq('cluster_id', cluster_id)
+      .gte('created_at', new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString())
+      .order('created_at', { ascending: false })
+      .limit(20);
 
     // Prepare data for AI analysis
     const getLatestMetric = (type: string) => {
@@ -149,109 +178,183 @@ serve(async (req) => {
 
     const podDetailsRaw = getLatestMetric('pod_details') as any;
     const eventsRaw = getLatestMetric('events') as any;
+    const nodesRaw = getLatestMetric('nodes') as any;
+    const pvcsRaw = getLatestMetric('pvcs') as any;
+    const securityRaw = getLatestMetric('security') as any;
+    const previousLogsRaw = getLatestMetric('pod_previous_logs') as any;
 
-    // Filter pods with issues
-    const problematicPods = podDetailsRaw?.pods?.filter((pod: any) => 
-      pod.restarts > 0 || 
-      pod.status !== 'Running' || 
+    // Filter pods with issues (include pods with any restarts — even if running now)
+    const problematicPods = podDetailsRaw?.pods?.filter((pod: any) =>
+      pod.restarts > 0 ||
+      pod.status !== 'Running' ||
       pod.phase !== 'Running' ||
       pod.ready !== pod.total_containers
     )?.slice(0, 50) || [];
 
-    // Filter events - only Warning/Error types from last 30 minutes
+    // All events (warnings + errors) from cluster
     const recentEvents = eventsRaw?.events?.filter((event: any) =>
       event.type === 'Warning' || event.reason?.includes('Error') || event.reason?.includes('Failed')
     )?.slice(0, 100) || [];
+
+    // Build restart trend from 24h historical data
+    const buildRestartTrend = (historical: any[]) => {
+      if (!historical || historical.length === 0) return [];
+      const snapshots = historical.map(h => ({
+        collected_at: h.collected_at,
+        pods_with_restarts: (h.metric_data?.pods || [])
+          .filter((p: any) => p.restarts > 0)
+          .map((p: any) => ({ name: p.name, namespace: p.namespace, restarts: p.restarts, status: p.status }))
+      }));
+      // Find pods that had restarts in historical data but may be ok now
+      const historicalPodMap = new Map<string, number>();
+      snapshots.forEach(s => {
+        s.pods_with_restarts.forEach((p: any) => {
+          const key = `${p.namespace}/${p.name}`;
+          historicalPodMap.set(key, Math.max(historicalPodMap.get(key) || 0, p.restarts));
+        });
+      });
+      return Array.from(historicalPodMap.entries()).map(([key, maxRestarts]) => ({
+        pod: key,
+        max_restarts_24h: maxRestarts,
+      }));
+    };
+
+    const podsWithPreviousLogs = previousLogsRaw?.pods_with_logs || [];
 
     const metricsSummary = {
       cpu: getLatestMetric('cpu'),
       memory: getLatestMetric('memory'),
       pods_count: getLatestMetric('pods'),
-      nodes: getLatestMetric('nodes'),
+      nodes: nodesRaw,
+      pvcs: pvcsRaw,
+      security: securityRaw,
       problematic_pods: problematicPods,
       warning_events: recentEvents,
+      pods_with_previous_logs: podsWithPreviousLogs,
+      recent_actions_taken: recentActions || [],
+      historical_restart_trends_24h: buildRestartTrend(historicalMetrics || []),
     };
 
     console.log('Metrics summary prepared:', {
       cpu: metricsSummary.cpu ? 'present' : 'missing',
       memory: metricsSummary.memory ? 'present' : 'missing',
+      nodes: nodesRaw ? 'present' : 'missing',
+      pvcs: pvcsRaw ? 'present' : 'missing',
       problematic_pods_count: problematicPods.length,
       warning_events_count: recentEvents.length,
+      pods_with_previous_logs: podsWithPreviousLogs.length,
+      recent_actions_count: recentActions?.length || 0,
+      historical_pods_with_restarts: metricsSummary.historical_restart_trends_24h.length,
     });
 
-    // Check for missing essential metrics
-    if (!podDetailsRaw || !eventsRaw) {
-      const missingMetrics = [];
-      if (!podDetailsRaw) missingMetrics.push('pod_details');
-      if (!eventsRaw) missingMetrics.push('events');
-      
+    if (!podDetailsRaw) {
       return new Response(
-        JSON.stringify({ 
+        JSON.stringify({
           anomalies: [{
             severity: 'warning',
             type: 'incomplete_data',
-            description: `Dados incompletos do cluster. Métricas ausentes: ${missingMetrics.join(', ')}`,
-            recommendation: 'Verifique se o agente está configurado corretamente.',
-            ai_analysis: { issue: 'incomplete_metrics', missing: missingMetrics }
+            description: 'Dados de pods não encontrados. Agente pode estar iniciando.',
+            recommendation: 'Aguarde o agente enviar as primeiras métricas.',
+            ai_analysis: { issue: 'incomplete_metrics' }
           }],
-          summary: `Agente está enviando apenas métricas básicas. Faltam: ${missingMetrics.join(', ')}.`,
+          summary: 'Agente está enviando métricas básicas. Aguardando dados completos.',
         }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('🤖 Calling Google Gemini for anomaly analysis...');
+    console.log('🤖 Calling Google Gemini for comprehensive cluster analysis...');
 
-    const systemPrompt = `You are a Kubernetes cluster monitoring AI assistant specialized in deep cluster analysis.
+    const systemPrompt = `You are a senior Kubernetes SRE AI specialized in deep cluster diagnosis.
+Analyze ALL provided data: current state, Kubernetes events, pod logs from crashed containers, historical trends, and recent actions taken.
 
-**PRIMARY ANALYSIS PRIORITY: KUBERNETES EVENTS**
-Analyze events FIRST before looking at metrics:
+## YOUR ANALYSIS MUST COVER ALL APPLICABLE CATEGORIES:
 
-1. **Critical Event Types (Highest Priority):**
-   - CrashLoopBackOff: Container repeatedly crashing - CRITICAL ISSUE
-   - ImagePullBackOff / ErrImagePull: Cannot pull container image - CRITICAL
-   - FailedScheduling: Pod cannot be scheduled - CRITICAL
-   - Failed: General pod failure - HIGH PRIORITY
-   - OOMKilled: Out of memory - HIGH PRIORITY
-   
-2. **Warning Event Types:**
-   - BackOff: Temporary scheduling issues
-   - Unhealthy: Health check failures
-   - FailedMount: Volume mount issues
+### 1. Pod Lifecycle (highest priority if logs available)
+- CrashLoopBackOff, OOMKilled (exit code 137), ImagePullBackOff, ErrImagePull
+- For pods in pods_with_previous_logs: analyze the ACTUAL log content to determine the exact root cause
+- Historical restarts (pods in historical_restart_trends_24h): explain what happened even if they are Running now
+- Init container failures, liveness/readiness probe failures
+- Pending pods: check events for FailedScheduling reasons
 
-3. **Pod Status Analysis:**
-   - Running + RestartCount > 5: Unstable pod
-   - Pending > 5 minutes: Scheduling issues
-   - Failed / Error: Immediate attention needed
+### 2. Node Health
+- Node conditions: DiskPressure, MemoryPressure, PIDPressure, NetworkUnavailable
+- Node resource saturation (CPU > 85%, memory > 90%)
+- Nodes with taints preventing scheduling
+- Nodes in NotReady state
+
+### 3. Workload Controllers
+- Deployments with unavailableReplicas > 0 (rollout stuck or failing)
+- StatefulSets with pods not ready in order
+- DaemonSets with pods missing on nodes
+- HPAs unable to scale (metrics unavailable, min/max replicas reached, behavior restrictions)
+
+### 4. Storage
+- PVCs in Pending or Lost state
+- StorageClass provisioner issues
+- Pods with FailedMount events
+- PVs not bound or in Released state
+
+### 5. Network
+- Services with no ready endpoints (all backend pods failing readiness)
+- DNS resolution failures (look in events for DNS-related messages)
+- Network policy blocking legitimate traffic
+- Ingress/Gateway misconfiguration events
+
+### 6. Resource Management
+- Namespaces exceeding ResourceQuota (events: "exceeded quota")
+- LimitRange violations
+- Pods without resource requests/limits running on constrained nodes
+
+### 7. Security & RBAC
+- Pods failing with Forbidden events (ServiceAccount missing permissions)
+- Missing Secrets causing pod startup failures
+- ImagePullSecrets missing for private registries
+
+## RULES:
+- If pods_with_previous_logs is provided, you MUST analyze the actual log content and cite specific log lines in logs_excerpt
+- If historical_restart_trends_24h shows pods with high restart counts that are now Running, create an anomaly explaining what happened
+- If recent_actions_taken shows auto-heal actions, reference them in action_already_taken field
+- Only create anomalies for REAL issues — do not invent problems
+- All text fields must be in Portuguese (Brazil)
+- For EACH anomaly, provide concrete kubectl troubleshooting commands in troubleshooting_steps
+
+Return ONLY valid JSON (no markdown fences):
+{
+  "anomalies": [
+    {
+      "type": "pod_crash|oom_killed|crash_loop|image_pull_error|node_pressure|node_not_ready|pvc_pending|pvc_lost|hpa_issue|network_issue|dns_issue|rbac_issue|quota_exceeded|rollout_stuck|probe_failure|mount_failure|scheduling_issue|resource_misconfiguration",
+      "severity": "low|medium|high|critical",
+      "title": "Título curto em português",
+      "description": "O que está acontecendo agora (português, 1-2 frases)",
+      "root_cause_analysis": "Por que isso aconteceu — análise detalhada baseada nos logs e eventos (português)",
+      "troubleshooting_steps": [
+        "1. Verificar status: kubectl describe pod <pod> -n <namespace>",
+        "2. Ver logs atuais: kubectl logs <pod> -n <namespace>",
+        "3. Passo concreto seguinte"
+      ],
+      "logs_excerpt": "Trecho de log relevante que levou a este diagnóstico (se logs disponíveis, cite linhas reais)",
+      "historical_context": "Se o pod tem histórico de restarts nas últimas 24h, descreva o padrão (ou null)",
+      "affected_resources": ["namespace/pod-ou-deployment-name"],
+      "event_messages": ["mensagens reais dos eventos k8s"],
+      "auto_heal": "restart_pod|delete_pod|scale_up|update_deployment_resources|update_deployment_image|null",
+      "auto_heal_params": {
+        "pod_name": "nome-do-pod",
+        "namespace": "namespace",
+        "deployment_name": "nome-do-deployment"
+      },
+      "action_already_taken": "Descrição do que já foi feito pelo auto-heal (ou null)"
+    }
+  ],
+  "summary": "Resumo geral da saúde do cluster em português",
+  "health_score": 85,
+  "historical_issues_resolved": "Descrição de problemas que ocorreram e foram resolvidos nas últimas 24h (ou null)"
+}
 
 **CRITICAL RULES FOR IMAGE ERRORS:**
 - For image_pull_error, ONLY suggest auto_heal="update_deployment_image" if you can extract the EXACT failing image
 - NEVER use placeholders - only real Docker image names
-- If you CANNOT determine a valid image name, set auto_heal="restart_pod"
-
-Return JSON (no markdown):
-{
-  "anomalies": [
-    {
-      "type": "pod_restart|pod_crash|pod_pending|image_pull_error|oom_killed|probe_failure|scheduling_issue|mount_failure|high_cpu|high_memory|resource_limit_too_low|resource_limit_too_high",
-      "severity": "low|medium|high|critical",
-      "description": "Detailed description in Portuguese",
-      "recommendation": "Specific action in Portuguese",
-      "affected_pods": ["namespace/pod-name"],
-      "event_messages": ["actual error messages"],
-      "auto_heal": "restart_pod|delete_pod|scale_up|scale_down|update_deployment_resources|update_deployment_image",
-      "auto_heal_params": {
-        "pod_name": "pod-name",
-        "namespace": "namespace",
-        "deployment_name": "deployment-name",
-        "container_name": "container-name"
-      }
-    }
-  ],
-  "summary": "Portuguese summary with total issues found"
-}`;
+- If you CANNOT determine a valid image name, set auto_heal="restart_pod"`;
 
     const geminiMessages = [
       { role: "system" as const, content: systemPrompt },
@@ -364,16 +467,22 @@ Return JSON (no markdown):
         user_id: userId,
         incident_type: mapAnomalyTypeToIncidentType(anomaly.type),
         severity: anomaly.severity,
-        title: `${anomaly.type.replace(/_/g, ' ').toUpperCase()}: ${anomaly.affected_pods?.[0] || 'Cluster'}`,
+        title: anomaly.title || `${anomaly.type.replace(/_/g, ' ')}: ${anomaly.affected_resources?.[0] || anomaly.affected_pods?.[0] || 'Cluster'}`,
         description: anomaly.description,
         auto_heal_action: anomaly.auto_heal || null,
         ai_analysis: {
           model: 'gemini-2.5-flash',
-          recommendation: anomaly.recommendation,
-          affected_pods: anomaly.affected_pods || [],
+          root_cause_analysis: anomaly.root_cause_analysis || null,
+          troubleshooting_steps: anomaly.troubleshooting_steps || [],
+          logs_excerpt: anomaly.logs_excerpt || null,
+          historical_context: anomaly.historical_context || null,
+          recommendation: anomaly.troubleshooting_steps?.[0] || anomaly.recommendation || anomaly.description,
+          action_already_taken: anomaly.action_already_taken || null,
+          affected_resources: anomaly.affected_resources || anomaly.affected_pods || [],
           event_messages: anomaly.event_messages || [],
           auto_heal_params: anomaly.auto_heal_params || null,
-          confidence: 0.85,
+          health_score: analysisResult.health_score || null,
+          confidence: 0.9,
           analyzed_at: new Date().toISOString(),
         },
         action_taken: false,
@@ -391,13 +500,115 @@ Return JSON (no markdown):
         console.log(`✅ Created ${insertedIncidents?.length || 0} ai_incidents`);
       }
 
-      // Create notification
+      // ── AUTO-EXECUTE fixable actions & flag "needs user action" ──
+      // System/infrastructure namespaces — AI will NOT auto-fix these, will flag for user
+      const SYSTEM_NAMESPACES = new Set([
+        'kube-system', 'kube-public', 'kube-node-lease',
+        'calico-system', 'calico-apiserver', 'tigera-operator',
+        'cilium', 'cilium-system', 'istio-system', 'istio-operator',
+        'linkerd', 'linkerd-viz', 'metallb-system', 'ingress-nginx',
+        'cert-manager', 'monitoring', 'prometheus', 'grafana',
+        'flux-system', 'argocd', 'argo', 'velero', 'gatekeeper-system',
+        'kyverno', 'local-path-storage',
+      ]);
+
+      // Issue types that always require user intervention
+      const USER_ACTION_TYPES = new Set([
+        'node_pressure', 'node_not_ready', 'pvc_pending', 'pvc_lost',
+        'rbac_issue', 'quota_exceeded', 'dns_issue', 'network_issue',
+        'hpa_issue',
+      ]);
+
+      // Actions the AI can execute automatically
+      const AUTO_FIXABLE_ACTIONS = new Set([
+        'restart_pod', 'delete_pod', 'scale_up',
+        'update_deployment_image', 'update_deployment_resources',
+      ]);
+
+      let autoFixedCount = 0;
+      let needsUserActionCount = 0;
+
+      for (let i = 0; i < anomalies.length; i++) {
+        const anomaly = anomalies[i];
+        const incident = insertedIncidents?.[i];
+        if (!incident) continue;
+
+        // Determine namespace from affected resources
+        const firstResource = anomaly.affected_resources?.[0] || anomaly.affected_pods?.[0] || '';
+        const namespace = firstResource.includes('/') ? firstResource.split('/')[0] : 'default';
+
+        const isSystemNamespace = SYSTEM_NAMESPACES.has(namespace);
+        const needsUserAction = isSystemNamespace ||
+          USER_ACTION_TYPES.has(anomaly.type) ||
+          !anomaly.auto_heal ||
+          !AUTO_FIXABLE_ACTIONS.has(anomaly.auto_heal);
+
+        if (!needsUserAction && anomaly.auto_heal && anomaly.auto_heal_params) {
+          // Auto-execute: create agent command immediately
+          const { error: cmdError } = await supabaseClient.from('agent_commands').insert({
+            cluster_id,
+            user_id: userId,
+            command_type: anomaly.auto_heal,
+            command_params: {
+              ...anomaly.auto_heal_params,
+              reason: `ai_auto_fix:${anomaly.type}`,
+              triggered_by: 'ai_analysis',
+            },
+            status: 'pending',
+          });
+
+          if (!cmdError) {
+            await supabaseClient.from('ai_incidents').update({
+              action_taken: true,
+              action_result: {
+                status: 'command_sent',
+                message: `Ação "${anomaly.auto_heal}" enviada automaticamente pela IA`,
+                timestamp: new Date().toISOString(),
+              },
+            }).eq('id', incident.id);
+            autoFixedCount++;
+            console.log(`✅ Auto-fix command sent for incident ${incident.id}: ${anomaly.auto_heal}`);
+          }
+        } else if (needsUserAction) {
+          // Flag as "needs user action" — update ai_analysis with reason
+          const userActionReason = isSystemNamespace
+            ? `Namespace do sistema "${namespace}" — o Kodo não modifica automaticamente componentes de infraestrutura`
+            : `Este tipo de problema (${anomaly.type}) requer intervenção manual`;
+
+          await supabaseClient.from('ai_incidents').update({
+            ai_analysis: {
+              ...incident.ai_analysis,
+              needs_user_action: true,
+              user_action_reason: userActionReason,
+            },
+          }).eq('id', incident.id);
+          needsUserActionCount++;
+        }
+      }
+
+      console.log(`🤖 Auto-fixed: ${autoFixedCount}, Needs user action: ${needsUserActionCount}`);
+
+      // Create notification (differentiate between auto-fixed and user-action-needed)
+      const needsActionIncidents = anomalies.filter((_: any, i: number) => {
+        const firstResource = anomalies[i].affected_resources?.[0] || anomalies[i].affected_pods?.[0] || '';
+        const ns = firstResource.includes('/') ? firstResource.split('/')[0] : 'default';
+        return SYSTEM_NAMESPACES.has(ns) || USER_ACTION_TYPES.has(anomalies[i].type) || !anomalies[i].auto_heal;
+      });
+
+      const notifTitle = needsUserActionCount > 0
+        ? `⚠️ ${needsUserActionCount} problema(s) requerem sua atenção`
+        : `✅ IA resolveu ${autoFixedCount} problema(s) automaticamente`;
+
+      const notifMessage = needsUserActionCount > 0
+        ? `${needsUserActionCount} problema(s) detectados precisam de ação manual. ${autoFixedCount > 0 ? `${autoFixedCount} foram corrigidos automaticamente.` : ''}`
+        : `A IA detectou e corrigiu ${autoFixedCount} anomalia(s) no cluster automaticamente.`;
+
       await supabaseClient
         .from('notifications')
         .insert({
           user_id: userId,
-          title: `🤖 ${anomalies.length} anomalia(s) detectada(s)`,
-          message: `A IA detectou ${anomalies.length} anomalia(s) no cluster. Verifique a aba de Monitoramento de IA.`,
+          title: notifTitle,
+          message: notifMessage,
           type: anomalies.some((a: any) => a.severity === 'critical') ? 'error' : 'warning',
           related_entity_type: 'cluster',
           related_entity_id: cluster_id,

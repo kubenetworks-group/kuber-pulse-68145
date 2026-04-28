@@ -28,7 +28,7 @@ import (
 )
 
 // Agent version - update this when releasing new versions
-const AgentVersion = "v0.0.55"
+const AgentVersion = "v0.0.56"
 
 // ---------------------------------------------
 // PVC USAGE VIA DF COMMAND (EXEC IN CONTAINERS)
@@ -460,6 +460,68 @@ func getPodConditions(pod corev1.Pod) []map[string]interface{} {
 		})
 	}
 	return conditions
+}
+
+// ---------------------------------------------
+// PREVIOUS CONTAINER LOGS COLLECTION
+// Collects logs from crashed/restarted containers (Previous: true)
+// Used by AI to diagnose root causes
+// ---------------------------------------------
+func collectPreviousLogs(clientset *kubernetes.Clientset) map[string]interface{} {
+	logsData := []interface{}{}
+
+	podList, err := clientset.CoreV1().Pods("").List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		log.Printf("⚠️  Could not list pods for previous logs: %v", err)
+		return map[string]interface{}{"pods_with_logs": logsData}
+	}
+
+	for _, pod := range podList.Items {
+		for _, cs := range pod.Status.ContainerStatuses {
+			if cs.RestartCount == 0 {
+				continue
+			}
+
+			tailLines := int64(100)
+			prevReq := clientset.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, &corev1.PodLogOptions{
+				Container: cs.Name,
+				TailLines: &tailLines,
+				Previous:  true,
+			})
+			prevStream, err := prevReq.Stream(context.Background())
+			if err != nil {
+				// No previous logs available (e.g. first crash logs already gone)
+				continue
+			}
+			buf := new(bytes.Buffer)
+			io.Copy(buf, prevStream)
+			prevStream.Close()
+
+			exitReason := ""
+			exitCode := int32(0)
+			var lastFinishedAt string
+			if cs.LastTerminationState.Terminated != nil {
+				lts := cs.LastTerminationState.Terminated
+				exitReason = lts.Reason
+				exitCode = lts.ExitCode
+				lastFinishedAt = lts.FinishedAt.Format(time.RFC3339)
+			}
+
+			logsData = append(logsData, map[string]interface{}{
+				"pod":             pod.Name,
+				"namespace":       pod.Namespace,
+				"container":       cs.Name,
+				"restart_count":   cs.RestartCount,
+				"exit_reason":     exitReason,
+				"exit_code":       exitCode,
+				"last_finished_at": lastFinishedAt,
+				"logs":            buf.String(),
+			})
+		}
+	}
+
+	log.Printf("📋 Collected previous logs for %d restarted containers", len(logsData))
+	return map[string]interface{}{"pods_with_logs": logsData}
 }
 
 // ---------------------------------------------
@@ -1877,6 +1939,11 @@ func sendMetrics(clientset *kubernetes.Clientset, metricsClient *metricsv.Client
 			"data":         collectSecurityThreatsData(clientset),
 			"collected_at": time.Now().UTC().Format(time.RFC3339),
 		},
+		{
+			"type":         "pod_previous_logs",
+			"data":         collectPreviousLogs(clientset),
+			"collected_at": time.Now().UTC().Format(time.RFC3339),
+		},
 	}
 
 	payload := map[string]interface{}{
@@ -2214,25 +2281,19 @@ func collectPodAuditData(clientset *kubernetes.Clientset, namespace, podName, re
 
 // getContainerLogs fetches the last N lines of logs from a container
 func getContainerLogs(clientset *kubernetes.Clientset, namespace, podName, containerName string, tailLines int64) string {
+	// Always fetch current logs first (most relevant for running containers)
 	logsReq := clientset.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{
 		Container: containerName,
 		TailLines: &tailLines,
-		Previous:  true, // Get logs from previous container instance if it crashed
+		Previous:  false,
 	})
-
 	logsStream, err := logsReq.Stream(context.Background())
 	if err != nil {
-		// Try current logs if previous doesn't exist
-		logsReq = clientset.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{
-			Container: containerName,
-			TailLines: &tailLines,
-			Previous:  false,
-		})
-		logsStream, err = logsReq.Stream(context.Background())
-		if err != nil {
-			log.Printf("⚠️  Could not get logs for %s/%s: %v", namespace, podName, err)
-			return ""
+		log.Printf("⚠️  Could not get logs for %s/%s (container=%s): %v", namespace, podName, containerName, err)
+		if strings.Contains(err.Error(), "403") || strings.Contains(err.Error(), "Forbidden") {
+			return fmt.Sprintf("[ERRO DE PERMISSÃO] O agente não tem permissão para ler logs deste container.\nAdicione 'pods/log' ao ClusterRole do kodo-agent:\n  resources: [\"pods/log\"]\n  verbs: [\"get\"]")
 		}
+		return ""
 	}
 	defer logsStream.Close()
 
@@ -2242,7 +2303,6 @@ func getContainerLogs(clientset *kubernetes.Clientset, namespace, podName, conta
 		log.Printf("⚠️  Error reading logs: %v", err)
 		return ""
 	}
-
 	return buf.String()
 }
 
@@ -2252,62 +2312,108 @@ func getPodLogs(clientset *kubernetes.Clientset, params map[string]interface{}) 
 	namespace, _ := params["namespace"].(string)
 	tailLinesF, _ := params["tail_lines"].(float64)
 	containerName, _ := params["container_name"].(string)
+	previousOnly, _ := params["previous"].(bool)
 
 	if podName == "" || namespace == "" {
 		return nil, fmt.Errorf("missing required params: pod_name, namespace")
 	}
 
-	tailLines := int64(100)
+	tailLines := int64(200)
 	if tailLinesF > 0 {
 		tailLines = int64(tailLinesF)
 	}
 
-	// If no container specified, get first container
+	// Get pod info to resolve container name and detect init containers
+	pod, err := clientset.CoreV1().Pods(namespace).Get(context.Background(), podName, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get pod: %v", err)
+	}
+
+	// Find the best container to fetch logs from
+	allContainers := []string{}
+	for _, c := range pod.Spec.InitContainers {
+		allContainers = append(allContainers, c.Name)
+	}
+	for _, c := range pod.Spec.Containers {
+		allContainers = append(allContainers, c.Name)
+	}
+
 	if containerName == "" {
-		pod, err := clientset.CoreV1().Pods(namespace).Get(context.Background(), podName, metav1.GetOptions{})
-		if err != nil {
-			return nil, fmt.Errorf("failed to get pod: %v", err)
-		}
+		// Default to first regular container (not init)
 		if len(pod.Spec.Containers) > 0 {
 			containerName = pod.Spec.Containers[0].Name
+		} else if len(allContainers) > 0 {
+			containerName = allContainers[0]
 		}
 	}
 
-	// Fetch current logs
-	logs := getContainerLogs(clientset, namespace, podName, containerName, tailLines)
+	if containerName == "" {
+		return nil, fmt.Errorf("no containers found in pod %s/%s", namespace, podName)
+	}
 
-	// Also try to get previous logs if container crashed
-	previousLogs := ""
-	prevReq := clientset.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{
-		Container: containerName,
-		TailLines: &tailLines,
-		Previous:  true,
-	})
-	prevStream, err := prevReq.Stream(context.Background())
-	if err == nil {
-		defer prevStream.Close()
+	streamLogs := func(previous bool) string {
+		req := clientset.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{
+			Container: containerName,
+			TailLines: &tailLines,
+			Previous:  previous,
+		})
+		stream, err := req.Stream(context.Background())
+		if err != nil {
+			if strings.Contains(err.Error(), "403") || strings.Contains(err.Error(), "Forbidden") {
+				return fmt.Sprintf("[ERRO DE PERMISSÃO] O agente não tem acesso aos logs.\nAdicione 'pods/log' ao ClusterRole do kodo-agent e aplique: kubectl apply -f kodo-agent.yaml")
+			}
+			return "" // previous container not available, or other transient error
+		}
+		defer stream.Close()
 		buf := new(bytes.Buffer)
-		io.Copy(buf, prevStream)
-		previousLogs = buf.String()
+		io.Copy(buf, stream)
+		return buf.String()
 	}
 
-	output := logs
-	if previousLogs != "" && previousLogs != logs {
-		output = "=== PREVIOUS CONTAINER LOGS ===\n" + previousLogs + "\n\n=== CURRENT CONTAINER LOGS ===\n" + logs
+	var output string
+
+	if previousOnly {
+		// Requested only previous (crashed) container logs
+		output = streamLogs(true)
+		if output == "" {
+			output = "Nenhum log do container anterior disponível (container não crashou recentemente)."
+		}
+	} else {
+		// Fetch both: current logs + previous crashed container logs (if any)
+		currentLogs := streamLogs(false)
+		previousLogs := streamLogs(true)
+
+		// Determine restart count for context
+		restartCount := int32(0)
+		for _, cs := range pod.Status.ContainerStatuses {
+			if cs.Name == containerName {
+				restartCount = cs.RestartCount
+				break
+			}
+		}
+
+		if currentLogs == "" && previousLogs == "" {
+			output = "Nenhum log disponível para este container."
+		} else if previousLogs != "" && currentLogs != "" && previousLogs != currentLogs {
+			header := fmt.Sprintf("=== LOGS DO CONTAINER ATUAL (reinicializações: %d) ===\n", restartCount)
+			prevHeader := "=== LOGS DO CONTAINER ANTERIOR (último crash) ===\n"
+			output = header + currentLogs + "\n\n" + prevHeader + previousLogs
+		} else if previousLogs != "" && currentLogs == "" {
+			output = fmt.Sprintf("=== LOGS DO CONTAINER ANTERIOR (reinicializações: %d) ===\n", restartCount) + previousLogs
+		} else {
+			output = currentLogs
+		}
 	}
 
-	if output == "" {
-		output = "No logs available for this container."
-	}
-
-	log.Printf("📋 Fetched %d bytes of logs for %s/%s", len(output), namespace, podName)
+	log.Printf("📋 Fetched %d bytes of logs for %s/%s (container=%s)", len(output), namespace, podName, containerName)
 
 	return map[string]interface{}{
-		"logs":      output,
-		"pod":       podName,
-		"namespace": namespace,
-		"container": containerName,
-		"lines":     tailLines,
+		"logs":          output,
+		"pod":           podName,
+		"namespace":     namespace,
+		"container":     containerName,
+		"lines":         tailLines,
+		"all_containers": allContainers,
 	}, nil
 }
 
@@ -2650,8 +2756,16 @@ func reportAgentStartup(clientset *kubernetes.Clientset, config AgentConfig) {
 // Performs a rollout restart of the agent deployment
 // ---------------------------------------------
 func selfUpdate(clientset *kubernetes.Clientset, params map[string]interface{}) (map[string]interface{}, error) {
-	// Get namespace and deployment name from params or use defaults
-	namespace := "kodo"
+	// Auto-detect own namespace from mounted service account token (most reliable)
+	defaultNamespace := "kodo-agent"
+	if nsBytes, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace"); err == nil {
+		ns := strings.TrimSpace(string(nsBytes))
+		if ns != "" {
+			defaultNamespace = ns
+		}
+	}
+
+	namespace := defaultNamespace
 	deploymentName := "kodo-agent"
 
 	if ns, ok := params["namespace"].(string); ok && ns != "" {
@@ -2679,11 +2793,25 @@ func selfUpdate(clientset *kubernetes.Clientset, params map[string]interface{}) 
 	// If new image provided, update it
 	if hasNewImage && newImage != "" {
 		log.Printf("📦 Updating image to: %s", newImage)
-		for i := range deployment.Spec.Template.Spec.Containers {
-			if deployment.Spec.Template.Spec.Containers[i].Name == "agent" {
-				deployment.Spec.Template.Spec.Containers[i].Image = newImage
+		updated := false
+		// Try by name "agent" first, then by name "kodo-agent", then update all containers
+		for _, targetName := range []string{"agent", "kodo-agent"} {
+			for i := range deployment.Spec.Template.Spec.Containers {
+				if deployment.Spec.Template.Spec.Containers[i].Name == targetName {
+					deployment.Spec.Template.Spec.Containers[i].Image = newImage
+					log.Printf("   Updated container %q to %s", targetName, newImage)
+					updated = true
+					break
+				}
+			}
+			if updated {
 				break
 			}
+		}
+		// Fallback: if only one container, update it regardless of name
+		if !updated && len(deployment.Spec.Template.Spec.Containers) == 1 {
+			deployment.Spec.Template.Spec.Containers[0].Image = newImage
+			log.Printf("   Updated sole container %q to %s", deployment.Spec.Template.Spec.Containers[0].Name, newImage)
 		}
 	}
 

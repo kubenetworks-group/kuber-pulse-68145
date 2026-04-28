@@ -1152,46 +1152,99 @@ export default function AIMonitor() {
               </Select>
             </div>
 
-            {/* Incidents List */}
-            <div className="space-y-4">
-              {loading ? (
-                <div className="text-center py-12 text-muted-foreground">
-                  {t('aiMonitor.loadingIncidents')}
-                </div>
-              ) : filteredIncidents.length === 0 ? (
-                <div className="text-center py-12">
-                  {!selectedClusterId ? (
-                    <>
-                      <Server className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
-                      <h3 className="text-lg font-semibold mb-2">Selecione um Cluster</h3>
-                      <p className="text-muted-foreground text-sm">
-                        Escolha um cluster no menu lateral para visualizar os incidentes.
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle className="h-16 w-16 mx-auto mb-4 text-success opacity-70" />
-                      <h3 className="text-lg font-semibold mb-2 text-success">{t('aiMonitor.noIncidentsDetected')}</h3>
-                      <p className="text-muted-foreground text-sm max-w-md mx-auto">
-                        Nenhum incidente detectado. A IA está monitorando seu cluster continuamente para detectar problemas.
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-2">
-                        Incidentes são criados automaticamente quando anomalias são detectadas pelo agente Kodo.
-                      </p>
-                    </>
+            {/* Incidents List — split by action type */}
+            {loading ? (
+              <div className="text-center py-12 text-muted-foreground">
+                {t('aiMonitor.loadingIncidents')}
+              </div>
+            ) : filteredIncidents.length === 0 ? (
+              <div className="text-center py-12">
+                {!selectedClusterId ? (
+                  <>
+                    <Server className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
+                    <h3 className="text-lg font-semibold mb-2">Selecione um Cluster</h3>
+                    <p className="text-muted-foreground text-sm">
+                      Escolha um cluster no menu lateral para visualizar os incidentes.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="h-16 w-16 mx-auto mb-4 text-success opacity-70" />
+                    <h3 className="text-lg font-semibold mb-2 text-success">{t('aiMonitor.noIncidentsDetected')}</h3>
+                    <p className="text-muted-foreground text-sm max-w-md mx-auto">
+                      Nenhum incidente detectado. A IA está monitorando continuamente.
+                    </p>
+                  </>
+                )}
+              </div>
+            ) : (() => {
+              const needsActionIncidents = filteredIncidents.filter(
+                (i: any) => (i.ai_analysis as any)?.needs_user_action === true && !i.action_taken
+              );
+              const autoHandledIncidents = filteredIncidents.filter(
+                (i: any) => i.action_taken || (i.ai_analysis as any)?.needs_user_action !== true
+              );
+
+              return (
+                <div className="space-y-6">
+                  {/* ── Section 1: Requer Ação do Usuário ── */}
+                  {needsActionIncidents.length > 0 && (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                        <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0" />
+                        <div>
+                          <p className="text-sm font-semibold text-amber-500">
+                            {needsActionIncidents.length} problema(s) requerem sua ação
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            A IA diagnosticou estes problemas mas não pode corrigi-los automaticamente. Siga os passos de resolução abaixo.
+                          </p>
+                        </div>
+                      </div>
+                      {needsActionIncidents.map((incident: any) => (
+                        <div key={incident.id} className="relative">
+                          <div className="absolute -left-0.5 top-0 bottom-0 w-1 rounded-full bg-amber-500/70" />
+                          <div className="pl-3">
+                            <AIIncidentCard
+                              incident={incident}
+                              clusterName={clusters.find((c: any) => c.id === incident.cluster_id)?.name}
+                              onExecuteAction={handleExecuteAction}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* ── Section 2: Tratado pela IA ── */}
+                  {autoHandledIncidents.length > 0 && (
+                    <div className="space-y-3">
+                      {needsActionIncidents.length > 0 && (
+                        <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+                          <CheckCircle className="h-5 w-5 text-emerald-500 shrink-0" />
+                          <div>
+                            <p className="text-sm font-semibold text-emerald-500">
+                              {autoHandledIncidents.filter((i: any) => i.action_taken).length} problema(s) corrigidos / em correção pela IA
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              A IA enviou comandos de correção automaticamente para o agente no cluster.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                      {autoHandledIncidents.map((incident: any) => (
+                        <AIIncidentCard
+                          key={incident.id}
+                          incident={incident}
+                          clusterName={clusters.find((c: any) => c.id === incident.cluster_id)?.name}
+                          onExecuteAction={handleExecuteAction}
+                        />
+                      ))}
+                    </div>
                   )}
                 </div>
-              ) : (
-                filteredIncidents.map(incident => (
-                  <AIIncidentCard
-                    key={incident.id}
-                    incident={incident}
-                    clusterName={clusters.find(c => c.id === incident.cluster_id)?.name}
-                    onExecuteAction={handleExecuteAction}
-                  />
-                ))
-              )}
-            </div>
+              );
+            })()}
           </TabsContent>
 
           {/* History Tab - Histórico consolidado */}

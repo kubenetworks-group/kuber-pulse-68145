@@ -141,6 +141,22 @@ serve(async (req) => {
     }
 
     const { cluster_id } = apiKeyData;
+    const agentVersion = req.headers.get('x-agent-version') || 'unknown';
+
+    // Update heartbeat — this is the primary liveness signal so the system knows the agent is online
+    // even when sendMetrics fails transiently (large payload, network blip, etc.)
+    await supabaseClient
+      .from('agent_api_keys')
+      .update({ last_seen: new Date().toISOString() })
+      .eq('cluster_id', cluster_id);
+
+    await supabaseClient
+      .from('clusters')
+      .update({
+        agent_last_seen_at: new Date().toISOString(),
+        ...(agentVersion !== 'unknown' ? { agent_version: agentVersion } : {}),
+      })
+      .eq('id', cluster_id);
 
     // Get pending commands for this cluster
     const { data: commands, error: commandsError } = await supabaseClient

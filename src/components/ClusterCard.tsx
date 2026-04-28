@@ -134,17 +134,31 @@ metadata:
   name: kodo-agent
 rules:
 - apiGroups: [""]
-  resources: ["nodes", "pods", "events", "namespaces"]
+  resources: ["nodes", "pods", "events", "namespaces", "services",
+              "persistentvolumes", "persistentvolumeclaims",
+              "resourcequotas", "serviceaccounts", "configmaps"]
   verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["pods/log", "pods/exec"]
+  verbs: ["get", "list", "create"]
 - apiGroups: [""]
   resources: ["pods"]
   verbs: ["delete"]
 - apiGroups: ["apps"]
-  resources: ["deployments"]
-  verbs: ["get", "list", "update"]
+  resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+  verbs: ["get", "list", "watch", "update"]
+- apiGroups: ["autoscaling"]
+  resources: ["horizontalpodautoscalers"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["networking.k8s.io"]
+  resources: ["ingresses", "networkpolicies"]
+  verbs: ["get", "list", "watch"]
 - apiGroups: ["metrics.k8s.io"]
   resources: ["nodes", "pods"]
   verbs: ["get", "list"]
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["clusterroles", "clusterrolebindings", "roles", "rolebindings"]
+  verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -179,7 +193,7 @@ spec:
       serviceAccountName: kodo-agent
       containers:
       - name: agent
-        image: your-registry/kodo-agent:latest
+        image: ghcr.io/kubenetworks-group/kodo-agent:latest
         imagePullPolicy: Always
         envFrom:
         - configMapRef:

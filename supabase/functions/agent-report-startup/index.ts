@@ -192,6 +192,25 @@ serve(async (req) => {
 
     console.log(`Restart event logged for cluster ${cluster_id}: ${triggeredBy} — ${triggerReason}`);
 
+    // Fire-and-forget: trigger AI analysis after restart (non-blocking)
+    // Skip for normal auto-update restarts (no crash to analyze)
+    if (triggeredBy !== 'auto_update' || exit_code !== 0) {
+      EdgeRuntime.waitUntil(
+        fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/agent-analyze-anomalies`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+          },
+          body: JSON.stringify({
+            cluster_id,
+            user_id: clusterData.user_id,
+          }),
+        }).then(r => console.log(`AI analysis triggered after restart: HTTP ${r.status}`))
+          .catch(e => console.error('Failed to trigger AI analysis:', e))
+      );
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
