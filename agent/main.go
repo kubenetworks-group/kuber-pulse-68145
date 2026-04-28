@@ -361,6 +361,9 @@ func main() {
 	log.Printf("🔧 Cluster ID: %s", config.ClusterID)
 	log.Printf("🔧 API Key: %s...%s", config.APIKey[:8], config.APIKey[len(config.APIKey)-4:])
 
+	// Report startup/restart event to backend (non-blocking)
+	go reportAgentStartup(clientset, config)
+
 	ticker := time.NewTicker(time.Duration(config.Interval) * time.Second)
 
 	for {
@@ -2562,6 +2565,84 @@ func updateCommandStatus(config AgentConfig, commandID string, result map[string
 	}
 
 	log.Printf("✅ Command %s status updated: %s", commandID, status)
+}
+
+// ---------------------------------------------
+// STARTUP REPORT
+// Reports agent startup/restart event to backend
+// ---------------------------------------------
+func reportAgentStartup(clientset *kubernetes.Clientset, config AgentConfig) {
+	podName := os.Getenv("HOSTNAME")
+	namespace := "kodo"
+
+	payload := map[string]interface{}{
+		"agent_version":  AgentVersion,
+		"pod_name":       podName,
+		"start_time":     time.Now().Format(time.RFC3339),
+		"restart_count":  0,
+		"exit_code":      0,
+		"restart_reason": "unknown",
+		"previous_logs":  "",
+	}
+
+	if podName != "" && clientset != nil {
+		pod, err := clientset.CoreV1().Pods(namespace).Get(
+			context.Background(), podName, metav1.GetOptions{},
+		)
+		if err == nil {
+			for _, cs := range pod.Status.ContainerStatuses {
+				if cs.Name == "agent" || cs.Name == "kodo-agent" {
+					payload["restart_count"] = cs.RestartCount
+					if cs.LastTerminationState.Terminated != nil {
+						lts := cs.LastTerminationState.Terminated
+						payload["exit_code"] = lts.ExitCode
+						payload["restart_reason"] = lts.Reason
+						payload["last_finished_at"] = lts.FinishedAt.Format(time.RFC3339)
+					}
+					break
+				}
+			}
+		} else {
+			log.Printf("⚠️  Could not get own pod info: %v", err)
+		}
+
+		// Fetch last 50 lines of previous container logs (if container restarted)
+		tailLines := int64(50)
+		prevReq := clientset.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{
+			Container: "agent",
+			TailLines: &tailLines,
+			Previous:  true,
+		})
+		if prevStream, err := prevReq.Stream(context.Background()); err == nil {
+			defer prevStream.Close()
+			buf := new(bytes.Buffer)
+			io.Copy(buf, prevStream)
+			payload["previous_logs"] = buf.String()
+		}
+	}
+
+	log.Printf("📤 Reporting startup event: version=%s pod=%s restart_count=%v reason=%v",
+		AgentVersion, podName, payload["restart_count"], payload["restart_reason"])
+
+	body, _ := json.Marshal(payload)
+	url := fmt.Sprintf("%s/agent-report-startup", config.APIEndpoint)
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
+	if err != nil {
+		log.Printf("⚠️  Failed to create startup report request: %v", err)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-agent-key", config.APIKey)
+	req.Header.Set("x-agent-version", AgentVersion)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("⚠️  Failed to report startup: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+	log.Printf("📤 Startup event reported (HTTP %d)", resp.StatusCode)
 }
 
 // ---------------------------------------------

@@ -6,6 +6,7 @@ import { ServicesOverview } from "@/components/observability/ServicesOverview";
 import { IngressOverview } from "@/components/observability/IngressOverview";
 import { ResourceUsageCharts } from "@/components/observability/ResourceUsageCharts";
 import { MonitoringAgentsSuggestions } from "@/components/observability/MonitoringAgentsSuggestions";
+import { AgentRestartHistory } from "@/components/observability/AgentRestartHistory";
 import { AlertRulesManager } from "@/components/observability/AlertRulesManager";
 import { AlertInstancesList } from "@/components/observability/AlertInstancesList";
 import { WebhookConfigManager } from "@/components/observability/WebhookConfigManager";
@@ -72,6 +73,7 @@ const Observability = () => {
 
             <TabsContent value="agents" className="space-y-5">
               <MonitoringAgentsSuggestions agents={agents} loading={loading} />
+              <AgentRestartHistory />
             </TabsContent>
           </Tabs>
         )}
