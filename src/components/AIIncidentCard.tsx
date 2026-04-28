@@ -297,27 +297,31 @@ export const AIIncidentCard = ({ incident, clusterName, onExecuteAction }: AIInc
               )}
             </div>
 
-            {incident.action_result && (
+            {incident.action_result && (() => {
+              const ar = incident.action_result as { status?: string; message?: string; details?: string; timestamp?: string };
+              return (
               <div className="mt-2 p-2.5 rounded-lg bg-background/80 border border-border/50">
                 <div className="flex items-center gap-1.5 mb-1">
-                  {incident.action_result.status === 'command_sent' ? (
+                  {ar.status === 'command_sent' ? (
                     <Clock className="h-3.5 w-3.5 text-blue-400" />
                   ) : (
                     <CheckCircle className="h-3.5 w-3.5 text-green-400" />
                   )}
                   <span className="text-xs font-medium">
-                    {incident.action_result.status === 'command_sent' ? 'Comando enviado ao cluster' : 'Ação concluída'}
+                    {ar.status === 'command_sent' ? 'Comando enviado ao cluster' : 'Ação concluída'}
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {incident.action_result.message || incident.action_result.details}
+                  {ar.message || ar.details}
                 </p>
-                {incident.action_result.timestamp && (
+                {ar.timestamp && (
                   <p className="text-[10px] text-muted-foreground mt-1">
-                    {new Date(incident.action_result.timestamp).toLocaleString('pt-BR')}
+                    {new Date(ar.timestamp).toLocaleString('pt-BR')}
                   </p>
                 )}
               </div>
+              );
+            })()}
             )}
           </div>
         )}
