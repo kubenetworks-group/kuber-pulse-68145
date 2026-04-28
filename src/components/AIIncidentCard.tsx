@@ -322,7 +322,6 @@ export const AIIncidentCard = ({ incident, clusterName, onExecuteAction }: AIInc
               </div>
               );
             })()}
-            )}
           </div>
         )}
 
