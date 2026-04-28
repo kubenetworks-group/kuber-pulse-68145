@@ -30,6 +30,49 @@ const CONFIG_RISK_TYPES = [
   'compliance_violation',
 ];
 
+// Infrastructure workloads that LEGITIMATELY need privileged access / host-network
+// These should NOT be flagged as security threats for those specific sources
+const KNOWN_INFRA_WORKLOADS = [
+  // CNI plugins
+  'calico', 'calico-node', 'calico-kube-controllers', 'calico-typha',
+  'flannel', 'weave', 'canal', 'cilium', 'cilium-agent',
+  'kube-router', 'multus',
+  // kube-system core
+  'kube-proxy', 'kube-apiserver', 'kube-controller-manager', 'kube-scheduler',
+  'etcd', 'coredns',
+  // Storage
+  'hostpath-provisioner', 'local-path-provisioner', 'nfs-provisioner',
+  // Monitoring
+  'node-exporter', 'prometheus-node-exporter',
+  // MicroK8s specific
+  'microk8s', 'storage-provisioner',
+];
+
+// Sources that are expected (not anomalous) for infra workloads
+const INFRA_EXPECTED_SOURCES = new Set(['privileged_container', 'host_network', 'host_pid']);
+
+/**
+ * Returns true if the pod belongs to a known infrastructure workload
+ * AND the threat source is expected for that type of workload.
+ */
+function isKnownInfraFalsePositive(pod: any): boolean {
+  const podNameLower = (pod.pod_name || pod.name || '').toLowerCase();
+  const namespace = (pod.namespace || '').toLowerCase();
+  const source = (pod.source || '').toLowerCase();
+
+  // Only suppress expected sources for infra workloads
+  if (!INFRA_EXPECTED_SOURCES.has(source)) return false;
+
+  // System namespaces with CNI / core patterns
+  const isSystemNs = ['kube-system', 'calico-system', 'calico-apiserver', 'tigera-operator',
+    'cilium-system', 'cilium', 'kube-node-lease', 'kube-public'].includes(namespace);
+
+  if (isSystemNs) {
+    return KNOWN_INFRA_WORKLOADS.some(infra => podNameLower.includes(infra));
+  }
+  return false;
+}
+
 // Check if a threat type is a real attack
 function isRealAttack(threatType: string, source: string, reason: string = ''): boolean {
   // Direct attack types

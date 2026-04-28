@@ -2,11 +2,11 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // Google Gemini API configuration
 const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models";
-const GEMINI_MODEL = "gemini-2.0-flash";
+const GEMINI_MODEL = "gemini-2.5-flash";
 
 // Lovable AI Gateway configuration
 const LOVABLE_AI_GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
-const LOVABLE_AI_MODEL = "google/gemini-2.5-flash"; // Fast and efficient
+const LOVABLE_AI_MODEL = "google/gemini-2.5-flash";
 
 // Free tier limits for Gemini
 const FREE_TIER_RPD = 1500; // Requests per day (free tier)
@@ -93,11 +93,11 @@ async function callLovableAI(
     body: JSON.stringify({
       model: LOVABLE_AI_MODEL,
       messages: convertToOpenAIFormat(messages),
-      max_tokens: 4096,
-      temperature: 0.7
+      max_tokens: 8192,
+      temperature: 0.4
     })
   });
-  
+
   if (!response.ok) {
     const error = await response.text();
     console.error("Lovable AI error:", response.status, error);
@@ -295,15 +295,15 @@ export async function callGemini(
   const requestBody: any = {
     contents,
     generationConfig: {
-      temperature: 0.7,
-      maxOutputTokens: 4096,
+      temperature: 0.4,
+      maxOutputTokens: 8192,
     }
   };
-  
+
   if (systemInstruction) {
     requestBody.systemInstruction = systemInstruction;
   }
-  
+
   console.log(`[Gemini] Calling ${GEMINI_MODEL} for ${functionName}...`);
   
   try {
@@ -405,15 +405,15 @@ export async function streamGemini(
   const requestBody: any = {
     contents,
     generationConfig: {
-      temperature: 0.7,
-      maxOutputTokens: 4096,
+      temperature: 0.4,
+      maxOutputTokens: 8192,
     }
   };
-  
+
   if (systemInstruction) {
     requestBody.systemInstruction = systemInstruction;
   }
-  
+
   console.log(`[Gemini] Streaming ${GEMINI_MODEL} for ${functionName}...`);
   
   try {
@@ -523,8 +523,8 @@ async function streamLovableAI(
     body: JSON.stringify({
       model: LOVABLE_AI_MODEL,
       messages: convertToOpenAIFormat(messages),
-      max_tokens: 4096,
-      temperature: 0.7,
+      max_tokens: 8192,
+      temperature: 0.4,
       stream: true
     })
   });

@@ -316,6 +316,8 @@ Analyze ALL provided data: current state, Kubernetes events, pod logs from crash
 - If historical_restart_trends_24h shows pods with high restart counts that are now Running, create an anomaly explaining what happened
 - If recent_actions_taken shows auto-heal actions, reference them in action_already_taken field
 - Only create anomalies for REAL issues — do not invent problems
+- **DO NOT create anomalies for pods that terminated with exit code 0 ("Completed")** — this is healthy termination (Jobs, init containers, one-shot tasks). These are NOT crashes.
+- DO NOT create anomalies for pods with many restarts if they are currently Running and the restarts occurred long ago (>6h) without recent activity
 - All text fields must be in Portuguese (Brazil)
 - For EACH anomaly, provide concrete kubectl troubleshooting commands in troubleshooting_steps
 
@@ -506,10 +508,11 @@ Return ONLY valid JSON (no markdown fences):
         'kube-system', 'kube-public', 'kube-node-lease',
         'calico-system', 'calico-apiserver', 'tigera-operator',
         'cilium', 'cilium-system', 'istio-system', 'istio-operator',
-        'linkerd', 'linkerd-viz', 'metallb-system', 'ingress-nginx',
+        'linkerd', 'linkerd-viz', 'metallb-system',
+        'ingress', 'ingress-nginx', 'ingress-controller',
         'cert-manager', 'monitoring', 'prometheus', 'grafana',
         'flux-system', 'argocd', 'argo', 'velero', 'gatekeeper-system',
-        'kyverno', 'local-path-storage',
+        'kyverno', 'local-path-storage', 'lens-metrics',
       ]);
 
       // Issue types that always require user intervention
@@ -538,7 +541,17 @@ Return ONLY valid JSON (no markdown fences):
         const namespace = firstResource.includes('/') ? firstResource.split('/')[0] : 'default';
 
         const isSystemNamespace = SYSTEM_NAMESPACES.has(namespace);
+
+        // False-positive guard: pods that exited with code 0 (Completed) are healthy terminations
+        // Do NOT auto-restart them — they're Jobs, init containers, or successful one-shot pods
+        const isHealthyTermination =
+          (anomaly.description?.includes('exit code 0') || anomaly.description?.includes('código de saída 0') ||
+           anomaly.description?.includes('Completed')) &&
+          !anomaly.description?.includes('CrashLoop') &&
+          anomaly.type !== 'crash_loop' && anomaly.type !== 'oom_killed';
+
         const needsUserAction = isSystemNamespace ||
+          isHealthyTermination ||
           USER_ACTION_TYPES.has(anomaly.type) ||
           !anomaly.auto_heal ||
           !AUTO_FIXABLE_ACTIONS.has(anomaly.auto_heal);
@@ -573,6 +586,8 @@ Return ONLY valid JSON (no markdown fences):
           // Flag as "needs user action" — update ai_analysis with reason
           const userActionReason = isSystemNamespace
             ? `Namespace do sistema "${namespace}" — o Kodo não modifica automaticamente componentes de infraestrutura`
+            : isHealthyTermination
+            ? `Container encerrou com código de saída 0 (terminação normal) — nenhuma ação automática necessária`
             : `Este tipo de problema (${anomaly.type}) requer intervenção manual`;
 
           await supabaseClient.from('ai_incidents').update({

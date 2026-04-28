@@ -2199,17 +2199,28 @@ func deletePod(clientset *kubernetes.Clientset, params map[string]interface{}) (
 	namespace := params["namespace"].(string)
 	commandID, _ := params["command_id"].(string)
 	reason, _ := params["reason"].(string)
+	deploymentName, _ := params["deployment_name"].(string)
 	if reason == "" {
 		reason = "manual_restart"
 	}
 
+	// Resolve the actual pod name — the AI may have stored a stale pod name
+	// (pods get new hashes on restart; the command may be seconds or minutes old)
+	resolvedPodName, err := resolveCurrentPodName(clientset, namespace, podName, deploymentName)
+	if err != nil {
+		return nil, fmt.Errorf("pod not found and could not find a replacement: %v", err)
+	}
+	if resolvedPodName != podName {
+		log.Printf("⚠️  Pod %s/%s not found; resolved to current pod: %s", namespace, podName, resolvedPodName)
+	}
+
 	// Collect pod info and logs BEFORE deleting for audit
-	auditData := collectPodAuditData(clientset, namespace, podName, reason)
+	auditData := collectPodAuditData(clientset, namespace, resolvedPodName, reason)
 
 	// Delete the pod
-	err := clientset.CoreV1().Pods(namespace).Delete(
+	err = clientset.CoreV1().Pods(namespace).Delete(
 		context.Background(),
-		podName,
+		resolvedPodName,
 		metav1.DeleteOptions{},
 	)
 
@@ -2221,12 +2232,66 @@ func deletePod(clientset *kubernetes.Clientset, params map[string]interface{}) (
 	go sendPodRestartAudit(auditData, commandID)
 
 	return map[string]interface{}{
-		"action":       "pod_deleted",
-		"pod":          podName,
-		"namespace":    namespace,
-		"message":      "Pod deleted successfully. Kubernetes will recreate it.",
-		"audit_logged": true,
+		"action":        "pod_deleted",
+		"pod":           resolvedPodName,
+		"original_pod":  podName,
+		"namespace":     namespace,
+		"message":       "Pod deleted successfully. Kubernetes will recreate it.",
+		"audit_logged":  true,
 	}, nil
+}
+
+// resolveCurrentPodName returns the pod name to actually delete.
+// If the exact pod still exists → returns it unchanged.
+// Otherwise it strips the pod-hash suffix to derive a deployment name,
+// lists all pods in the namespace, and returns the first live pod whose
+// name starts with the deployment prefix.
+func resolveCurrentPodName(clientset *kubernetes.Clientset, namespace, podName, deploymentName string) (string, error) {
+	// Fast path: exact pod still alive?
+	_, err := clientset.CoreV1().Pods(namespace).Get(context.Background(), podName, metav1.GetOptions{})
+	if err == nil {
+		return podName, nil // pod exists, use it directly
+	}
+
+	// Derive deployment-name prefix from the pod name if not provided.
+	// Pod names follow: <deployment>-<replicaset-hash>-<pod-hash>
+	// Strip the last two dash-separated segments to get the deployment name.
+	prefix := deploymentName
+	if prefix == "" {
+		parts := strings.Split(podName, "-")
+		if len(parts) >= 3 {
+			// Remove last 2 segments (replicaset hash + pod hash)
+			prefix = strings.Join(parts[:len(parts)-2], "-")
+		} else if len(parts) >= 2 {
+			prefix = strings.Join(parts[:len(parts)-1], "-")
+		} else {
+			prefix = podName
+		}
+	}
+
+	log.Printf("🔍 Searching for current pod with prefix %q in namespace %s", prefix, namespace)
+
+	podList, listErr := clientset.CoreV1().Pods(namespace).List(context.Background(), metav1.ListOptions{})
+	if listErr != nil {
+		return "", fmt.Errorf("pod %s not found and cannot list pods: %v", podName, listErr)
+	}
+
+	for _, p := range podList.Items {
+		if strings.HasPrefix(p.Name, prefix) && p.DeletionTimestamp == nil {
+			// Prefer Running pods; fall back to any non-terminating pod
+			if p.Status.Phase == corev1.PodRunning {
+				return p.Name, nil
+			}
+		}
+	}
+	// Second pass: accept any non-terminating pod with the prefix
+	for _, p := range podList.Items {
+		if strings.HasPrefix(p.Name, prefix) && p.DeletionTimestamp == nil {
+			return p.Name, nil
+		}
+	}
+
+	return "", fmt.Errorf("no pod found with prefix %q in namespace %s (original: %s)", prefix, namespace, podName)
 }
 
 // collectPodAuditData collects pod state and logs before restart for auditing
