@@ -3,13 +3,13 @@ import { NodeDetailsCard } from "@/components/NodeDetailsCard";
 import { AIInsightsWidget } from "@/components/AIInsightsWidget";
 import { PodHealthByNamespace } from "@/components/PodHealthByNamespace";
 import { ClusterEvents } from "@/components/ClusterEvents";
-import { WelcomeHeader } from "@/components/WelcomeHeader";
 import { ClusterOnboarding } from "@/components/ClusterOnboarding";
-import { ClusterStatusSummary } from "@/components/ClusterStatusSummary";
 import { AgentUpdateBanner } from "@/components/AgentUpdateBanner";
 import { AdminAlertsDisplay } from "@/components/AdminAlertsDisplay";
 import { SecurityThreatsFloatingAlert } from "@/components/SecurityThreatsFloatingAlert";
 import { WeeklyReportBanner } from "@/components/WeeklyReportBanner";
+import { CleanHeader } from "@/components/dashboard/CleanHeader";
+import { CleanMetricsRow } from "@/components/dashboard/CleanMetricsRow";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCluster } from "@/contexts/ClusterContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -128,70 +128,51 @@ const Index = () => {
       {/* Floating Security Alert */}
       <SecurityThreatsFloatingAlert />
       
-      <div className="p-4 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 animate-fade-in">
-        {/* Agent Update Banner */}
+      <div className="p-4 sm:p-6 lg:p-8 space-y-6 animate-fade-in">
+        {/* System banners (kept above the fold) */}
         <AgentUpdateBanner />
-
-        {/* Weekly Report Banner */}
         <WeeklyReportBanner />
-
-        {/* Admin Alerts */}
         <AdminAlertsDisplay />
 
-        {/* Welcome Header */}
-        <WelcomeHeader />
+        {/* Clean header */}
+        <CleanHeader clusterData={clusterData} />
 
-        {/* Show Onboarding if no clusters */}
+        {/* Onboarding if no clusters */}
         {clusters.length === 0 ? (
           <ClusterOnboarding />
         ) : (
-          <div className="space-y-4 sm:space-y-6">
-            {/* Cluster Info Badge */}
-            {clusterData && (
-              <div className="inline-flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20 animate-in fade-in slide-in-from-top-3 duration-500">
-                <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
-                <span className="text-xs sm:text-sm font-medium text-foreground">
-                  {clusterData.name} - {clusterData.environment}
-                </span>
-              </div>
-            )}
+          <div className="space-y-6">
+            {/* Top metrics row — minimal pill cards */}
+            <CleanMetricsRow
+              clusterData={clusterData}
+              cpuUsage={nodeMetrics.cpuUsage}
+              memoryUsage={nodeMetrics.memoryUsage}
+            />
 
-            {/* Cluster Status Summary - Full Width */}
-            {clusterData && (
-              <div className="animate-scale-in">
-                <ClusterStatusSummary clusterData={clusterData} />
-              </div>
-            )}
-
-
-            {/* Node Infrastructure - Full Width */}
+            {/* Node infrastructure */}
             {selectedClusterId && (
-              <div className="animate-scale-in">
-                <NodeDetailsCard
-                  nodes={nodeMetrics.nodes}
-                  totalCPU={nodeMetrics.totalCPU}
-                  totalMemory={nodeMetrics.totalMemory}
-                  cpuUsage={nodeMetrics.cpuUsage}
-                  memoryUsage={nodeMetrics.memoryUsage}
-                  loading={nodeMetrics.loading}
-                />
-              </div>
+              <NodeDetailsCard
+                nodes={nodeMetrics.nodes}
+                totalCPU={nodeMetrics.totalCPU}
+                totalMemory={nodeMetrics.totalMemory}
+                cpuUsage={nodeMetrics.cpuUsage}
+                memoryUsage={nodeMetrics.memoryUsage}
+                loading={nodeMetrics.loading}
+              />
             )}
 
-            {/* Pod Health - Full Width */}
-            <div className="animate-scale-in">
-              <PodHealthByNamespace />
+            {/* Two-column layout on large screens: pods + events */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2">
+                <PodHealthByNamespace />
+              </div>
+              <div>
+                <ClusterEvents />
+              </div>
             </div>
 
-            {/* Cluster Events - Full Width */}
-            <div className="animate-scale-in">
-              <ClusterEvents />
-            </div>
-
-            {/* AI Insights Widget - Full Width */}
-            <div className="animate-scale-in">
-              <AIInsightsWidget recentIncidents={incidents} />
-            </div>
+            {/* AI insights — full width */}
+            <AIInsightsWidget recentIncidents={incidents} />
           </div>
         )}
       </div>
