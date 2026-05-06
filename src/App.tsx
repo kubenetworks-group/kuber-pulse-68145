@@ -12,6 +12,7 @@ import { AdminProtectedRoute } from "@/components/AdminProtectedRoute";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import LandingPage from "./pages/LandingPage";
+import About from "./pages/About";
 import Welcome from "./pages/Welcome";
 import Clusters from "./pages/Clusters";
 import AIMonitor from "./pages/AIMonitor";
