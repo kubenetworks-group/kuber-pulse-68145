@@ -62,6 +62,7 @@ const App = () => (
             <ClusterProvider>
               <Routes>
                 <Route path="/" element={<LandingPage />} />
+                <Route path="/sobre" element={<About />} />
                 <Route path="/auth" element={<Auth />} />
                 <Route
                   path="/welcome"
