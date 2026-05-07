@@ -48,6 +48,7 @@ const Agents = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [showApiKey, setShowApiKey] = useState<string | null>(null);
   const [lastCreatedClusterId, setLastCreatedClusterId] = useState<string | null>(null);
+  const [latestAgentVersion, setLatestAgentVersion] = useState<string | null>(null);
 
   // Handle cluster_id from URL (coming from Clusters page after creating a cluster)
   useEffect(() => {
@@ -66,8 +67,18 @@ const Agents = () => {
   useEffect(() => {
     if (user) {
       fetchAgentKeys();
+      fetchLatestAgentVersion();
     }
   }, [user]);
+
+  const fetchLatestAgentVersion = async () => {
+    const { data } = await supabase
+      .from('agent_versions')
+      .select('version')
+      .eq('is_latest', true)
+      .single();
+    if (data?.version) setLatestAgentVersion(data.version);
+  };
 
   const fetchAgentKeys = async () => {
     try {
@@ -482,7 +493,7 @@ spec:
                                 Uma nova versão do agente está disponível. Execute o comando abaixo para atualizar:
                               </p>
                               <div className="mt-2 p-2 bg-background rounded text-xs font-mono break-all">
-                                kubectl set image deployment/kodo-agent agent=ghcr.io/kubenetworks-group/kodo-agent:latest -n kodo
+                                {`kubectl set image deployment/kodo-agent agent=ghcr.io/kubenetworks-group/kodo-agent:${latestAgentVersion ?? 'latest'} -n kodo`}
                               </div>
                             </div>
                           </div>

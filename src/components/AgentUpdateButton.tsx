@@ -288,7 +288,7 @@ export function AgentUpdateButton() {
                 </p>
                 <div className="relative">
                   <pre className="text-[10px] sm:text-xs bg-muted/50 p-2 sm:p-3 rounded-md font-mono overflow-x-auto pr-10 whitespace-pre-wrap break-all sm:whitespace-pre sm:break-normal">
-                    kubectl set image deployment/kodo-agent agent=ghcr.io/kubenetworks-group/kodo-agent:latest -n kodo
+                    {`kubectl set image deployment/kodo-agent agent=ghcr.io/kubenetworks-group/kodo-agent:${updateInfo.latest_version} -n kodo`}
                   </pre>
                   <Button
                     variant="ghost"
@@ -296,7 +296,7 @@ export function AgentUpdateButton() {
                     className="absolute top-1 right-1 h-6 w-6 sm:h-7 sm:w-7"
                     onClick={() => {
                       navigator.clipboard.writeText(
-                        'kubectl set image deployment/kodo-agent agent=ghcr.io/kubenetworks-group/kodo-agent:latest -n kodo'
+                        `kubectl set image deployment/kodo-agent agent=ghcr.io/kubenetworks-group/kodo-agent:${updateInfo.latest_version} -n kodo`
                       );
                       toast.success('Comando copiado!');
                     }}

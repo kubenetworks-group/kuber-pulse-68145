@@ -86,7 +86,10 @@ export function AgentUpdateBanner() {
     }
   };
 
-  const updateCommand = 'kubectl set image deployment/kodo-agent agent=ghcr.io/kubenetworks-group/kodo-agent:latest -n kodo';
+  const latestTag = updateInfo?.latest_version
+    ? updateInfo.latest_version.startsWith('v') ? updateInfo.latest_version : `v${updateInfo.latest_version}`
+    : 'latest';
+  const updateCommand = `kubectl set image deployment/kodo-agent agent=ghcr.io/kubenetworks-group/kodo-agent:${latestTag} -n kodo`;
 
   const copyCommand = () => {
     navigator.clipboard.writeText(updateCommand);

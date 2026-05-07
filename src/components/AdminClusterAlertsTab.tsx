@@ -62,6 +62,7 @@ export const AdminClusterAlertsTab = () => {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [latestAgentVersion, setLatestAgentVersion] = useState<string | null>(null);
   
   // Form states
   const [selectedClusterId, setSelectedClusterId] = useState<string>("");
@@ -73,6 +74,14 @@ export const AdminClusterAlertsTab = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
+      // Fetch latest agent version
+      const { data: latestVer } = await supabase
+        .from('agent_versions')
+        .select('version')
+        .eq('is_latest', true)
+        .single();
+      if (latestVer?.version) setLatestAgentVersion(latestVer.version);
+
       // Fetch all clusters (admin can see all)
       const { data: clustersData, error: clustersError } = await supabase
         .from('clusters')
@@ -192,7 +201,7 @@ export const AdminClusterAlertsTab = () => {
   const sendUpdateAlert = (cluster: Cluster) => {
     setSelectedClusterId(cluster.id);
     setTitle("Atualização do Agente Kodo Disponível");
-    setMessage(`Há uma nova versão do agente Kodo disponível. Por favor, atualize seu agente para garantir compatibilidade e acesso às últimas funcionalidades.\n\nComando para atualizar:\nkubectl set image deployment/kodo-agent agent=ghcr.io/kubenetworks-group/kodo-agent:latest -n kodo`);
+    setMessage(`Há uma nova versão do agente Kodo disponível. Por favor, atualize seu agente para garantir compatibilidade e acesso às últimas funcionalidades.\n\nComando para atualizar:\nkubectl set image deployment/kodo-agent agent=ghcr.io/kubenetworks-group/kodo-agent:${latestAgentVersion ?? 'latest'} -n kodo`);
     setAlertType("update");
     setActionType("update_agent");
     setCreateModalOpen(true);

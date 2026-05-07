@@ -28,7 +28,7 @@ import (
 )
 
 // Agent version - update this when releasing new versions
-const AgentVersion = "v0.0.56"
+const AgentVersion = "v0.1.62"
 
 // ---------------------------------------------
 // PVC USAGE VIA DF COMMAND (EXEC IN CONTAINERS)
@@ -369,8 +369,8 @@ func main() {
 	for {
 		select {
 		case <-ticker.C:
-			sendMetrics(clientset, metricsClient, kubeconfig, config)
-			getCommands(clientset, config)
+			go sendMetrics(clientset, metricsClient, kubeconfig, config)
+			go getCommands(clientset, config)
 		}
 	}
 }
@@ -1968,7 +1968,7 @@ func sendMetrics(clientset *kubernetes.Clientset, metricsClient *metricsv.Client
 	log.Printf("🔍 Headers: Content-Type=application/json, x-agent-key=%s...%s, x-agent-version=%s",
 		config.APIKey[:8], config.APIKey[len(config.APIKey)-4:], AgentVersion)
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Printf("❌ Error sending metrics: %v", err)
@@ -2729,7 +2729,7 @@ func updateCommandStatus(config AgentConfig, commandID string, result map[string
 	req.Header.Set("x-agent-key", config.APIKey)
 	req.Header.Set("x-agent-version", AgentVersion)
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: 15 * time.Second}
 	resp, _ := client.Do(req)
 	if resp != nil {
 		defer resp.Body.Close()

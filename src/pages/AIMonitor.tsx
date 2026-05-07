@@ -66,6 +66,7 @@ export default function AIMonitor() {
   const [agentCommands, setAgentCommands] = useState<any[]>([]);
   const [analyzingCluster, setAnalyzingCluster] = useState(false);
   const [lastAnalysisTime, setLastAnalysisTime] = useState<Date | null>(null);
+  const [latestAgentVersion, setLatestAgentVersion] = useState<string | null>(null);
 
   // Security Threats Hook - Real-time monitoring
   const {
@@ -83,6 +84,12 @@ export default function AIMonitor() {
       fetchScanHistory();
       fetchRecentAnomalies();
       fetchAgentCommands();
+      supabase
+        .from('agent_versions')
+        .select('version')
+        .eq('is_latest', true)
+        .single()
+        .then(({ data }) => { if (data?.version) setLatestAgentVersion(data.version); });
     }
   }, [user, selectedClusterId]);
 
@@ -967,7 +974,7 @@ export default function AIMonitor() {
                               return {
                                 type: 'warning',
                                 message: 'Agente Kodo precisa de atualização',
-                                details: `O agente está enviando métricas (última: ${format(new Date(cmdCluster.last_sync), 'dd/MM/yyyy HH:mm', { locale: getDateLocale() })}), mas não está buscando comandos. Atualize o agente para a versão mais recente: kubectl set image deployment/kodo-agent agent=ghcr.io/kubenetworks-group/kodo-agent:latest -n kodo`
+                                details: `O agente está enviando métricas (última: ${format(new Date(cmdCluster.last_sync), 'dd/MM/yyyy HH:mm', { locale: getDateLocale() })}), mas não está buscando comandos. Atualize o agente para a versão mais recente: kubectl set image deployment/kodo-agent agent=ghcr.io/kubenetworks-group/kodo-agent:${latestAgentVersion ?? 'latest'} -n kodo`
                               };
                             }
                             return {
