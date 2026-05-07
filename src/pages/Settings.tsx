@@ -12,7 +12,7 @@ import { useSubscription, PLAN_LIMITS } from "@/contexts/SubscriptionContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Database, Loader2, Sparkles, GraduationCap, Crown, Clock, Brain, Server, User, Check, Shield, MessageSquare, XCircle, Info, FileText, Lock, Download, Trash2, ExternalLink } from "lucide-react";
-import { seedDemoData, deleteDemoData } from "@/services/demoDataSeeder";
+import { seedDemoData, deleteDemoData, generateAISavings } from "@/services/demoDataSeeder";
 import { AIUsageWidget } from "@/components/AIUsageWidget";
 import { useNavigate, Link } from "react-router-dom";
 import { AvatarUpload } from "@/components/AvatarUpload";
@@ -203,12 +203,11 @@ const Settings = () => {
   const handleGenerateAISavings = async () => {
     setSavingsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('seed-ai-savings');
-      if (error) throw error;
-      toast.success(`Generated ${data.savings_created} AI savings records!`);
+      const result = await generateAISavings();
+      toast.success(`${result.savings_created} registros de economia com IA gerados para ${result.clusters_processed} clusters!`);
       setTimeout(() => window.location.href = '/costs', 2000);
     } catch (error: any) {
-      toast.error(error.message || "Failed to generate AI savings data");
+      toast.error(error.message || "Falha ao gerar dados de economia com IA");
     } finally {
       setSavingsLoading(false);
     }

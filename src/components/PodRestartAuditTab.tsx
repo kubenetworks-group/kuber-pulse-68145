@@ -6,15 +6,17 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { 
-  Calendar, 
-  RefreshCw, 
-  FileText, 
+import {
+  Calendar,
+  RefreshCw,
+  FileText,
   AlertTriangle,
   Clock,
   Terminal,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  BrainCircuit,
+  Loader2
 } from "lucide-react";
 import { format, subDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -31,6 +33,9 @@ interface AuditLog {
   exit_code: number | null;
   terminated_at: string | null;
   restart_count: number;
+  analysis_summary: string | null;
+  source: string | null;
+  episode_key: string | null;
   created_at: string;
 }
 
@@ -59,6 +64,38 @@ export function PodRestartAuditTab() {
       fetchData();
     }
   }, [selectedClusterId]);
+
+  // Realtime: auto-refresh when new audit records arrive or analysis_summary is populated
+  useEffect(() => {
+    if (!selectedClusterId) return;
+    const channel = supabase
+      .channel('pod-restart-audit-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'pod_restart_audit',
+          filter: `cluster_id=eq.${selectedClusterId}`,
+        },
+        () => fetchData()
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [selectedClusterId]);
+
+  const getCauseBadge = (reason: string, exitCode: number | null) => {
+    if (exitCode === 137 || reason?.toLowerCase().includes('oom')) {
+      return <Badge className="bg-red-900/40 text-red-300 border-red-700/50 text-[10px]">OOMKilled</Badge>;
+    }
+    if (reason?.toLowerCase().includes('crash') || reason?.toLowerCase().includes('backoff')) {
+      return <Badge className="bg-orange-900/40 text-orange-300 border-orange-700/50 text-[10px]">CrashLoop</Badge>;
+    }
+    if (exitCode !== null && exitCode !== 0) {
+      return <Badge className="bg-yellow-900/40 text-yellow-300 border-yellow-700/50 text-[10px]">Exit {exitCode}</Badge>;
+    }
+    return null;
+  };
 
   const fetchData = async () => {
     if (!selectedClusterId) return;
@@ -205,6 +242,10 @@ export function PodRestartAuditTab() {
                               <Badge variant={getReasonBadgeVariant(log.restart_reason)}>
                                 {log.restart_reason}
                               </Badge>
+                              {getCauseBadge(log.restart_reason, log.exit_code)}
+                              {log.source === 'auto' && (
+                                <Badge variant="outline" className="text-[10px] border-blue-500/40 text-blue-400">Auto</Badge>
+                              )}
                             </div>
                             <div className="flex items-center gap-3 text-sm text-muted-foreground">
                               {log.exit_code !== null && (
@@ -265,6 +306,24 @@ export function PodRestartAuditTab() {
                               Logs do container não disponíveis para este restart.
                             </p>
                           )}
+
+                          {/* AI Analysis Section */}
+                          {log.analysis_summary ? (
+                            <div className="p-3 bg-blue-950/30 border border-blue-800/30 rounded-lg space-y-1">
+                              <h4 className="text-sm font-medium flex items-center gap-2">
+                                <BrainCircuit className="h-4 w-4 text-blue-400" />
+                                Análise da IA
+                              </h4>
+                              <p className="text-xs text-muted-foreground leading-relaxed">
+                                {log.analysis_summary}
+                              </p>
+                            </div>
+                          ) : log.container_logs ? (
+                            <p className="text-xs text-muted-foreground italic flex items-center gap-1.5">
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                              Análise da IA em andamento...
+                            </p>
+                          ) : null}
                         </CardContent>
                       </CollapsibleContent>
                     </Collapsible>

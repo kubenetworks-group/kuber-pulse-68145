@@ -700,6 +700,92 @@ serve(async (req) => {
 
     console.log(`✅ Successfully stored ${metrics.length} metrics`);
 
+    // Auto-capture pre-restart logs for pods with spontaneous crashes
+    // Detects pods with restart_count > 0 that haven't been captured yet
+    const podDetailsMetric = metrics.find((m: any) => m.type === 'pod_details');
+    if (podDetailsMetric) {
+      const pods = (podDetailsMetric.data as any)?.pods || [];
+
+      if (pods.length > 0) {
+        const { data: clusterOwner } = await supabaseClient
+          .from('clusters')
+          .select('user_id')
+          .eq('id', cluster_id)
+          .single();
+
+        if (clusterOwner) {
+          for (const pod of pods) {
+            const totalRestarts = pod.total_restarts || 0;
+            if (totalRestarts === 0) continue;
+
+            // episode_key identifies this specific restart count for this pod
+            const episodeKey = `${pod.namespace}/${pod.name}/${totalRestarts}`;
+
+            // Check if this restart episode is already captured
+            const { data: existing } = await supabaseClient
+              .from('pod_restart_audit')
+              .select('id')
+              .eq('cluster_id', cluster_id)
+              .eq('episode_key', episodeKey)
+              .maybeSingle();
+
+            if (existing) continue;
+
+            // Check if a capture command is already pending for this pod+episode
+            const { data: pending } = await supabaseClient
+              .from('agent_commands')
+              .select('id')
+              .eq('cluster_id', cluster_id)
+              .eq('command_type', 'get_pod_logs')
+              .eq('status', 'pending')
+              .filter('command_params->pod_name', 'eq', pod.name)
+              .filter('command_params->namespace', 'eq', pod.namespace)
+              .filter('command_params->trigger', 'eq', 'auto_restart_capture')
+              .maybeSingle();
+
+            if (pending) continue;
+
+            // Detect restart cause from container last_state
+            let restartReason = 'Unknown';
+            let exitCode: number | null = null;
+            for (const cs of pod.containers || []) {
+              const lastState = cs.last_state || {};
+              if (lastState.reason) {
+                restartReason = lastState.reason;
+                exitCode = lastState.exit_code ?? null;
+                if (lastState.exit_code === 137) restartReason = 'OOMKilled';
+                break;
+              }
+            }
+
+            // Create command to fetch previous (crashed) container logs
+            const { error: cmdError } = await supabaseClient.from('agent_commands').insert({
+              cluster_id,
+              user_id: clusterOwner.user_id,
+              command_type: 'get_pod_logs',
+              command_params: {
+                pod_name: pod.name,
+                namespace: pod.namespace,
+                tail_lines: 200,
+                previous: true,
+                episode_key: episodeKey,
+                restart_reason: restartReason,
+                exit_code: exitCode,
+                restart_count: totalRestarts,
+                user_id: clusterOwner.user_id,
+                trigger: 'auto_restart_capture',
+              },
+              status: 'pending',
+            });
+
+            if (!cmdError) {
+              console.log(`📋 Auto log-capture queued: ${episodeKey}`);
+            }
+          }
+        }
+      }
+    }
+
     return new Response(
       JSON.stringify({ 
         success: true, 

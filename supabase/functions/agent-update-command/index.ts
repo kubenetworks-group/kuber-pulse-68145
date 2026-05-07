@@ -188,6 +188,49 @@ serve(async (req) => {
       });
     }
 
+    // Auto-capture: if this was an auto-triggered log fetch for restart analysis,
+    // save the logs to pod_restart_audit and invoke AI analysis
+    if (status === 'completed' && result) {
+      const { data: fullCmd } = await supabaseClient
+        .from('agent_commands')
+        .select('command_params')
+        .eq('id', command_id)
+        .single();
+
+      const params = fullCmd?.command_params as any;
+      if (params?.trigger === 'auto_restart_capture') {
+        const logs = (result as any).logs || '';
+
+        const { data: auditRecord } = await supabaseClient
+          .from('pod_restart_audit')
+          .upsert({
+            cluster_id: apiKeyData.cluster_id,
+            user_id: params.user_id,
+            pod_name: params.pod_name,
+            namespace: params.namespace,
+            restart_reason: params.restart_reason || 'Unknown',
+            exit_code: params.exit_code || null,
+            restart_count: params.restart_count || 0,
+            container_logs: logs || null,
+            container_logs_tail: 200,
+            episode_key: params.episode_key,
+            source: 'auto',
+            command_id,
+            previous_state: {},
+          }, { onConflict: 'cluster_id,episode_key', ignoreDuplicates: true })
+          .select('id')
+          .maybeSingle();
+
+        if (auditRecord?.id) {
+          console.log(`📋 Saved restart audit: ${params.episode_key}, invoking AI analysis`);
+          // Fire-and-forget: invoke AI analysis asynchronously
+          supabaseClient.functions.invoke('analyze-restart-cause', {
+            body: { audit_id: auditRecord.id, cluster_id: apiKeyData.cluster_id }
+          }).catch((err: any) => console.error('Failed to invoke analyze-restart-cause:', err));
+        }
+      }
+    }
+
     console.log(`Command updated successfully`);
 
     return new Response(

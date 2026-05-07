@@ -30,6 +30,7 @@ import PrivacyPolicy from "./pages/PrivacyPolicy";
 import NotFound from "./pages/NotFound";
 import AdminDashboard from "./pages/AdminDashboard";
 import Migration from "./pages/Migration";
+import Developer from "./pages/Developer";
 import { CookieBanner } from "@/components/CookieBanner";
 
 const queryClient = new QueryClient();
@@ -141,6 +142,14 @@ const App = () => (
                   element={
                     <ProtectedRoute>
                       <Migration />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/developer"
+                  element={
+                    <ProtectedRoute>
+                      <Developer />
                     </ProtectedRoute>
                   }
                 />

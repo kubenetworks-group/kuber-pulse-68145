@@ -277,6 +277,27 @@ All colors MUST be HSL.
     }
   }
 
+  @keyframes slide-up-fade {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes progress-fill {
+    from { width: 0%; }
+    to   { width: 100%; }
+  }
+
+  @keyframes chart-bar-grow {
+    from { transform: scaleY(0); }
+    to   { transform: scaleY(1); }
+  }
+
   .animate-scan-line {
     animation: scan-line 8s linear infinite;
   }

@@ -457,19 +457,31 @@ export async function seedDemoData(): Promise<SeedResult> {
   }
 
   // ── AI savings ────────────────────────────────────────────────────────────
-  if (!incidentsError) {
-    const { data: insertedIncidents } = await supabase
-      .from('ai_incidents').select('id, cluster_id').eq('user_id', userId).eq('is_demo', true);
+  const allAiSavings: any[] = [];
 
+  const { data: insertedIncidents } = await supabase
+    .from('ai_incidents').select('id, cluster_id').eq('user_id', userId).eq('is_demo', true);
+
+  // Helper: pick a random incident ID for a given cluster (or any if none found)
+  const pickIncidentId = (clusterId: string) => {
+    const clusterIncs = insertedIncidents?.filter((r: any) => r.cluster_id === clusterId) || [];
+    const pool = clusterIncs.length > 0 ? clusterIncs : (insertedIncidents || []);
+    if (pool.length === 0) return null;
+    return pool[Math.floor(Math.random() * pool.length)].id;
+  };
+
+  // Downtime prevention: based on resolved incidents (current-month entries)
+  if (!incidentsError) {
     const resolvedIncidents = incidents.filter(inc => inc.action_taken && inc.resolved_at);
-    const aiSavings = resolvedIncidents.map((inc, index) => {
+    const downtimeSavings = resolvedIncidents.map((inc, index) => {
       const cluster = clusters.find(c => c.id === inc.cluster_id)!;
       const costPerMinute = cluster.monthly_cost / (30 * 24 * 60);
       const incidentRow = insertedIncidents?.find((r: any) => r.cluster_id === inc.cluster_id);
+      const incidentId = incidentRow?.id || insertedIncidents?.[index]?.id;
       const downtimeAvoidedMinutes = inc.severity === 'critical' ? 30 : 15;
       const estimatedSavings = Number((downtimeAvoidedMinutes * costPerMinute * 10).toFixed(2));
       return {
-        user_id: userId, incident_id: incidentRow?.id || insertedIncidents?.[index]?.id,
+        user_id: userId, incident_id: incidentId,
         cluster_id: inc.cluster_id, is_demo: true,
         downtime_avoided_minutes: downtimeAvoidedMinutes,
         cost_per_minute: Number(costPerMinute.toFixed(4)),
@@ -477,10 +489,78 @@ export async function seedDemoData(): Promise<SeedResult> {
         calculation_details: { severity: inc.severity, revenue_multiplier: 10, assumption: 'Based on downtime avoided and revenue impact' },
       };
     }).filter(s => s.incident_id);
+    allAiSavings.push(...downtimeSavings);
+  }
 
-    if (aiSavings.length > 0) {
-      const { error } = await supabase.from('ai_cost_savings').insert(aiSavings);
-      if (error) console.error('ai_cost_savings error:', error);
+  // Historical AI savings for all clusters: 3 types across last 6 months
+  if (insertedIncidents && insertedIncidents.length > 0) {
+    for (const cluster of clusters) {
+      const baseSavingsPct = 0.08 + Math.random() * 0.07; // 8-15% of monthly cost
+      for (let monthsBack = 5; monthsBack >= 0; monthsBack--) {
+        const monthDate = new Date(Date.now());
+        monthDate.setMonth(monthDate.getMonth() - monthsBack);
+        const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+
+        const variation = 1 + (Math.random() - 0.5) * 0.4;
+        const totalMonthlySavings = cluster.monthly_cost * baseSavingsPct * variation;
+
+        // Split savings across 3 types with realistic proportions
+        const downtimePct = 0.5 + Math.random() * 0.1;   // ~50-60%
+        const resourcePct = 0.25 + Math.random() * 0.1;  // ~25-35%
+        const scalePct = 1 - downtimePct - resourcePct;  // remainder
+
+        const downtimeSaving = Number((totalMonthlySavings * downtimePct).toFixed(2));
+        const resourceSaving = Number((totalMonthlySavings * resourcePct).toFixed(2));
+        const scaleSaving = Number((totalMonthlySavings * scalePct).toFixed(2));
+
+        const dayOffset = randInt(1, 20);
+        const costPerMinute = Number((cluster.monthly_cost / (30 * 24 * 60)).toFixed(4));
+
+        const incId1 = pickIncidentId(cluster.id);
+        const incId2 = pickIncidentId(cluster.id);
+        const incId3 = pickIncidentId(cluster.id);
+        if (!incId1 || !incId2 || !incId3) continue;
+
+        allAiSavings.push({
+          user_id: userId, cluster_id: cluster.id, is_demo: true,
+          incident_id: incId1,
+          downtime_avoided_minutes: Math.max(1, Math.round(downtimeSaving / (costPerMinute * 10))),
+          cost_per_minute: costPerMinute,
+          estimated_savings: downtimeSaving,
+          saving_type: 'downtime_prevention',
+          created_at: new Date(monthStart.getTime() + dayOffset * 24 * 3600_000).toISOString(),
+          calculation_details: { method: 'historical', assumption: 'Auto-heal actions preventing cluster downtime' },
+        });
+
+        allAiSavings.push({
+          user_id: userId, cluster_id: cluster.id, is_demo: true,
+          incident_id: incId2,
+          downtime_avoided_minutes: 0,
+          cost_per_minute: costPerMinute,
+          estimated_savings: resourceSaving,
+          saving_type: 'resource_optimization',
+          created_at: new Date(monthStart.getTime() + (dayOffset + 3) * 24 * 3600_000).toISOString(),
+          calculation_details: { method: 'historical', optimized_nodes: randInt(1, 3), assumption: 'Right-sizing pods and removing idle resources' },
+        });
+
+        allAiSavings.push({
+          user_id: userId, cluster_id: cluster.id, is_demo: true,
+          incident_id: incId3,
+          downtime_avoided_minutes: 0,
+          cost_per_minute: costPerMinute,
+          estimated_savings: scaleSaving,
+          saving_type: 'scale_optimization',
+          created_at: new Date(monthStart.getTime() + (dayOffset + 6) * 24 * 3600_000).toISOString(),
+          calculation_details: { method: 'historical', assumption: 'Predictive auto-scaling reduced over-provisioning' },
+        });
+      }
+    }
+  }
+
+  if (allAiSavings.length > 0) {
+    for (let i = 0; i < allAiSavings.length; i += 200) {
+      const { error } = await supabase.from('ai_cost_savings').insert(allAiSavings.slice(i, i + 200));
+      if (error) console.error('ai_cost_savings batch error:', error);
     }
   }
 
@@ -562,6 +642,160 @@ export async function seedDemoData(): Promise<SeedResult> {
     pvcs: allPvcs.length,
     storage_recommendations: storageRecs.length,
   };
+}
+
+// ─── Generate AI savings (standalone, for existing clusters) ─────────────────
+
+export async function generateAISavings(): Promise<{ savings_created: number; clusters_processed: number }> {
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) throw new Error("Não autenticado");
+  const userId = user.id;
+
+  // Get all clusters for this user
+  const { data: clusters, error: clustersError } = await supabase
+    .from('clusters')
+    .select('id, monthly_cost')
+    .eq('user_id', userId);
+
+  if (clustersError) throw clustersError;
+  if (!clusters || clusters.length === 0) throw new Error("Nenhum cluster encontrado. Gere os dados demo primeiro.");
+
+  // Delete existing demo savings
+  await supabase.from('ai_cost_savings').delete().eq('user_id', userId).eq('is_demo', true);
+
+  // Ensure each cluster has incidents (needed for FK constraint)
+  const clusterIncidentMap: Record<string, string[]> = {};
+
+  for (const cluster of clusters) {
+    const { data: existingIncidents } = await supabase
+      .from('ai_incidents')
+      .select('id')
+      .eq('cluster_id', cluster.id)
+      .eq('user_id', userId)
+      .limit(3);
+
+    let incidentIds = (existingIncidents || []).map((i: any) => i.id);
+
+    if (incidentIds.length === 0) {
+      // Create demo incidents for this cluster (values must match DB CHECK constraints)
+      const templates = [
+        {
+          cluster_id: cluster.id, user_id: userId, is_demo: true,
+          incident_type: 'pod_crash', severity: 'high',
+          title: 'Pod em CrashLoopBackOff',
+          description: 'Pod reiniciando continuamente devido a falha de configuração',
+          ai_analysis: { root_cause: 'Configuração incorreta de variável de ambiente', confidence: 0.95 },
+          auto_heal_action: 'restart_pod',
+          action_taken: true, action_result: { status: 'success' },
+          resolved_at: new Date().toISOString(),
+        },
+        {
+          cluster_id: cluster.id, user_id: userId, is_demo: true,
+          incident_type: 'high_cpu', severity: 'medium',
+          title: 'Uso excessivo de CPU detectado',
+          description: 'Container consumindo acima do limite configurado',
+          ai_analysis: { root_cause: 'Requests/limits mal configurados', confidence: 0.88 },
+          auto_heal_action: 'optimize_resources',
+          action_taken: true, action_result: { status: 'success' },
+          resolved_at: new Date().toISOString(),
+        },
+        {
+          cluster_id: cluster.id, user_id: userId, is_demo: true,
+          incident_type: 'high_memory', severity: 'critical',
+          title: 'Memory Leak Detectado',
+          description: 'Aplicação com vazamento de memória identificado pela IA',
+          ai_analysis: { root_cause: 'Memory leak no código da aplicação', confidence: 0.92 },
+          auto_heal_action: 'restart_pod',
+          action_taken: true, action_result: { status: 'success' },
+          resolved_at: new Date().toISOString(),
+        },
+      ];
+
+      const { data: created, error: incErr } = await supabase
+        .from('ai_incidents').insert(templates).select('id');
+
+      if (incErr) {
+        throw new Error(`Falha ao criar incidents para o cluster: ${incErr.message}`);
+      }
+      incidentIds = (created || []).map((i: any) => i.id);
+    }
+
+    clusterIncidentMap[cluster.id] = incidentIds;
+  }
+
+  // Generate savings across last 6 months (3 types per cluster per month)
+  const savingsToInsert: any[] = [];
+  const now = new Date();
+
+  for (const cluster of clusters) {
+    const incidentIds = clusterIncidentMap[cluster.id];
+    if (!incidentIds || incidentIds.length === 0) continue;
+
+    const baseMonthlyCost = Number(cluster.monthly_cost) || rand(500, 5000);
+    const baseSavingsPct = rand(0.08, 0.15);
+
+    for (let monthsBack = 5; monthsBack >= 0; monthsBack--) {
+      const monthStart = new Date(now.getFullYear(), now.getMonth() - monthsBack, 1).getTime();
+
+      const variation = 1 + (Math.random() - 0.5) * 0.4;
+      const totalMonthlySavings = baseMonthlyCost * baseSavingsPct * variation;
+
+      const downtimePct = rand(0.50, 0.60);
+      const resourcePct = rand(0.25, 0.35);
+      const scalePct = 1 - downtimePct - resourcePct;
+
+      const downtimeSaving = Number((totalMonthlySavings * downtimePct).toFixed(2));
+      const resourceSaving = Number((totalMonthlySavings * resourcePct).toFixed(2));
+      const scaleSaving = Number((totalMonthlySavings * scalePct).toFixed(2));
+
+      const costPerMinute = Number((baseMonthlyCost / (30 * 24 * 60)).toFixed(4));
+      const dayOffset = randInt(1, 20);
+
+      const incId1 = incidentIds[0 % incidentIds.length];
+      const incId2 = incidentIds[1 % incidentIds.length];
+      const incId3 = incidentIds[2 % incidentIds.length];
+
+      savingsToInsert.push({
+        user_id: userId, cluster_id: cluster.id, is_demo: true,
+        incident_id: incId1, saving_type: 'downtime_prevention',
+        estimated_savings: downtimeSaving, cost_per_minute: costPerMinute,
+        downtime_avoided_minutes: Math.max(1, Math.round(downtimeSaving / (costPerMinute * 10))),
+        calculation_details: { method: 'historical', assumption: 'Auto-heal actions prevented cluster downtime' },
+        created_at: new Date(monthStart + dayOffset * 24 * 3600_000).toISOString(),
+      });
+
+      savingsToInsert.push({
+        user_id: userId, cluster_id: cluster.id, is_demo: true,
+        incident_id: incId2, saving_type: 'resource_optimization',
+        estimated_savings: resourceSaving, cost_per_minute: costPerMinute,
+        downtime_avoided_minutes: 0,
+        calculation_details: { method: 'historical', assumption: 'Right-sizing pods and removing idle resources' },
+        created_at: new Date(monthStart + (dayOffset + 3) * 24 * 3600_000).toISOString(),
+      });
+
+      savingsToInsert.push({
+        user_id: userId, cluster_id: cluster.id, is_demo: true,
+        incident_id: incId3, saving_type: 'scale_optimization',
+        estimated_savings: scaleSaving, cost_per_minute: costPerMinute,
+        downtime_avoided_minutes: 0,
+        calculation_details: { method: 'historical', assumption: 'Predictive auto-scaling reduced over-provisioning' },
+        created_at: new Date(monthStart + (dayOffset + 6) * 24 * 3600_000).toISOString(),
+      });
+    }
+  }
+
+  if (savingsToInsert.length === 0) {
+    throw new Error("Nenhum saving gerado — verifique se os clusters possuem incidents válidos.");
+  }
+
+  let totalInserted = 0;
+  for (let i = 0; i < savingsToInsert.length; i += 200) {
+    const { error } = await supabase.from('ai_cost_savings').insert(savingsToInsert.slice(i, i + 200));
+    if (error) throw new Error(`Erro ao inserir economias: ${error.message}`);
+    totalInserted += Math.min(200, savingsToInsert.length - i);
+  }
+
+  return { savings_created: totalInserted, clusters_processed: Object.keys(clusterIncidentMap).length };
 }
 
 // ─── Delete demo data ─────────────────────────────────────────────────────────

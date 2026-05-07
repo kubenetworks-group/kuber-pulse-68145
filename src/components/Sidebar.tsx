@@ -20,6 +20,7 @@ import {
   AlertTriangle,
   Activity,
   Archive,
+  Code2,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -46,6 +47,7 @@ export const Sidebar = ({ collapsed = false, onNavigate, onToggleCollapse, onCol
     { name: t('common.storage'), href: "/storage", icon: HardDrive },
     { name: t('common.aiMonitor'), href: "/ai-monitor", icon: Bot },
     ...(isPro ? [{ name: "Economia com IA", href: "/ai-savings", icon: Sparkles }] : []),
+    { name: "Plataforma Dev", href: "/developer", icon: Code2 },
     { name: t('common.clusters'), href: "/clusters", icon: Server },
     { name: t('common.agents'), href: "/agents", icon: Bot },
     { name: "Backup & Migração", href: "/migration", icon: Archive },

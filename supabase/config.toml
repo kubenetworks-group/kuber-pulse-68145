@@ -1,5 +1,11 @@
 project_id = "dadaeduevxyvkhjmwlel"
 
+[functions.analyze-restart-cause]
+verify_jwt = false
+
+[functions.generate-k8s-yaml]
+verify_jwt = false
+
 [functions.docs-assistant]
 verify_jwt = false
 

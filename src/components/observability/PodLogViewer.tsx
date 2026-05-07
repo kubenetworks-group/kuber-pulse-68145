@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -38,6 +38,70 @@ export const PodLogViewer = ({ pods }: PodLogViewerProps) => {
   const [selectedContainer, setSelectedContainer] = useState<string>("");
   const [availableContainers, setAvailableContainers] = useState<string[]>([]);
   const [isPermissionError, setIsPermissionError] = useState(false);
+  const [activeCommandId, setActiveCommandId] = useState<string | null>(null);
+  const [liveTail, setLiveTail] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const liveTailTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Supabase Realtime: listen for agent_commands updates instead of polling
+  useEffect(() => {
+    if (!activeCommandId) return;
+
+    const channel = supabase
+      .channel(`log-result-${activeCommandId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'agent_commands', filter: `id=eq.${activeCommandId}` },
+        (payload) => {
+          const cmd = payload.new as any;
+          if (cmd.status === 'completed' && cmd.result) {
+            const result = cmd.result as any;
+            const logText = result.logs || result.output || 'Sem logs disponíveis.';
+            if (result.all_containers && Array.isArray(result.all_containers)) {
+              setAvailableContainers(result.all_containers);
+              if (!selectedContainer && result.container) {
+                setSelectedContainer(result.container);
+              }
+            }
+            setIsPermissionError(logText.includes('ERRO DE PERMISSÃO') || logText.includes('Forbidden'));
+            setLogs(logText);
+            setLastUpdated(new Date());
+            setLoadingLogs(false);
+          } else if (cmd.status === 'failed') {
+            const errMsg = (cmd.result as any)?.error || 'Falha ao obter logs';
+            setIsPermissionError(errMsg.includes('403') || errMsg.includes('Forbidden'));
+            setLogs(`Erro: ${errMsg}`);
+            setLoadingLogs(false);
+          }
+        }
+      )
+      .subscribe();
+
+    // Fallback timeout: if agent never responds in 60s
+    const timeout = setTimeout(() => {
+      setLogs('Timeout: O agente não respondeu a tempo. Verifique se o agente está ativo no cluster.');
+      setLoadingLogs(false);
+      supabase.removeChannel(channel);
+    }, 60000);
+
+    return () => {
+      clearTimeout(timeout);
+      supabase.removeChannel(channel);
+    };
+  }, [activeCommandId]);
+
+  // Clean up Live Tail when dialog closes
+  useEffect(() => {
+    if (!dialogOpen) {
+      setLiveTail(false);
+      if (liveTailTimerRef.current) {
+        clearInterval(liveTailTimerRef.current);
+        liveTailTimerRef.current = null;
+      }
+      setActiveCommandId(null);
+      setLastUpdated(null);
+    }
+  }, [dialogOpen]);
 
   const fetchLogs = async (pod: PodData, containerOverride?: string) => {
     if (!selectedClusterId || !user) return;
@@ -46,6 +110,7 @@ export const PodLogViewer = ({ pods }: PodLogViewerProps) => {
     setLoadingLogs(true);
     setLogs("");
     setIsPermissionError(false);
+    setActiveCommandId(null);
 
     const container = containerOverride || selectedContainer || "";
 
@@ -64,55 +129,27 @@ export const PodLogViewer = ({ pods }: PodLogViewerProps) => {
 
       if (error) throw error;
 
-      const commandId = data.id;
-      let attempts = 0;
-      const maxAttempts = 30;
-
-      const poll = async () => {
-        attempts++;
-        const { data: cmd } = await supabase
-          .from("agent_commands")
-          .select("status, result")
-          .eq("id", commandId)
-          .single();
-
-        if (cmd?.status === "completed" && cmd.result) {
-          const result = cmd.result as any;
-          const logText = result.logs || result.output || "Sem logs disponíveis.";
-
-          // Update available containers list from result
-          if (result.all_containers && Array.isArray(result.all_containers)) {
-            setAvailableContainers(result.all_containers);
-            if (!selectedContainer && result.container) {
-              setSelectedContainer(result.container);
-            }
-          }
-
-          // Detect permission error
-          if (logText.includes("ERRO DE PERMISSÃO") || logText.includes("Forbidden")) {
-            setIsPermissionError(true);
-          }
-
-          setLogs(logText);
-          setLoadingLogs(false);
-        } else if (cmd?.status === "failed") {
-          const result = cmd?.result as any;
-          const errMsg = result?.error || "Falha ao obter logs";
-          setIsPermissionError(errMsg.includes("403") || errMsg.includes("Forbidden"));
-          setLogs(`Erro: ${errMsg}`);
-          setLoadingLogs(false);
-        } else if (attempts < maxAttempts) {
-          setTimeout(poll, 2000);
-        } else {
-          setLogs("Timeout: O agente não respondeu a tempo. Verifique se o agente está ativo no cluster.");
-          setLoadingLogs(false);
-        }
-      };
-
-      setTimeout(poll, 2000);
+      // Set commandId — the Realtime useEffect will handle the response
+      setActiveCommandId(data.id);
     } catch (err: any) {
       setLogs(`Erro: ${err.message}`);
       setLoadingLogs(false);
+    }
+  };
+
+  const toggleLiveTail = () => {
+    if (liveTail) {
+      if (liveTailTimerRef.current) {
+        clearInterval(liveTailTimerRef.current);
+        liveTailTimerRef.current = null;
+      }
+      setLiveTail(false);
+    } else {
+      setLiveTail(true);
+      if (selectedPod) fetchLogs(selectedPod, selectedContainer);
+      liveTailTimerRef.current = setInterval(() => {
+        if (selectedPod) fetchLogs(selectedPod, selectedContainer);
+      }, 15000);
     }
   };
 
@@ -274,6 +311,22 @@ export const PodLogViewer = ({ pods }: PodLogViewerProps) => {
                       ))}
                     </SelectContent>
                   </Select>
+                )}
+                {/* Live Tail toggle */}
+                <Button
+                  variant={liveTail ? "default" : "ghost"}
+                  size="sm"
+                  className={`h-7 text-xs gap-1.5 ${liveTail ? "bg-green-900/40 text-green-300 hover:bg-green-900/60 border border-green-700/50" : ""}`}
+                  onClick={toggleLiveTail}
+                  disabled={!selectedPod}
+                >
+                  <div className={`w-2 h-2 rounded-full ${liveTail ? "bg-green-400 animate-pulse" : "bg-muted-foreground"}`} />
+                  {liveTail ? "Live" : "Live Tail"}
+                </Button>
+                {lastUpdated && (
+                  <span className="text-[10px] text-muted-foreground hidden sm:inline">
+                    {lastUpdated.toLocaleTimeString()}
+                  </span>
                 )}
                 <Button
                   variant="ghost" size="sm" className="h-7 text-xs gap-1"

@@ -6,6 +6,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+function rand(min: number, max: number) { return Math.random() * (max - min) + min; }
+function randInt(min: number, max: number) { return Math.floor(rand(min, max + 1)); }
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -13,233 +16,222 @@ serve(async (req) => {
 
   try {
     const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      throw new Error('No authorization header');
-    }
+    if (!authHeader) throw new Error('No authorization header');
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get authenticated user
     const token = authHeader.replace('Bearer ', '');
     const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !user) throw new Error('Unauthorized');
 
-    if (userError || !user) {
-      throw new Error('Unauthorized');
-    }
+    const userId = user.id;
 
     // Get user's clusters
     const { data: clusters, error: clustersError } = await supabase
       .from('clusters')
-      .select('id')
-      .eq('user_id', user.id);
+      .select('id, monthly_cost')
+      .eq('user_id', userId);
 
     if (clustersError) throw clustersError;
 
     if (!clusters || clusters.length === 0) {
       return new Response(
         JSON.stringify({ error: 'No clusters found. Please create clusters first.' }),
-        { 
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Get or create incidents for each cluster
-    const savingsToInsert = [];
-    let totalIncidents = 0;
+    // Delete old demo savings for this user
+    await supabase.from('ai_cost_savings').delete().eq('user_id', userId).eq('is_demo', true);
+
+    // Ensure each cluster has at least one incident to satisfy FK constraint
+    const clusterIncidentMap: Record<string, string[]> = {};
 
     for (const cluster of clusters) {
-      // Check existing incidents
       const { data: existingIncidents } = await supabase
         .from('ai_incidents')
         .select('id')
         .eq('cluster_id', cluster.id)
-        .eq('user_id', user.id);
+        .eq('user_id', userId)
+        .limit(3);
 
-      let incidentIds = existingIncidents?.map(i => i.id) || [];
+      let incidentIds = existingIncidents?.map((i: any) => i.id) || [];
 
-      // Create incidents if none exist
+      // Create demo incidents if none found for this cluster
       if (incidentIds.length === 0) {
-        const incidentsToCreate = [
+        const incidentTemplates = [
           {
-            cluster_id: cluster.id,
-            user_id: user.id,
-            incident_type: 'pod_crash_loop',
-            severity: 'high',
+            cluster_id: cluster.id, user_id: userId, is_demo: true,
+            incident_type: 'pod_crash_loop', severity: 'high',
             title: 'Pod em CrashLoopBackOff',
-            description: 'Pod reiniciando continuamente devido a falha de configuração',
-            ai_analysis: {
-              root_cause: 'Configuração incorreta de variável de ambiente',
-              impact: 'Serviço parcialmente indisponível',
-              recommendation: 'Corrigir variável DATABASE_URL',
-              confidence: 0.95
-            },
+            description: 'Pod reiniciando continuamente',
+            ai_analysis: { root_cause: 'Configuração incorreta', confidence: 0.95 },
             auto_heal_action: 'Aplicar patch de configuração',
             action_taken: true,
-            action_result: { status: 'success', applied_at: new Date().toISOString() },
-            resolved_at: new Date().toISOString()
+            action_result: { status: 'success' },
+            resolved_at: new Date().toISOString(),
           },
           {
-            cluster_id: cluster.id,
-            user_id: user.id,
-            incident_type: 'resource_exhaustion',
-            severity: 'medium',
-            title: 'Uso excessivo de CPU',
-            description: 'Container consumindo mais CPU que o limite configurado',
-            ai_analysis: {
-              root_cause: 'Requests/limits mal configurados',
-              impact: 'Performance degradada',
-              recommendation: 'Ajustar resource requests e limits',
-              confidence: 0.88
-            },
+            cluster_id: cluster.id, user_id: userId, is_demo: true,
+            incident_type: 'resource_exhaustion', severity: 'medium',
+            title: 'Uso excessivo de CPU detectado',
+            description: 'Container consumindo acima do limite',
+            ai_analysis: { root_cause: 'Requests/limits mal configurados', confidence: 0.88 },
             auto_heal_action: 'Ajustar recursos do pod',
             action_taken: true,
-            action_result: { status: 'success', old_cpu: '100m', new_cpu: '500m' },
-            resolved_at: new Date().toISOString()
+            action_result: { status: 'success' },
+            resolved_at: new Date().toISOString(),
           },
           {
-            cluster_id: cluster.id,
-            user_id: user.id,
-            incident_type: 'memory_leak',
-            severity: 'critical',
+            cluster_id: cluster.id, user_id: userId, is_demo: true,
+            incident_type: 'memory_leak', severity: 'critical',
             title: 'Memory Leak Detectado',
             description: 'Aplicação com vazamento de memória',
-            ai_analysis: {
-              root_cause: 'Memory leak no código da aplicação',
-              impact: 'Risco de OOMKilled',
-              recommendation: 'Reiniciar pod e investigar aplicação',
-              confidence: 0.92
-            },
+            ai_analysis: { root_cause: 'Memory leak no código', confidence: 0.92 },
             auto_heal_action: 'Reiniciar pod com memory leak',
             action_taken: true,
-            action_result: { status: 'success', pod_restarted: true },
-            resolved_at: new Date().toISOString()
-          }
+            action_result: { status: 'success' },
+            resolved_at: new Date().toISOString(),
+          },
         ];
 
-        const { data: createdIncidents, error: incidentsError } = await supabase
+        const { data: created, error: incErr } = await supabase
           .from('ai_incidents')
-          .insert(incidentsToCreate)
+          .insert(incidentTemplates)
           .select('id');
 
-        if (incidentsError) {
-          console.error('Error creating incidents:', incidentsError);
-        } else {
-          incidentIds = createdIncidents?.map(i => i.id) || [];
-          totalIncidents += incidentIds.length;
+        if (incErr) {
+          console.error(`Failed to create incidents for cluster ${cluster.id}:`, incErr);
+          continue; // skip this cluster
         }
+        incidentIds = created?.map((i: any) => i.id) || [];
       }
 
-      // Create savings for each incident
-      for (const incidentId of incidentIds) {
-        const savingTypes = [
-          {
-            type: 'downtime_prevention',
-            downtime: 120,
-            costPerMinute: 15.5
-          },
-          {
-            type: 'resource_optimization',
-            downtime: 0,
-            costPerMinute: 0
-          },
-          {
-            type: 'scale_optimization',
-            downtime: 0,
-            costPerMinute: 0
-          }
-        ];
+      clusterIncidentMap[cluster.id] = incidentIds;
+    }
 
-        const randomSaving = savingTypes[Math.floor(Math.random() * savingTypes.length)];
-        
-        let estimatedSavings = 0;
-        let calculationDetails = {};
+    // Generate savings for all clusters across last 6 months
+    const savingsToInsert: any[] = [];
+    const now = new Date();
 
-        if (randomSaving.type === 'downtime_prevention') {
-          estimatedSavings = randomSaving.downtime * randomSaving.costPerMinute;
-          calculationDetails = {
-            method: 'downtime_cost',
-            downtime_minutes: randomSaving.downtime,
-            cost_per_minute: randomSaving.costPerMinute
-          };
-        } else if (randomSaving.type === 'resource_optimization') {
-          const oldCost = Math.random() * 500 + 100;
-          const newCost = oldCost * 0.7;
-          estimatedSavings = oldCost - newCost;
-          calculationDetails = {
-            method: 'resource_comparison',
-            old_monthly_cost: oldCost,
-            new_monthly_cost: newCost
-          };
-        } else {
-          const reducedReplicas = Math.floor(Math.random() * 5) + 1;
-          estimatedSavings = reducedReplicas * 50;
-          calculationDetails = {
-            method: 'scale_optimization',
-            replicas_reduced: reducedReplicas,
-            cost_per_replica: 50
-          };
-        }
+    for (const cluster of clusters) {
+      const incidentIds = clusterIncidentMap[cluster.id];
+      if (!incidentIds || incidentIds.length === 0) continue;
+
+      const baseMonthlyCost = Number(cluster.monthly_cost) || rand(500, 5000);
+      const baseSavingsPct = rand(0.08, 0.15); // 8-15% of monthly cost
+
+      for (let monthsBack = 5; monthsBack >= 0; monthsBack--) {
+        const monthDate = new Date(now.getFullYear(), now.getMonth() - monthsBack, 1);
+        const monthStart = monthDate.getTime();
+
+        const variation = 1 + (Math.random() - 0.5) * 0.4;
+        const totalMonthlySavings = baseMonthlyCost * baseSavingsPct * variation;
+
+        const downtimePct = rand(0.5, 0.6);
+        const resourcePct = rand(0.25, 0.35);
+        const scalePct = 1 - downtimePct - resourcePct;
+
+        const downtimeSaving = Number((totalMonthlySavings * downtimePct).toFixed(2));
+        const resourceSaving = Number((totalMonthlySavings * resourcePct).toFixed(2));
+        const scaleSaving = Number((totalMonthlySavings * scalePct).toFixed(2));
+
+        const costPerMinute = Number((baseMonthlyCost / (30 * 24 * 60)).toFixed(4));
+        const dayOffset = randInt(1, 20);
+
+        // Pick incident IDs (round-robin from available incidents)
+        const incId1 = incidentIds[0 % incidentIds.length];
+        const incId2 = incidentIds[1 % incidentIds.length];
+        const incId3 = incidentIds[2 % incidentIds.length];
 
         savingsToInsert.push({
-          incident_id: incidentId,
-          cluster_id: cluster.id,
-          user_id: user.id,
-          saving_type: randomSaving.type,
-          estimated_savings: estimatedSavings,
-          cost_per_minute: randomSaving.costPerMinute,
-          downtime_avoided_minutes: randomSaving.downtime,
-          calculation_details: calculationDetails,
-          created_at: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString()
+          user_id: userId, cluster_id: cluster.id, is_demo: true,
+          incident_id: incId1,
+          saving_type: 'downtime_prevention',
+          estimated_savings: downtimeSaving,
+          cost_per_minute: costPerMinute,
+          downtime_avoided_minutes: Math.max(1, Math.round(downtimeSaving / (costPerMinute * 10))),
+          calculation_details: {
+            method: 'historical',
+            assumption: 'Auto-heal actions prevented cluster downtime',
+          },
+          created_at: new Date(monthStart + dayOffset * 24 * 3600_000).toISOString(),
+        });
+
+        savingsToInsert.push({
+          user_id: userId, cluster_id: cluster.id, is_demo: true,
+          incident_id: incId2,
+          saving_type: 'resource_optimization',
+          estimated_savings: resourceSaving,
+          cost_per_minute: costPerMinute,
+          downtime_avoided_minutes: 0,
+          calculation_details: {
+            method: 'historical',
+            old_monthly_cost: Number((baseMonthlyCost * 1.3).toFixed(2)),
+            new_monthly_cost: Number((baseMonthlyCost * 1.3 - resourceSaving).toFixed(2)),
+            assumption: 'Right-sizing pods and removing idle resources',
+          },
+          created_at: new Date(monthStart + (dayOffset + 3) * 24 * 3600_000).toISOString(),
+        });
+
+        savingsToInsert.push({
+          user_id: userId, cluster_id: cluster.id, is_demo: true,
+          incident_id: incId3,
+          saving_type: 'scale_optimization',
+          estimated_savings: scaleSaving,
+          cost_per_minute: costPerMinute,
+          downtime_avoided_minutes: 0,
+          calculation_details: {
+            method: 'historical',
+            replicas_reduced: randInt(1, 4),
+            cost_per_replica: Number((scaleSaving / Math.max(1, randInt(1, 4))).toFixed(2)),
+            assumption: 'Predictive auto-scaling reduced over-provisioning',
+          },
+          created_at: new Date(monthStart + (dayOffset + 6) * 24 * 3600_000).toISOString(),
         });
       }
     }
 
-    // Insert all savings
-    if (savingsToInsert.length > 0) {
+    // Insert all savings in batches
+    let totalInserted = 0;
+    for (let i = 0; i < savingsToInsert.length; i += 200) {
+      const batch = savingsToInsert.slice(i, i + 200);
       const { error: savingsError } = await supabase
         .from('ai_cost_savings')
-        .insert(savingsToInsert);
+        .insert(batch);
 
       if (savingsError) {
-        console.error('Error inserting savings:', savingsError);
-        throw savingsError;
+        console.error('Error inserting savings batch:', savingsError);
+      } else {
+        totalInserted += batch.length;
       }
     }
 
     // Create notification
-    await supabase
-      .from('notifications')
-      .insert({
-        user_id: user.id,
-        title: '💰 Dados de Economia Gerados',
-        message: `Adicionados ${savingsToInsert.length} registros de economia com IA no banco de dados.`,
-        type: 'success'
-      });
+    await supabase.from('notifications').insert({
+      user_id: userId,
+      title: '💰 Dados de Economia Gerados',
+      message: `Adicionados ${totalInserted} registros de economia com IA no banco de dados.`,
+      type: 'success',
+    });
 
     return new Response(
       JSON.stringify({
         success: true,
-        savings_created: savingsToInsert.length,
-        incidents_created: totalIncidents,
-        message: `Successfully created ${savingsToInsert.length} AI savings records`
+        savings_created: totalInserted,
+        clusters_processed: Object.keys(clusterIncidentMap).length,
+        message: `Successfully created ${totalInserted} AI savings records across 6 months`,
       }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
     console.error('Error in seed-ai-savings:', error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
