@@ -29,37 +29,12 @@ interface PersistentVolume {
   claim_ref_name: string | null;
 }
 
-// Merge real usage from agent_metrics.pvcs into the PVC list from the pvcs table.
-// The pvcs table row may have used_bytes=0 if the edge function is an older version,
-// so we fall back to the raw metric_data for accuracy.
-function mergeUsageFromMetrics(
-  pvcs: PVC[],
-  metricPVCs: Array<{ name: string; namespace: string; used_bytes?: number; capacity_bytes?: number }>
-): PVC[] {
-  if (!metricPVCs.length) return pvcs;
-
-  // Build a lookup: "namespace/name" → metric entry
-  const lookup = new Map<string, typeof metricPVCs[0]>();
-  for (const mp of metricPVCs) {
-    if (mp.namespace && mp.name) {
-      lookup.set(`${mp.namespace}/${mp.name}`, mp);
-    }
-  }
-
-  return pvcs.map(pvc => {
-    const key = `${pvc.namespace}/${pvc.name}`;
-    const metric = lookup.get(key);
-    if (metric && (metric.used_bytes ?? 0) > 0 && pvc.used_bytes === 0) {
-      return { ...pvc, used_bytes: metric.used_bytes! };
-    }
-    return pvc;
-  });
-}
 
 const Storage = () => {
   const { t } = useTranslation();
   const { selectedClusterId, clusters } = useCluster();
   const [loading, setLoading] = useState(true);
+  const [debugSources, setDebugSources] = useState<{ pvcsTable: string; history: string; metrics: string } | null>(null);
   const [storageMetrics, setStorageMetrics] = useState({
     total: 0,
     allocated: 0,
@@ -138,28 +113,73 @@ const Storage = () => {
       if (pvcsError) {
         console.error('Error fetching PVCs:', pvcsError);
       } else if (pvcsData) {
-        // Fetch latest raw PVC metric from agent_metrics.
-        // The pvcs table used_bytes may be 0 if the edge function is an older version.
-        // Falling back to the raw agent payload guarantees we show real usage.
-        const { data: rawMetrics, error: rawError } = await supabase
-          .from('agent_metrics')
-          .select('metric_data, collected_at')
-          .eq('cluster_id', selectedClusterId)
-          .eq('metric_type', 'pvcs')
-          .order('collected_at', { ascending: false })
-          .limit(1);
+        // Source 1: pvcs table (already has used_bytes if edge function is up-to-date)
+        // Source 2: pvc_usage_history — flat table, easiest to query, most recent non-zero per PVC
+        // Source 3: agent_metrics — raw JSON payload as last resort
+        const [usageHistoryResult, rawMetricsResult] = await Promise.all([
+          (supabase as any)
+            .from('pvc_usage_history')
+            .select('pvc_name, namespace, used_bytes, collected_at')
+            .eq('cluster_id', selectedClusterId)
+            .gt('used_bytes', 0)
+            .order('collected_at', { ascending: false })
+            .limit(200),
+          supabase
+            .from('agent_metrics')
+            .select('metric_data, collected_at')
+            .eq('cluster_id', selectedClusterId)
+            .eq('metric_type', 'pvcs')
+            .order('collected_at', { ascending: false })
+            .limit(1),
+        ]);
 
-        if (rawError) console.error('[Storage] agent_metrics query error:', rawError);
+        if (usageHistoryResult.error) console.error('[Storage] pvc_usage_history error:', usageHistoryResult.error);
+        if (rawMetricsResult.error) console.error('[Storage] agent_metrics error:', rawMetricsResult.error);
 
-        const latestMetric = rawMetrics?.[0];
-        const metricPVCs: Array<{ name: string; namespace: string; used_bytes?: number; capacity_bytes?: number }> =
+        // Build usage lookup from pvc_usage_history (most recent non-zero per PVC)
+        const historyLookup = new Map<string, number>();
+        for (const record of (usageHistoryResult.data || [])) {
+          const key = `${record.namespace}/${record.pvc_name}`;
+          if (!historyLookup.has(key)) {
+            historyLookup.set(key, record.used_bytes);
+          }
+        }
+
+        // Build usage lookup from agent_metrics raw payload (last resort)
+        const latestMetric = rawMetricsResult.data?.[0];
+        const metricPVCs: Array<{ name: string; namespace: string; used_bytes?: number }> =
           (latestMetric?.metric_data as any)?.pvcs ?? [];
 
-        console.log('[Storage] pvcs from DB:', pvcsData?.map(p => ({ n: p.name, used: p.used_bytes })));
-        console.log('[Storage] agent_metrics pvcs (collected_at:', latestMetric?.collected_at, '):', metricPVCs.map(p => ({ n: p.name, used: p.used_bytes })));
+        const pvcsSummary = pvcsData.map(p => `${p.name}=${p.used_bytes}`).join(', ');
+        const historySummary = historyLookup.size > 0
+          ? [...historyLookup.entries()].map(([k, v]) => `${k.split('/')[1]}=${v}`).join(', ')
+          : 'vazio';
+        const metricsSummary = metricPVCs.length > 0
+          ? metricPVCs.map(p => `${p.name}=${p.used_bytes ?? 0}`).join(', ')
+          : 'vazio';
 
-        // Merge real usage into the pvcs rows
-        const enrichedPVCs = mergeUsageFromMetrics(pvcsData as PVC[], metricPVCs);
+        console.log('[Storage] pvcs table:', pvcsSummary);
+        console.log('[Storage] pvc_usage_history lookup:', historySummary);
+        console.log('[Storage] agent_metrics pvcs (', latestMetric?.collected_at, '):', metricsSummary);
+
+        setDebugSources({ pvcsTable: pvcsSummary, history: historySummary, metrics: metricsSummary });
+
+        // Merge: pvc_usage_history wins over pvcs.used_bytes, agent_metrics is last resort
+        const enrichedPVCs = (pvcsData as PVC[]).map(pvc => {
+          const key = `${pvc.namespace}/${pvc.name}`;
+          // Try pvc_usage_history first
+          const historyUsed = historyLookup.get(key);
+          if (historyUsed && historyUsed > 0) {
+            return { ...pvc, used_bytes: historyUsed };
+          }
+          // Try agent_metrics raw payload
+          const metricEntry = metricPVCs.find(m => m.namespace === pvc.namespace && m.name === pvc.name);
+          if (metricEntry && (metricEntry.used_bytes ?? 0) > 0) {
+            return { ...pvc, used_bytes: metricEntry.used_bytes! };
+          }
+          // Fall back to whatever pvcs table has
+          return pvc;
+        });
 
         const allocatedBytes = enrichedPVCs.reduce((sum, pvc) => sum + (pvc.requested_bytes || 0), 0);
         const usedBytes = enrichedPVCs.reduce((sum, pvc) => sum + (pvc.used_bytes || 0), 0);
@@ -224,6 +244,13 @@ const Storage = () => {
           </div>
         ) : (
           <div className="space-y-6">
+            {debugSources && (
+              <div className="text-[11px] font-mono bg-muted/30 border border-border/40 rounded-lg px-3 py-2 text-muted-foreground space-y-0.5">
+                <p><span className="text-foreground/60">pvcs table:</span> {debugSources.pvcsTable}</p>
+                <p><span className="text-foreground/60">usage history:</span> {debugSources.history}</p>
+                <p><span className="text-foreground/60">agent metrics:</span> {debugSources.metrics}</p>
+              </div>
+            )}
             <div className="animate-in fade-in slide-in-from-bottom-5 duration-700" style={{ animationDelay: '100ms' }}>
               <StorageChart
                 total={storageMetrics.total}

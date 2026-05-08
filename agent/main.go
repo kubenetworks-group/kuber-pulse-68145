@@ -18,8 +18,8 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -28,7 +28,7 @@ import (
 )
 
 // Agent version - update this when releasing new versions
-const AgentVersion = "v0.1.64"
+const AgentVersion = "v0.1.71"
 
 // ---------------------------------------------
 // PVC USAGE VIA DF COMMAND (EXEC IN CONTAINERS)
@@ -105,15 +105,9 @@ func findPVCMountInPod(pod *corev1.Pod, pvcName string) (containerName, mountPat
 	return "", "", false
 }
 
-// execDfInContainer executes df -Pk (POSIX portable, 1K-blocks) inside a container.
-// df -Pk is supported by virtually every df implementation (GNU, busybox, alpine).
-// Output format (fixed columns):
-//   Filesystem     1024-blocks      Used Available Capacity Mounted on
-//   /dev/sda1         10485760   2097152   8388608      20% /prometheus
-func execDfInContainer(clientset *kubernetes.Clientset, restConfig *rest.Config,
-	namespace, podName, containerName, mountPath string) (*PVCDfUsage, error) {
-
-	log.Printf("   💾 exec df -Pk in %s/%s (container: %s, mount: %s)", namespace, podName, containerName, mountPath)
+// execCommandInContainer runs a command in a pod container and returns stdout.
+func execCommandInContainer(clientset *kubernetes.Clientset, restConfig *rest.Config,
+	namespace, podName, containerName string, command []string) (string, error) {
 
 	req := clientset.CoreV1().RESTClient().Post().
 		Resource("pods").
@@ -122,14 +116,14 @@ func execDfInContainer(clientset *kubernetes.Clientset, restConfig *rest.Config,
 		SubResource("exec").
 		VersionedParams(&corev1.PodExecOptions{
 			Container: containerName,
-			Command:   []string{"df", "-Pk", mountPath},
+			Command:   command,
 			Stdout:    true,
 			Stderr:    true,
 		}, scheme.ParameterCodec)
 
 	executor, err := remotecommand.NewSPDYExecutor(restConfig, "POST", req.URL())
 	if err != nil {
-		return nil, fmt.Errorf("failed to create executor: %v", err)
+		return "", fmt.Errorf("failed to create executor: %v", err)
 	}
 
 	var stdout, stderr bytes.Buffer
@@ -143,15 +137,88 @@ func execDfInContainer(clientset *kubernetes.Clientset, restConfig *rest.Config,
 		errStr := err.Error()
 		stderrStr := stderr.String()
 		if strings.Contains(errStr, "forbidden") || strings.Contains(errStr, "cannot create resource") {
-			return nil, fmt.Errorf("forbidden: %v", err)
+			return "", fmt.Errorf("forbidden: %v", err)
 		}
 		if strings.Contains(errStr, "executable file not found") || strings.Contains(stderrStr, "not found") {
-			return nil, fmt.Errorf("df not available in container")
+			return "", fmt.Errorf("command not available in container")
 		}
-		return nil, fmt.Errorf("exec failed: %v (stderr: %s)", err, stderrStr)
+		return "", fmt.Errorf("exec failed: %v (stderr: %s)", err, stderrStr)
+	}
+	return stdout.String(), nil
+}
+
+// execDuInContainer runs "du -sk <mountPath>" and returns used bytes.
+// This measures actual file sizes inside the directory — correct for local-path/hostPath PVCs
+// where df -Pk shows the node's root filesystem (overlay), not the PVC's own usage.
+func execDuInContainer(clientset *kubernetes.Clientset, restConfig *rest.Config,
+	namespace, podName, containerName, mountPath string, requestedBytes int64) (*PVCDfUsage, error) {
+
+	out, err := execCommandInContainer(clientset, restConfig, namespace, podName, containerName,
+		[]string{"du", "-sk", mountPath})
+	if err != nil {
+		return nil, fmt.Errorf("du -sk failed: %v", err)
 	}
 
-	return parseDfPosixOutput(stdout.String(), mountPath)
+	// du -sk output: "<1K-blocks>\t<path>"
+	fields := strings.Fields(strings.TrimSpace(out))
+	if len(fields) < 1 {
+		return nil, fmt.Errorf("unexpected du output: %q", out)
+	}
+	used1K, err := strconv.ParseInt(fields[0], 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("could not parse du output %q: %v", out, err)
+	}
+	const kib = int64(1024)
+	usedBytes := used1K * kib
+	// For du, we don't have total/available — use requested as capacity
+	availBytes := int64(0)
+	if requestedBytes > usedBytes {
+		availBytes = requestedBytes - usedBytes
+	}
+	pct := 0
+	if requestedBytes > 0 {
+		pct = int(float64(usedBytes) / float64(requestedBytes) * 100)
+	}
+	log.Printf("   📁 du -sk %s: used=%.2fGB (of %.2fGB requested)",
+		mountPath, float64(usedBytes)/(1024*1024*1024), float64(requestedBytes)/(1024*1024*1024))
+	return &PVCDfUsage{
+		MountPath:      mountPath,
+		TotalBytes:     requestedBytes,
+		UsedBytes:      usedBytes,
+		AvailableBytes: availBytes,
+		UsePercent:     pct,
+	}, nil
+}
+
+// execDfInContainer executes df -Pk (POSIX portable, 1K-blocks) inside a container.
+// If df reports a pseudo-filesystem (overlay, tmpfs) — common for local-path-provisioner PVCs
+// where the node directory is bind-mounted — falls back to "du -sk" to measure actual file sizes.
+// Output format (fixed columns):
+//
+//	Filesystem     1024-blocks      Used Available Capacity Mounted on
+//	/dev/sda1         10485760   2097152   8388608      20% /prometheus
+func execDfInContainer(clientset *kubernetes.Clientset, restConfig *rest.Config,
+	namespace, podName, containerName, mountPath string, requestedBytes int64) (*PVCDfUsage, error) {
+
+	log.Printf("   💾 exec df -Pk in %s/%s (container: %s, mount: %s)", namespace, podName, containerName, mountPath)
+
+	out, err := execCommandInContainer(clientset, restConfig, namespace, podName, containerName,
+		[]string{"df", "-Pk", mountPath})
+	if err != nil {
+		return nil, err
+	}
+
+	usage, dfErr := parseDfPosixOutput(out, mountPath)
+	if dfErr != nil {
+		// If df returned a pseudo-filesystem (overlay/tmpfs), fall back to du -sk
+		// which directly sums file sizes — accurate for local-path-provisioner PVCs.
+		if strings.Contains(dfErr.Error(), "pseudo-filesystem") {
+			log.Printf("   🔄 df shows pseudo-filesystem for %s — falling back to du -sk", mountPath)
+			return execDuInContainer(clientset, restConfig, namespace, podName, containerName, mountPath, requestedBytes)
+		}
+		return nil, dfErr
+	}
+	return usage, nil
 }
 
 // pseudoFilesystems are filesystem types that represent the container's root or
@@ -165,8 +232,10 @@ var pseudoFilesystems = map[string]bool{
 
 // parseDfPosixOutput parses df -Pk output (POSIX, 1K-block columns).
 // Expected header + 1 data line:
-//   Filesystem     1024-blocks      Used Available Capacity Mounted on
-//   /dev/sda1         10485760   2097152   8388608      20% /prometheus
+//
+//	Filesystem     1024-blocks      Used Available Capacity Mounted on
+//	/dev/sda1         10485760   2097152   8388608      20% /prometheus
+//
 // All values are in 1024-byte blocks → multiply by 1024 to get bytes.
 // Returns an error if the filesystem is pseudo (overlay, tmpfs, etc.),
 // ensuring we only report usage from real block-device-backed PVCs.
@@ -232,9 +301,10 @@ func parseDfPosixOutput(output, mountPath string) (*PVCDfUsage, error) {
 	return nil, fmt.Errorf("could not parse df output for mount path %s", mountPath)
 }
 
-// collectPVCUsageViaDf tries to collect PVC usage by executing df in containers
+// collectPVCUsageViaDf tries to collect PVC usage by executing df (with du fallback) in containers.
+// requestedBytes is the PVC's requested capacity, used as the "total" when du is the source.
 func collectPVCUsageViaDf(clientset *kubernetes.Clientset, restConfig *rest.Config,
-	pvcNamespace, pvcName string) (*PVCDfUsage, error) {
+	pvcNamespace, pvcName string, requestedBytes int64) (*PVCDfUsage, error) {
 
 	// Skip immediately if we already know exec is forbidden (RBAC not applied yet)
 	if atomic.LoadInt32(&dfExecForbidden) == 1 {
@@ -288,7 +358,7 @@ func collectPVCUsageViaDf(clientset *kubernetes.Clientset, restConfig *rest.Conf
 		}
 
 		// Try to exec df in this container
-		usage, err := execDfInContainer(clientset, restConfig, pvcNamespace, pod.Name, containerName, mountPath)
+		usage, err := execDfInContainer(clientset, restConfig, pvcNamespace, pod.Name, containerName, mountPath, requestedBytes)
 		if err != nil {
 			errStr := err.Error()
 			// Detect RBAC forbidden — set global flag so all future PVCs skip exec silently
@@ -366,7 +436,7 @@ func main() {
 	metricsConfig.TLSClientConfig.Insecure = true
 	metricsConfig.TLSClientConfig.CAData = nil
 	metricsConfig.TLSClientConfig.CAFile = ""
-	
+
 	metricsClient, err := metricsv.NewForConfig(&metricsConfig)
 	if err != nil {
 		log.Printf("⚠️  Failed to create Metrics client: %v", err)
@@ -529,14 +599,14 @@ func collectPreviousLogs(clientset *kubernetes.Clientset) map[string]interface{}
 			}
 
 			logsData = append(logsData, map[string]interface{}{
-				"pod":             pod.Name,
-				"namespace":       pod.Namespace,
-				"container":       cs.Name,
-				"restart_count":   cs.RestartCount,
-				"exit_reason":     exitReason,
-				"exit_code":       exitCode,
+				"pod":              pod.Name,
+				"namespace":        pod.Namespace,
+				"container":        cs.Name,
+				"restart_count":    cs.RestartCount,
+				"exit_reason":      exitReason,
+				"exit_code":        exitCode,
 				"last_finished_at": lastFinishedAt,
-				"logs":            buf.String(),
+				"logs":             buf.String(),
 			})
 		}
 	}
@@ -596,9 +666,9 @@ type NodeStats struct {
 }
 
 type PodStats struct {
-	PodRef         PodReference  `json:"podRef"`
-	VolumeStats    []VolumeStats `json:"volume,omitempty"`
-	EphemeralStorage *FsStats    `json:"ephemeral-storage,omitempty"`
+	PodRef           PodReference  `json:"podRef"`
+	VolumeStats      []VolumeStats `json:"volume,omitempty"`
+	EphemeralStorage *FsStats      `json:"ephemeral-storage,omitempty"`
 }
 
 type PodReference struct {
@@ -726,16 +796,16 @@ func collectPVCVolumeStats(clientset *kubernetes.Clientset) map[string]PVCVolume
 			for _, vol := range pod.VolumeStats {
 				nodeVolumes++
 				totalVolumes++
-				
+
 				if vol.PVCRef == nil {
 					continue // Skip volumes without PVC reference (emptyDir, configMap, etc.)
 				}
 
 				nodePVCVolumes++
 				totalPVCVolumes++
-				
+
 				key := vol.PVCRef.Namespace + "/" + vol.PVCRef.Name
-				
+
 				usage := PVCVolumeUsage{}
 				if vol.UsedBytes != nil {
 					usage.UsedBytes = int64(*vol.UsedBytes)
@@ -759,8 +829,8 @@ func collectPVCVolumeStats(clientset *kubernetes.Clientset) map[string]PVCVolume
 				pvcUsage[key] = usage
 			}
 		}
-		
-		log.Printf("   📦 Node %s: %d pods, %d volumes, %d PVC volumes", 
+
+		log.Printf("   📦 Node %s: %d pods, %d volumes, %d PVC volumes",
 			node.Name, len(summary.Pods), nodeVolumes, nodePVCVolumes)
 	}
 
@@ -797,7 +867,7 @@ func collectPVCs(clientset *kubernetes.Clientset, restConfig *rest.Config) []map
 	}
 
 	var pvcDetails []map[string]interface{}
-	
+
 	// Track PVCs that need df fallback (limit to avoid too many execs)
 	dfFallbackCount := 0
 	maxDfFallbacks := 10 // Maximum exec calls per collection cycle
@@ -814,7 +884,7 @@ func collectPVCs(clientset *kubernetes.Clientset, restConfig *rest.Config) []map
 		capacityBytes := int64(0)
 		actualCapacity := int64(0)
 		usageSource := "none"
-		
+
 		// Get actual capacity from the bound PV
 		if pvc.Spec.VolumeName != "" {
 			if pv, exists := pvMap[pvc.Spec.VolumeName]; exists {
@@ -830,17 +900,17 @@ func collectPVCs(clientset *kubernetes.Clientset, restConfig *rest.Config) []map
 			usedBytes = stats.UsedBytes
 			capacityBytes = stats.CapacityBytes
 			usageSource = "kubelet"
-			log.Printf("📊 PVC %s: real usage from Kubelet = %.2f GB / %.2f GB", 
+			log.Printf("📊 PVC %s: real usage from Kubelet = %.2f GB / %.2f GB",
 				pvcKey, float64(usedBytes)/(1024*1024*1024), float64(capacityBytes)/(1024*1024*1024))
 		} else if restConfig != nil && dfFallbackCount < maxDfFallbacks && pvc.Status.Phase == corev1.ClaimBound {
 			// Fallback: Try df command via exec if Kubelet stats returned 0 or missing
-			dfUsage, err := collectPVCUsageViaDf(clientset, restConfig, pvc.Namespace, pvc.Name)
+			dfUsage, err := collectPVCUsageViaDf(clientset, restConfig, pvc.Namespace, pvc.Name, requestedBytes)
 			if err == nil && dfUsage.UsedBytes > 0 {
 				usedBytes = dfUsage.UsedBytes
 				capacityBytes = dfUsage.TotalBytes
 				usageSource = "df_exec"
 				dfFallbackCount++
-				log.Printf("📊 PVC %s: real usage from df exec = %.2f GB / %.2f GB", 
+				log.Printf("📊 PVC %s: real usage from df exec = %.2f GB / %.2f GB",
 					pvcKey, float64(usedBytes)/(1024*1024*1024), float64(capacityBytes)/(1024*1024*1024))
 			} else {
 				// No data available from df either
@@ -866,7 +936,7 @@ func collectPVCs(clientset *kubernetes.Clientset, restConfig *rest.Config) []map
 			if actualCapacity > 0 && capacityBytes == 0 {
 				capacityBytes = actualCapacity
 			}
-			
+
 			// For fallback, we don't have real usage data, so set to 0
 			usedBytes = 0
 		}
@@ -888,14 +958,14 @@ func collectPVCs(clientset *kubernetes.Clientset, restConfig *rest.Config) []map
 			"created_at":      pvc.CreationTimestamp.Time,
 			"usage_source":    usageSource, // Track how we got usage data
 		})
-		
+
 		// Mark PV as bound
 		if pvc.Spec.VolumeName != "" {
 			boundPVs[pvc.Spec.VolumeName] = true
 		}
 	}
 
-	log.Printf("📦 Collected %d PVCs (Kubelet stats: %d, df fallback: %d)", 
+	log.Printf("📦 Collected %d PVCs (Kubelet stats: %d, df fallback: %d)",
 		len(pvcDetails), len(pvcVolumeStats), dfFallbackCount)
 	return pvcDetails
 }
@@ -952,16 +1022,16 @@ func collectStandalonePVs(clientset *kubernetes.Clientset) []map[string]interfac
 		}
 
 		pvDetails = append(pvDetails, map[string]interface{}{
-			"name":                 pv.Name,
-			"status":               status,
-			"capacity_bytes":       capacityBytes,
-			"storage_class":        storageClassName,
-			"reclaim_policy":       reclaimPolicy,
-			"access_modes":         accessModes,
-			"volume_mode":          volumeMode,
-			"claim_ref_namespace":  claimRefNamespace,
-			"claim_ref_name":       claimRefName,
-			"created_at":           pv.CreationTimestamp.Time,
+			"name":                pv.Name,
+			"status":              status,
+			"capacity_bytes":      capacityBytes,
+			"storage_class":       storageClassName,
+			"reclaim_policy":      reclaimPolicy,
+			"access_modes":        accessModes,
+			"volume_mode":         volumeMode,
+			"claim_ref_namespace": claimRefNamespace,
+			"claim_ref_name":      claimRefName,
+			"created_at":          pv.CreationTimestamp.Time,
 		})
 	}
 
@@ -1076,11 +1146,11 @@ func collectNodeStorageMetrics(clientset *kubernetes.Clientset) map[string]inter
 			float64(nodeAvailable)/(1024*1024*1024))
 
 		nodeStorageDetails = append(nodeStorageDetails, map[string]interface{}{
-			"node_name":         node.Name,
-			"capacity_bytes":    nodeCapacity,
-			"used_bytes":        nodeUsed,
-			"available_bytes":   nodeAvailable,
-			"source":            source,
+			"node_name":       node.Name,
+			"capacity_bytes":  nodeCapacity,
+			"used_bytes":      nodeUsed,
+			"available_bytes": nodeAvailable,
+			"source":          source,
 		})
 	}
 
@@ -1103,17 +1173,17 @@ func collectNodeStorageMetrics(clientset *kubernetes.Clientset) map[string]inter
 // ---------------------------------------------
 func collectSecurityData(clientset *kubernetes.Clientset) map[string]interface{} {
 	ctx := context.Background()
-	
+
 	// Initialize RBAC data
 	rbacData := map[string]interface{}{
-		"cluster_roles_count":          0,
-		"cluster_role_bindings_count":  0,
-		"roles_count":                  0,
-		"role_bindings_count":          0,
-		"has_rbac":                     false,
-		"cluster_roles":                []string{},
+		"cluster_roles_count":         0,
+		"cluster_role_bindings_count": 0,
+		"roles_count":                 0,
+		"role_bindings_count":         0,
+		"has_rbac":                    false,
+		"cluster_roles":               []string{},
 	}
-	
+
 	// Initialize security data with all fields
 	securityData := map[string]interface{}{
 		"rbac":               rbacData,
@@ -1129,7 +1199,7 @@ func collectSecurityData(clientset *kubernetes.Clientset) map[string]interface{}
 	log.Printf("🔍 Collecting RBAC data...")
 	clusterRolesCount := 0
 	clusterRoleBindingsCount := 0
-	
+
 	log.Printf("🔍 Attempting to list ClusterRoles...")
 	clusterRoles, err := clientset.RbacV1().ClusterRoles().List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -1170,11 +1240,11 @@ func collectSecurityData(clientset *kubernetes.Clientset) map[string]interface{}
 	} else {
 		log.Printf("✅ Found %d namespaces to scan", len(namespaces.Items))
 	}
-	
+
 	totalRoles := 0
 	totalRoleBindings := 0
 	rolesByNamespace := make(map[string]int)
-	
+
 	for _, ns := range namespaces.Items {
 		roles, err := clientset.RbacV1().Roles(ns.Name).List(ctx, metav1.ListOptions{})
 		if err != nil {
@@ -1193,27 +1263,27 @@ func collectSecurityData(clientset *kubernetes.Clientset) map[string]interface{}
 			totalRoleBindings += len(roleBindings.Items)
 		}
 	}
-	
+
 	hasRbac := (clusterRolesCount > 0 || clusterRoleBindingsCount > 0 || totalRoles > 0 || totalRoleBindings > 0)
-	log.Printf("📊 RBAC scan complete: %d ClusterRoles, %d ClusterRoleBindings, %d Roles, %d RoleBindings, has_rbac=%v", 
+	log.Printf("📊 RBAC scan complete: %d ClusterRoles, %d ClusterRoleBindings, %d Roles, %d RoleBindings, has_rbac=%v",
 		clusterRolesCount, clusterRoleBindingsCount, totalRoles, totalRoleBindings, hasRbac)
-	
+
 	if len(rolesByNamespace) > 0 {
 		log.Printf("📋 Roles by namespace: %v", rolesByNamespace)
 	}
-	
+
 	// Update RBAC data with all counts
 	rbacData["roles_count"] = totalRoles
 	rbacData["role_bindings_count"] = totalRoleBindings
 	rbacData["roles_by_namespace"] = rolesByNamespace
 	rbacData["has_rbac"] = hasRbac
-	
+
 	// Update the security data with the complete RBAC data
 	securityData["rbac"] = rbacData
-	
+
 	// Debug: Print final RBAC data
 	log.Printf("🔒 Final RBAC data: cluster_roles=%d, cluster_role_bindings=%d, roles=%d, role_bindings=%d, has_rbac=%v",
-		rbacData["cluster_roles_count"], rbacData["cluster_role_bindings_count"], 
+		rbacData["cluster_roles_count"], rbacData["cluster_role_bindings_count"],
 		rbacData["roles_count"], rbacData["role_bindings_count"], rbacData["has_rbac"])
 
 	// 2. Collect NetworkPolicies - iterate through ALL namespaces
@@ -1223,11 +1293,11 @@ func collectSecurityData(clientset *kubernetes.Clientset) map[string]interface{}
 		"has_network_policies":     false,
 		"policies":                 []map[string]interface{}{},
 	}
-	
+
 	totalNetworkPolicies := 0
 	namespacesWithPolicies := 0
 	networkPolicyDetails := []map[string]interface{}{}
-	
+
 	log.Printf("🔍 Scanning NetworkPolicies in %d namespaces...", len(namespaces.Items))
 	for _, ns := range namespaces.Items {
 		netPolicies, err := clientset.NetworkingV1().NetworkPolicies(ns.Name).List(ctx, metav1.ListOptions{})
@@ -1249,7 +1319,7 @@ func collectSecurityData(clientset *kubernetes.Clientset) map[string]interface{}
 		}
 	}
 	log.Printf("📊 NetworkPolicies scan complete: found %d policies in %d namespaces", totalNetworkPolicies, namespacesWithPolicies)
-	
+
 	networkPoliciesData["total_count"] = totalNetworkPolicies
 	networkPoliciesData["namespaces_with_policies"] = namespacesWithPolicies
 	networkPoliciesData["has_network_policies"] = totalNetworkPolicies > 0
@@ -1262,7 +1332,7 @@ func collectSecurityData(clientset *kubernetes.Clientset) map[string]interface{}
 		"types":       map[string]int{},
 		"has_secrets": false,
 	}
-	
+
 	log.Printf("🔍 Collecting Secrets data from %d namespaces...", len(namespaces.Items))
 	totalSecrets := 0
 	secretTypes := make(map[string]int)
@@ -1286,7 +1356,7 @@ func collectSecurityData(clientset *kubernetes.Clientset) map[string]interface{}
 	if len(secretsByNamespace) > 0 {
 		log.Printf("📋 Secrets by namespace: %v", secretsByNamespace)
 	}
-	
+
 	secretsData["total_count"] = totalSecrets
 	secretsData["types"] = secretTypes
 	secretsData["has_secrets"] = totalSecrets > 0
@@ -1298,7 +1368,7 @@ func collectSecurityData(clientset *kubernetes.Clientset) map[string]interface{}
 		"total_count": 0,
 		"has_quotas":  false,
 	}
-	
+
 	log.Printf("🔍 Collecting ResourceQuotas...")
 	totalQuotas := 0
 	for _, ns := range namespaces.Items {
@@ -1310,7 +1380,7 @@ func collectSecurityData(clientset *kubernetes.Clientset) map[string]interface{}
 		totalQuotas += len(quotas.Items)
 	}
 	log.Printf("📊 ResourceQuotas scan complete: found %d quotas", totalQuotas)
-	
+
 	resourceQuotasData["total_count"] = totalQuotas
 	resourceQuotasData["has_quotas"] = totalQuotas > 0
 	securityData["resource_quotas"] = resourceQuotasData
@@ -1320,7 +1390,7 @@ func collectSecurityData(clientset *kubernetes.Clientset) map[string]interface{}
 		"total_count":      0,
 		"has_limit_ranges": false,
 	}
-	
+
 	totalLimitRanges := 0
 	for _, ns := range namespaces.Items {
 		limitRanges, err := clientset.CoreV1().LimitRanges(ns.Name).List(ctx, metav1.ListOptions{})
@@ -1328,14 +1398,14 @@ func collectSecurityData(clientset *kubernetes.Clientset) map[string]interface{}
 			totalLimitRanges += len(limitRanges.Items)
 		}
 	}
-	
+
 	limitRangesData["total_count"] = totalLimitRanges
 	limitRangesData["has_limit_ranges"] = totalLimitRanges > 0
 	securityData["limit_ranges"] = limitRangesData
 
 	// 6. Analyze Pod Security (containers running as root, privileged, etc.)
 	podSecurityData := map[string]interface{}{
-		"total_pods":                   0,
+		"total_pods":                  0,
 		"pods_with_security_context":  0,
 		"pods_running_as_non_root":    0,
 		"pods_with_resource_limits":   0,
@@ -1344,7 +1414,7 @@ func collectSecurityData(clientset *kubernetes.Clientset) map[string]interface{}
 		"security_context_percentage": float64(0),
 		"resource_limits_percentage":  float64(0),
 	}
-	
+
 	pods, _ := clientset.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
 	podsWithSecurityContext := 0
 	podsRunningAsNonRoot := 0
@@ -1427,14 +1497,14 @@ func collectSecurityData(clientset *kubernetes.Clientset) map[string]interface{}
 // detectIngressController identifies the ingress controller type and checks its RBAC configuration
 func detectIngressController(clientset *kubernetes.Clientset, ctx context.Context) map[string]interface{} {
 	result := map[string]interface{}{
-		"type":             "unknown",
-		"detected":         false,
-		"namespace":        "",
-		"has_rbac":         false,
-		"rbac_details":     map[string]interface{}{},
-		"deployment_name":  "",
-		"service_account":  "",
-		"version":          "",
+		"type":            "unknown",
+		"detected":        false,
+		"namespace":       "",
+		"has_rbac":        false,
+		"rbac_details":    map[string]interface{}{},
+		"deployment_name": "",
+		"service_account": "",
+		"version":         "",
 	}
 
 	// Common ingress controller identifiers with more label options
@@ -1509,24 +1579,24 @@ func detectIngressController(clientset *kubernetes.Clientset, ctx context.Contex
 					result["detected"] = true
 					result["namespace"] = ns
 					result["deployment_name"] = deploy.Name
-					
+
 					if deploy.Spec.Template.Spec.ServiceAccountName != "" {
 						result["service_account"] = deploy.Spec.Template.Spec.ServiceAccountName
 					}
-					
+
 					if len(deploy.Spec.Template.Spec.Containers) > 0 {
 						result["version"] = deploy.Spec.Template.Spec.Containers[0].Image
 					}
-					
+
 					log.Printf("✅ Detected %s ingress controller in namespace %s (deployment: %s, label: %s)", ic.name, ns, deploy.Name, labelSelector)
-					
+
 					rbacDetails := checkIngressControllerRBAC(clientset, ctx, ns, result["service_account"].(string), ic.name)
 					result["has_rbac"] = rbacDetails["has_proper_rbac"]
 					result["rbac_details"] = rbacDetails
-					
+
 					return result
 				}
-				
+
 				// Check DaemonSets
 				daemonsets, err := clientset.AppsV1().DaemonSets(ns).List(ctx, metav1.ListOptions{
 					LabelSelector: labelSelector,
@@ -1537,21 +1607,21 @@ func detectIngressController(clientset *kubernetes.Clientset, ctx context.Contex
 					result["detected"] = true
 					result["namespace"] = ns
 					result["deployment_name"] = ds.Name + " (DaemonSet)"
-					
+
 					if ds.Spec.Template.Spec.ServiceAccountName != "" {
 						result["service_account"] = ds.Spec.Template.Spec.ServiceAccountName
 					}
-					
+
 					if len(ds.Spec.Template.Spec.Containers) > 0 {
 						result["version"] = ds.Spec.Template.Spec.Containers[0].Image
 					}
-					
+
 					log.Printf("✅ Detected %s ingress controller (DaemonSet) in namespace %s", ic.name, ns)
-					
+
 					rbacDetails := checkIngressControllerRBAC(clientset, ctx, ns, result["service_account"].(string), ic.name)
 					result["has_rbac"] = rbacDetails["has_proper_rbac"]
 					result["rbac_details"] = rbacDetails
-					
+
 					return result
 				}
 			}
@@ -1573,27 +1643,27 @@ func detectIngressController(clientset *kubernetes.Clientset, ctx context.Contex
 							result["detected"] = true
 							result["namespace"] = ns.Name
 							result["deployment_name"] = deploy.Name
-							
+
 							if deploy.Spec.Template.Spec.ServiceAccountName != "" {
 								result["service_account"] = deploy.Spec.Template.Spec.ServiceAccountName
 							}
-							
+
 							if len(deploy.Spec.Template.Spec.Containers) > 0 {
 								result["version"] = deploy.Spec.Template.Spec.Containers[0].Image
 							}
-							
+
 							log.Printf("✅ Detected %s ingress controller by name pattern in namespace %s (deployment: %s)", ic.name, ns.Name, deploy.Name)
-							
+
 							rbacDetails := checkIngressControllerRBAC(clientset, ctx, ns.Name, result["service_account"].(string), ic.name)
 							result["has_rbac"] = rbacDetails["has_proper_rbac"]
 							result["rbac_details"] = rbacDetails
-							
+
 							return result
 						}
 					}
 				}
 			}
-			
+
 			// Get all daemonsets in namespace
 			daemonsets, err := clientset.AppsV1().DaemonSets(ns.Name).List(ctx, metav1.ListOptions{})
 			if err == nil {
@@ -1604,21 +1674,21 @@ func detectIngressController(clientset *kubernetes.Clientset, ctx context.Contex
 							result["detected"] = true
 							result["namespace"] = ns.Name
 							result["deployment_name"] = ds.Name + " (DaemonSet)"
-							
+
 							if ds.Spec.Template.Spec.ServiceAccountName != "" {
 								result["service_account"] = ds.Spec.Template.Spec.ServiceAccountName
 							}
-							
+
 							if len(ds.Spec.Template.Spec.Containers) > 0 {
 								result["version"] = ds.Spec.Template.Spec.Containers[0].Image
 							}
-							
+
 							log.Printf("✅ Detected %s ingress controller (DaemonSet) by name pattern in namespace %s", ic.name, ns.Name)
-							
+
 							rbacDetails := checkIngressControllerRBAC(clientset, ctx, ns.Name, result["service_account"].(string), ic.name)
 							result["has_rbac"] = rbacDetails["has_proper_rbac"]
 							result["rbac_details"] = rbacDetails
-							
+
 							return result
 						}
 					}
@@ -1634,7 +1704,7 @@ func detectIngressController(clientset *kubernetes.Clientset, ctx context.Contex
 		for _, ic := range ingressClasses.Items {
 			controllerName := ic.Spec.Controller
 			log.Printf("📋 Found IngressClass: %s with controller: %s", ic.Name, controllerName)
-			
+
 			controllerLower := strings.ToLower(controllerName)
 			if strings.Contains(controllerLower, "nginx") {
 				result["type"] = "nginx"
@@ -1657,7 +1727,7 @@ func detectIngressController(clientset *kubernetes.Clientset, ctx context.Contex
 			}
 			result["detected"] = true
 			result["deployment_name"] = ic.Name + " (IngressClass)"
-			
+
 			log.Printf("✅ Detected ingress controller from IngressClass: %s -> %s", ic.Name, result["type"])
 			break
 		}
@@ -1684,7 +1754,7 @@ func detectIngressController(clientset *kubernetes.Clientset, ctx context.Contex
 					result["deployment_name"] = className + " (from annotation)"
 					break
 				}
-				
+
 				// Check spec.ingressClassName
 				if ing.Spec.IngressClassName != nil {
 					log.Printf("📋 Found Ingress %s/%s with ingressClassName: %s", ing.Namespace, ing.Name, *ing.Spec.IngressClassName)
@@ -1714,13 +1784,13 @@ func detectIngressController(clientset *kubernetes.Clientset, ctx context.Contex
 // checkIngressControllerRBAC verifies RBAC configuration for the ingress controller
 func checkIngressControllerRBAC(clientset *kubernetes.Clientset, ctx context.Context, namespace, serviceAccount, controllerType string) map[string]interface{} {
 	rbacDetails := map[string]interface{}{
-		"has_proper_rbac":         false,
-		"cluster_role":            "",
-		"cluster_role_binding":    "",
-		"role":                    "",
-		"role_binding":            "",
-		"missing_permissions":     []string{},
-		"warnings":                []string{},
+		"has_proper_rbac":      false,
+		"cluster_role":         "",
+		"cluster_role_binding": "",
+		"role":                 "",
+		"role_binding":         "",
+		"missing_permissions":  []string{},
+		"warnings":             []string{},
 	}
 
 	if serviceAccount == "" {
@@ -1742,7 +1812,7 @@ func checkIngressControllerRBAC(clientset *kubernetes.Clientset, ctx context.Con
 				foundClusterRoleBinding = true
 				rbacDetails["cluster_role_binding"] = crb.Name
 				rbacDetails["cluster_role"] = crb.RoleRef.Name
-				
+
 				// Verify the ClusterRole has required permissions
 				clusterRole, err := clientset.RbacV1().ClusterRoles().Get(ctx, crb.RoleRef.Name, metav1.GetOptions{})
 				if err == nil {
@@ -1786,14 +1856,14 @@ func checkIngressControllerRBAC(clientset *kubernetes.Clientset, ctx context.Con
 // checkRequiredPermissions verifies that the RBAC rules contain required permissions for the ingress controller
 func checkRequiredPermissions(rules []rbacv1.PolicyRule, controllerType string) []string {
 	missing := []string{}
-	
+
 	// Common required permissions for ingress controllers
 	requiredResources := map[string][]string{
-		"": {"services", "endpoints", "secrets", "configmaps", "pods"},
-		"networking.k8s.io": {"ingresses", "ingressclasses"},
+		"":                    {"services", "endpoints", "secrets", "configmaps", "pods"},
+		"networking.k8s.io":   {"ingresses", "ingressclasses"},
 		"coordination.k8s.io": {"leases"},
 	}
-	
+
 	// Check each required resource
 	for apiGroup, resources := range requiredResources {
 		for _, resource := range resources {
@@ -1835,7 +1905,7 @@ func checkRequiredPermissions(rules []rbacv1.PolicyRule, controllerType string) 
 			}
 		}
 	}
-	
+
 	return missing
 }
 
@@ -2467,12 +2537,12 @@ func deletePod(clientset *kubernetes.Clientset, params map[string]interface{}) (
 	go sendPodRestartAudit(auditData, commandID)
 
 	return map[string]interface{}{
-		"action":        "pod_deleted",
-		"pod":           resolvedPodName,
-		"original_pod":  podName,
-		"namespace":     namespace,
-		"message":       "Pod deleted successfully. Kubernetes will recreate it.",
-		"audit_logged":  true,
+		"action":       "pod_deleted",
+		"pod":          resolvedPodName,
+		"original_pod": podName,
+		"namespace":    namespace,
+		"message":      "Pod deleted successfully. Kubernetes will recreate it.",
+		"audit_logged": true,
 	}, nil
 }
 
@@ -2708,11 +2778,11 @@ func getPodLogs(clientset *kubernetes.Clientset, params map[string]interface{}) 
 	log.Printf("📋 Fetched %d bytes of logs for %s/%s (container=%s)", len(output), namespace, podName, containerName)
 
 	return map[string]interface{}{
-		"logs":          output,
-		"pod":           podName,
-		"namespace":     namespace,
-		"container":     containerName,
-		"lines":         tailLines,
+		"logs":           output,
+		"pod":            podName,
+		"namespace":      namespace,
+		"container":      containerName,
+		"lines":          tailLines,
 		"all_containers": allContainers,
 	}, nil
 }
@@ -2871,7 +2941,6 @@ func updateDeploymentImage(clientset *kubernetes.Clientset, params map[string]in
 		"message":    "Deployment image updated successfully. Kubernetes will roll out the new pods.",
 	}, nil
 }
-
 
 func updateDeploymentResources(clientset *kubernetes.Clientset, params map[string]interface{}) (map[string]interface{}, error) {
 	deploymentName := params["deployment_name"].(string)
@@ -3134,12 +3203,12 @@ func selfUpdate(clientset *kubernetes.Clientset, params map[string]interface{}) 
 	log.Printf("✅ Self-update triggered! Deployment %s/%s will restart...", namespace, deploymentName)
 
 	return map[string]interface{}{
-		"action":          "self_update",
-		"deployment":      deploymentName,
-		"namespace":       namespace,
+		"action":           "self_update",
+		"deployment":       deploymentName,
+		"namespace":        namespace,
 		"previous_version": AgentVersion,
-		"new_image":       newImage,
-		"message":         "Agent deployment updated. Pod will restart with new version.",
+		"new_image":        newImage,
+		"message":          "Agent deployment updated. Pod will restart with new version.",
 	}, nil
 }
 
@@ -3276,10 +3345,10 @@ func collectSecurityThreatsData(clientset *kubernetes.Clientset) map[string]inte
 
 		// Check for pods running as root
 		if pod.Spec.SecurityContext == nil ||
-		   (pod.Spec.SecurityContext.RunAsNonRoot == nil || !*pod.Spec.SecurityContext.RunAsNonRoot) {
+			(pod.Spec.SecurityContext.RunAsNonRoot == nil || !*pod.Spec.SecurityContext.RunAsNonRoot) {
 			for _, container := range pod.Spec.Containers {
 				if container.SecurityContext == nil ||
-				   (container.SecurityContext.RunAsNonRoot == nil || !*container.SecurityContext.RunAsNonRoot) {
+					(container.SecurityContext.RunAsNonRoot == nil || !*container.SecurityContext.RunAsNonRoot) {
 					if !isSystemNS {
 						suspiciousPods = append(suspiciousPods, map[string]interface{}{
 							"pod_name":       pod.Name,
@@ -3313,20 +3382,20 @@ func collectSecurityThreatsData(clientset *kubernetes.Clientset) map[string]inte
 			if isSecurityEvent(event.Reason, event.Message) {
 				threatLevel := "medium"
 				if strings.Contains(strings.ToLower(event.Message), "unauthorized") ||
-				   strings.Contains(strings.ToLower(event.Message), "forbidden") ||
-				   strings.Contains(strings.ToLower(event.Message), "denied") {
+					strings.Contains(strings.ToLower(event.Message), "forbidden") ||
+					strings.Contains(strings.ToLower(event.Message), "denied") {
 					threatLevel = "high"
 				}
 
 				suspiciousEvents = append(suspiciousEvents, map[string]interface{}{
-					"type":       event.Type,
-					"reason":     event.Reason,
-					"message":    event.Message,
-					"namespace":  event.InvolvedObject.Namespace,
-					"object":     event.InvolvedObject.Name,
-					"kind":       event.InvolvedObject.Kind,
-					"count":      event.Count,
-					"last_time":  event.LastTimestamp.Time,
+					"type":         event.Type,
+					"reason":       event.Reason,
+					"message":      event.Message,
+					"namespace":    event.InvolvedObject.Namespace,
+					"object":       event.InvolvedObject.Name,
+					"kind":         event.InvolvedObject.Kind,
+					"count":        event.Count,
+					"last_time":    event.LastTimestamp.Time,
 					"threat_level": threatLevel,
 				})
 			}
@@ -3415,22 +3484,22 @@ func isDangerousCapability(cap string) bool {
 // isSuspiciousImage checks for known malicious or suspicious image patterns
 func isSuspiciousImage(image string) bool {
 	suspiciousPatterns := []string{
-		"xmrig",       // Crypto miner
-		"monero",      // Crypto miner
-		"cryptonight", // Crypto mining algorithm
-		"minerd",      // Miner daemon
-		"cpuminer",    // CPU miner
-		"nicehash",    // Mining pool
-		"stratum",     // Mining protocol
-		"coinhive",    // Web miner
-		"kinsing",     // Known malware
-		"dota",        // Known malware
-		"tsunami",     // Known malware
-		"xorddos",     // Known DDoS malware
-		"backdoor",    // Backdoor indicator
-		"rootkit",     // Rootkit indicator
+		"xmrig",         // Crypto miner
+		"monero",        // Crypto miner
+		"cryptonight",   // Crypto mining algorithm
+		"minerd",        // Miner daemon
+		"cpuminer",      // CPU miner
+		"nicehash",      // Mining pool
+		"stratum",       // Mining protocol
+		"coinhive",      // Web miner
+		"kinsing",       // Known malware
+		"dota",          // Known malware
+		"tsunami",       // Known malware
+		"xorddos",       // Known DDoS malware
+		"backdoor",      // Backdoor indicator
+		"rootkit",       // Rootkit indicator
 		"reverse-shell", // Reverse shell
-		"netcat",      // Network utility (can be suspicious)
+		"netcat",        // Network utility (can be suspicious)
 	}
 
 	imageLower := strings.ToLower(image)
@@ -3475,13 +3544,13 @@ func isSecurityEvent(reason, message string) bool {
 
 	// Additional security message patterns
 	if strings.Contains(messageLower, "denied") ||
-	   strings.Contains(messageLower, "forbidden") ||
-	   strings.Contains(messageLower, "unauthorized") ||
-	   strings.Contains(messageLower, "permission") ||
-	   strings.Contains(messageLower, "secret") ||
-	   strings.Contains(messageLower, "certificate") ||
-	   strings.Contains(messageLower, "tls") ||
-	   strings.Contains(messageLower, "authentication") {
+		strings.Contains(messageLower, "forbidden") ||
+		strings.Contains(messageLower, "unauthorized") ||
+		strings.Contains(messageLower, "permission") ||
+		strings.Contains(messageLower, "secret") ||
+		strings.Contains(messageLower, "certificate") ||
+		strings.Contains(messageLower, "tls") ||
+		strings.Contains(messageLower, "authentication") {
 		return true
 	}
 
@@ -3726,12 +3795,12 @@ func collectClusterSnapshot(clientset *kubernetes.Clientset, config AgentConfig,
 	}
 
 	snapshot := map[string]interface{}{
-		"snapshot_id":    snapshotID,
-		"collected_at":   time.Now().UTC().Format(time.RFC3339),
-		"resource_count": resourceCount,
-		"namespaces":     namespaceList,
+		"snapshot_id":     snapshotID,
+		"collected_at":    time.Now().UTC().Format(time.RFC3339),
+		"resource_count":  resourceCount,
+		"namespaces":      namespaceList,
 		"storage_classes": storageClasses,
-		"manifests":      manifests,
+		"manifests":       manifests,
 	}
 
 	body, err := json.Marshal(snapshot)
