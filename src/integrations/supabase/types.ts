@@ -1256,6 +1256,39 @@ export type Database = {
         }
         Relationships: []
       }
+      generated_yamls: {
+        Row: {
+          cluster_id: string
+          components: string[] | null
+          created_at: string
+          explanation: string | null
+          generated_yaml: string
+          id: string
+          user_description: string
+          user_id: string
+        }
+        Insert: {
+          cluster_id: string
+          components?: string[] | null
+          created_at?: string
+          explanation?: string | null
+          generated_yaml: string
+          id?: string
+          user_description: string
+          user_id: string
+        }
+        Update: {
+          cluster_id?: string
+          components?: string[] | null
+          created_at?: string
+          explanation?: string | null
+          generated_yaml?: string
+          id?: string
+          user_description?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       loadbalancer_services: {
         Row: {
           cluster_id: string
@@ -1606,6 +1639,7 @@ export type Database = {
           container_logs_tail: number | null
           container_name: string | null
           created_at: string
+          episode_key: string | null
           exit_code: number | null
           id: string
           namespace: string
@@ -1613,6 +1647,7 @@ export type Database = {
           previous_state: Json | null
           restart_count: number | null
           restart_reason: string
+          source: string | null
           terminated_at: string | null
           user_id: string
         }
@@ -1624,6 +1659,7 @@ export type Database = {
           container_logs_tail?: number | null
           container_name?: string | null
           created_at?: string
+          episode_key?: string | null
           exit_code?: number | null
           id?: string
           namespace: string
@@ -1631,6 +1667,7 @@ export type Database = {
           previous_state?: Json | null
           restart_count?: number | null
           restart_reason: string
+          source?: string | null
           terminated_at?: string | null
           user_id: string
         }
@@ -1642,6 +1679,7 @@ export type Database = {
           container_logs_tail?: number | null
           container_name?: string | null
           created_at?: string
+          episode_key?: string | null
           exit_code?: number | null
           id?: string
           namespace?: string
@@ -1649,6 +1687,7 @@ export type Database = {
           previous_state?: Json | null
           restart_count?: number | null
           restart_reason?: string
+          source?: string | null
           terminated_at?: string | null
           user_id?: string
         }
