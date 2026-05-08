@@ -28,7 +28,7 @@ import (
 )
 
 // Agent version - update this when releasing new versions
-const AgentVersion = "v0.1.63"
+const AgentVersion = "v0.1.64"
 
 // ---------------------------------------------
 // PVC USAGE VIA DF COMMAND (EXEC IN CONTAINERS)
@@ -154,11 +154,22 @@ func execDfInContainer(clientset *kubernetes.Clientset, restConfig *rest.Config,
 	return parseDfPosixOutput(stdout.String(), mountPath)
 }
 
+// pseudoFilesystems are filesystem types that represent the container's root or
+// in-memory mounts. Usage from these is the entire NODE disk / memory, not the
+// PVC's own data, so we reject them to avoid misleading statistics.
+var pseudoFilesystems = map[string]bool{
+	"overlay": true, "tmpfs": true, "devtmpfs": true,
+	"none": true, "udev": true, "cgroup": true, "cgroupfs": true,
+	"proc": true, "sysfs": true, "devpts": true,
+}
+
 // parseDfPosixOutput parses df -Pk output (POSIX, 1K-block columns).
 // Expected header + 1 data line:
 //   Filesystem     1024-blocks      Used Available Capacity Mounted on
 //   /dev/sda1         10485760   2097152   8388608      20% /prometheus
 // All values are in 1024-byte blocks → multiply by 1024 to get bytes.
+// Returns an error if the filesystem is pseudo (overlay, tmpfs, etc.),
+// ensuring we only report usage from real block-device-backed PVCs.
 func parseDfPosixOutput(output, mountPath string) (*PVCDfUsage, error) {
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 	if len(lines) < 2 {
@@ -173,6 +184,9 @@ func parseDfPosixOutput(output, mountPath string) (*PVCDfUsage, error) {
 		if len(fields) < 5 {
 			continue
 		}
+
+		// Field[0] is the Filesystem column (device name, e.g. /dev/sda1 or overlay)
+		fsName := fields[0]
 
 		// Determine offset: if filesystem name takes up field[0], data starts at [1]
 		offset := 1
@@ -198,6 +212,12 @@ func parseDfPosixOutput(output, mountPath string) (*PVCDfUsage, error) {
 		}
 		pctStr := strings.TrimSuffix(fields[offset+3], "%")
 		pct, _ := strconv.Atoi(pctStr)
+
+		// Reject pseudo-filesystems (overlay, tmpfs, …) — they reflect the
+		// node's root disk or memory, NOT the PVC's own storage.
+		if offset == 1 && pseudoFilesystems[fsName] {
+			return nil, fmt.Errorf("skipping pseudo-filesystem %q for mount %s — not real PVC storage", fsName, mountPath)
+		}
 
 		const kib = int64(1024)
 		return &PVCDfUsage{
