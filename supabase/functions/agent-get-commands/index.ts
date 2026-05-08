@@ -158,8 +158,9 @@ serve(async (req) => {
       })
       .eq('id', cluster_id);
 
-    // Delete commands stuck >30 min (sent or pending) — unresolvable, clean up
-    const deleteThreshold = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    // Delete commands stuck >10 min (sent or pending) — unresolvable, clean up
+    // to avoid blocking the queue without needing an external broker (RabbitMQ etc).
+    const deleteThreshold = new Date(Date.now() - 10 * 60 * 1000).toISOString();
     const { data: deletedStale } = await supabaseClient
       .from('agent_commands')
       .delete()
