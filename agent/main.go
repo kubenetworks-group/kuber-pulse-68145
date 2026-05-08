@@ -277,6 +277,14 @@ func collectPVCUsageViaDf(clientset *kubernetes.Clientset, restConfig *rest.Conf
 		// Try to exec df in this container
 		usage, err := execDfInContainer(clientset, restConfig, pvcNamespace, pod.Name, containerName, mountPath)
 		if err != nil {
+			errStr := err.Error()
+			// Detect RBAC forbidden — no point retrying other pods, same SA will be rejected
+			if strings.Contains(errStr, "forbidden") || strings.Contains(errStr, "cannot create resource") {
+				log.Printf("   ❌ RBAC: pods/exec not allowed for service account kodo:kodo-agent.")
+				log.Printf("      Fix: kubectl apply -f https://raw.githubusercontent.com/kubenetworks-group/kodo-agent/main/kubernetes/deployment.yaml")
+				log.Printf("      Or:  kubectl apply -f agent/kubernetes/deployment.yaml")
+				return nil, fmt.Errorf("pods/exec forbidden — re-apply ClusterRole to fix (see above)")
+			}
 			log.Printf("   ⚠️  df exec failed for PVC %s in pod %s: %v", pvcName, pod.Name, err)
 			continue
 		}
@@ -638,7 +646,14 @@ func collectPVCVolumeStats(clientset *kubernetes.Clientset) map[string]PVCVolume
 
 		responseBytes, err := request.DoRaw(context.Background())
 		if err != nil {
-			log.Printf("⚠️  Error fetching stats from node %s: %v", node.Name, err)
+			errStr := err.Error()
+			if strings.Contains(errStr, "forbidden") {
+				log.Printf("⚠️  Kubelet stats forbidden for node %s — needs nodes/proxy permission in ClusterRole", node.Name)
+			} else if strings.Contains(errStr, "unknown") || strings.Contains(errStr, "connection refused") {
+				log.Printf("⚠️  Kubelet stats unavailable for node %s (stats/summary endpoint not accessible — will use df fallback)", node.Name)
+			} else {
+				log.Printf("⚠️  Error fetching stats from node %s: %v", node.Name, err)
+			}
 			continue
 		}
 

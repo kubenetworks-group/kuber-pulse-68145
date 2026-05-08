@@ -11,7 +11,7 @@ export interface AutoHealSettings {
   enabled: boolean;
   auto_apply_security: boolean;
   auto_apply_anomalies: boolean;
-  severity_threshold: 'low' | 'medium' | 'high' | 'critical';
+  severity_threshold: 'all' | 'low' | 'medium' | 'high' | 'critical';
   scan_interval_minutes: number;
   require_whatsapp_approval?: boolean;
   approval_timeout_minutes?: number;
@@ -174,7 +174,7 @@ export function useAutoHeal() {
   };
 
   // Update severity threshold
-  const updateSeverityThreshold = async (threshold: 'low' | 'medium' | 'high' | 'critical') => {
+  const updateSeverityThreshold = async (threshold: 'all' | 'low' | 'medium' | 'high' | 'critical') => {
     await saveSettings({ severity_threshold: threshold });
   };
 

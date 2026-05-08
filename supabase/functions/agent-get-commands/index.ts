@@ -158,7 +158,16 @@ serve(async (req) => {
       })
       .eq('id', cluster_id);
 
-    // Get pending commands for this cluster
+    // Reset stale 'sent' commands (sent >5 min ago but never completed) back to pending
+    const staleThreshold = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    await supabaseClient
+      .from('agent_commands')
+      .update({ status: 'pending', executed_at: null })
+      .eq('cluster_id', cluster_id)
+      .eq('status', 'sent')
+      .lt('executed_at', staleThreshold);
+
+    // Get pending commands for this cluster (includes just-reset stale ones)
     const { data: commands, error: commandsError } = await supabaseClient
       .from('agent_commands')
       .select('*')

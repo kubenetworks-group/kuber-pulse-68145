@@ -158,7 +158,9 @@ serve(async (req) => {
 
     const actionsExecuted: any[] = [];
     const severityOrder = ['low', 'medium', 'high', 'critical'];
-    const thresholdIndex = severityOrder.indexOf(settings?.severity_threshold || 'high');
+    const configuredThreshold = settings?.severity_threshold || 'high';
+    // 'all' means act on every severity level (thresholdIndex = 0 = lowest)
+    const thresholdIndex = configuredThreshold === 'all' ? 0 : severityOrder.indexOf(configuredThreshold);
 
     // ======= DEDUPLICATION: Fetch recent pending/sent commands to avoid duplicates =======
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
@@ -534,7 +536,7 @@ serve(async (req) => {
     // This includes: CrashLoopBackOff, ImagePullBackOff, recent restarts, stuck pods
     if (applyAnomalies) {
       // Threshold for considering restarts as problematic (lowered from 3 to 1 to catch recent issues)
-      const restartThreshold = settings?.severity_threshold === 'low' ? 1 : 
+      const restartThreshold = (settings?.severity_threshold === 'all' || settings?.severity_threshold === 'low') ? 1 :
                                 settings?.severity_threshold === 'medium' ? 2 : 3;
       
       // Find pods that are NOT Ready, in CrashLoopBackOff, or have restart issues

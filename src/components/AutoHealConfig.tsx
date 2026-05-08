@@ -142,6 +142,7 @@ export function AutoHealConfig() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
                 <SelectItem value="low">Baixo</SelectItem>
                 <SelectItem value="medium">Médio</SelectItem>
                 <SelectItem value="high">Alto</SelectItem>
