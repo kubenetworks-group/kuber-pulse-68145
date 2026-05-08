@@ -97,7 +97,7 @@ spec:
       # - name: ghcr-secret
       containers:
       - name: agent
-        image: ghcr.io/kubenetworks-group/kodo-agent:v1.0.68
+        image: ghcr.io/kubenetworks-group/kodo-agent:v0.1.69
         imagePullPolicy: Always
         envFrom:
         - configMapRef:

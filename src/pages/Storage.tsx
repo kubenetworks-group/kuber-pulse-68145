@@ -29,6 +29,33 @@ interface PersistentVolume {
   claim_ref_name: string | null;
 }
 
+// Merge real usage from agent_metrics.pvcs into the PVC list from the pvcs table.
+// The pvcs table row may have used_bytes=0 if the edge function is an older version,
+// so we fall back to the raw metric_data for accuracy.
+function mergeUsageFromMetrics(
+  pvcs: PVC[],
+  metricPVCs: Array<{ name: string; namespace: string; used_bytes?: number; capacity_bytes?: number }>
+): PVC[] {
+  if (!metricPVCs.length) return pvcs;
+
+  // Build a lookup: "namespace/name" → metric entry
+  const lookup = new Map<string, typeof metricPVCs[0]>();
+  for (const mp of metricPVCs) {
+    if (mp.namespace && mp.name) {
+      lookup.set(`${mp.namespace}/${mp.name}`, mp);
+    }
+  }
+
+  return pvcs.map(pvc => {
+    const key = `${pvc.namespace}/${pvc.name}`;
+    const metric = lookup.get(key);
+    if (metric && (metric.used_bytes ?? 0) > 0 && pvc.used_bytes === 0) {
+      return { ...pvc, used_bytes: metric.used_bytes! };
+    }
+    return pvc;
+  });
+}
+
 const Storage = () => {
   const { t } = useTranslation();
   const { selectedClusterId, clusters } = useCluster();
@@ -111,10 +138,27 @@ const Storage = () => {
       if (pvcsError) {
         console.error('Error fetching PVCs:', pvcsError);
       } else if (pvcsData) {
-        const allocatedBytes = pvcsData.reduce((sum, pvc) => sum + (pvc.requested_bytes || 0), 0);
-        const usedBytes = pvcsData.reduce((sum, pvc) => sum + (pvc.used_bytes || 0), 0);
+        // Fetch latest raw PVC metric from agent_metrics.
+        // The pvcs table used_bytes may be 0 if the edge function is an older version.
+        // Falling back to the raw agent payload guarantees we show real usage.
+        const { data: rawMetric } = await supabase
+          .from('agent_metrics')
+          .select('metric_data')
+          .eq('cluster_id', selectedClusterId)
+          .eq('metric_type', 'pvcs')
+          .order('collected_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        const metricPVCs: Array<{ name: string; namespace: string; used_bytes?: number; capacity_bytes?: number }> =
+          (rawMetric?.metric_data as any)?.pvcs ?? [];
+
+        // Merge real usage into the pvcs rows
+        const enrichedPVCs = mergeUsageFromMetrics(pvcsData as PVC[], metricPVCs);
+
+        const allocatedBytes = enrichedPVCs.reduce((sum, pvc) => sum + (pvc.requested_bytes || 0), 0);
+        const usedBytes = enrichedPVCs.reduce((sum, pvc) => sum + (pvc.used_bytes || 0), 0);
         const physicalCapacityGB = cluster?.storage_total_gb || 0;
-        // Use real PVC usage for the donut chart to be consistent with "Usado Real" card
         const realUsedGB = usedBytes / (1024 ** 3);
         const allocatedGB = allocatedBytes / (1024 ** 3);
         const availableGB = Math.max(0, physicalCapacityGB - realUsedGB);
@@ -124,7 +168,7 @@ const Storage = () => {
           allocated: allocatedGB,
           used: realUsedGB,
           available: availableGB,
-          pvcs: pvcsData || []
+          pvcs: enrichedPVCs,
         });
       }
 
@@ -184,7 +228,7 @@ const Storage = () => {
                 pvcs={storageMetrics.pvcs}
               />
             </div>
-            
+
             <div className="animate-in fade-in slide-in-from-bottom-5 duration-700" style={{ animationDelay: '200ms' }}>
               <PVCleanupRecommendations pvs={standalonePVs} clusterProvider={selectedCluster?.provider} />
             </div>

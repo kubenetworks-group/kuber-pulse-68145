@@ -382,6 +382,13 @@ serve(async (req) => {
 
         // Insert new PVCs only if there are any
         if (pvcsData.length > 0) {
+          // Debug: log used_bytes from agent for each PVC
+          for (const pvc of pvcsData) {
+            const usedGB = ((pvc.used_bytes || 0) / (1024 ** 3)).toFixed(2);
+            const reqGB = ((pvc.requested_bytes || 0) / (1024 ** 3)).toFixed(2);
+            console.log(`  PVC ${pvc.namespace}/${pvc.name}: used_bytes=${pvc.used_bytes ?? 'undefined'} (${usedGB}GB), requested=${reqGB}GB, source=${pvc.usage_source ?? 'n/a'}`);
+          }
+
           const pvcsToInsert = pvcsData.map(pvc => ({
             cluster_id,
             user_id: clusterData.user_id,
@@ -390,7 +397,7 @@ serve(async (req) => {
             storage_class: pvc.storage_class || null,
             status: pvc.status,
             requested_bytes: pvc.requested_bytes || 0,
-            used_bytes: pvc.used_bytes || 0, // Now contains real usage from Kubelet
+            used_bytes: pvc.used_bytes || 0,
             last_sync: new Date().toISOString(),
           }));
 
