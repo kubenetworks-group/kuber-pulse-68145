@@ -141,17 +141,22 @@ const Storage = () => {
         // Fetch latest raw PVC metric from agent_metrics.
         // The pvcs table used_bytes may be 0 if the edge function is an older version.
         // Falling back to the raw agent payload guarantees we show real usage.
-        const { data: rawMetric } = await supabase
+        const { data: rawMetrics, error: rawError } = await supabase
           .from('agent_metrics')
-          .select('metric_data')
+          .select('metric_data, collected_at')
           .eq('cluster_id', selectedClusterId)
           .eq('metric_type', 'pvcs')
           .order('collected_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
+          .limit(1);
 
+        if (rawError) console.error('[Storage] agent_metrics query error:', rawError);
+
+        const latestMetric = rawMetrics?.[0];
         const metricPVCs: Array<{ name: string; namespace: string; used_bytes?: number; capacity_bytes?: number }> =
-          (rawMetric?.metric_data as any)?.pvcs ?? [];
+          (latestMetric?.metric_data as any)?.pvcs ?? [];
+
+        console.log('[Storage] pvcs from DB:', pvcsData?.map(p => ({ n: p.name, used: p.used_bytes })));
+        console.log('[Storage] agent_metrics pvcs (collected_at:', latestMetric?.collected_at, '):', metricPVCs.map(p => ({ n: p.name, used: p.used_bytes })));
 
         // Merge real usage into the pvcs rows
         const enrichedPVCs = mergeUsageFromMetrics(pvcsData as PVC[], metricPVCs);

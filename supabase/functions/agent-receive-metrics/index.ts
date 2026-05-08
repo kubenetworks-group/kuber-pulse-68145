@@ -374,12 +374,6 @@ serve(async (req) => {
         .single();
 
       if (clusterData) {
-        // Always delete old PVCs for this cluster (even if new list is empty)
-        await supabaseClient
-          .from('pvcs')
-          .delete()
-          .eq('cluster_id', cluster_id);
-
         // Insert new PVCs only if there are any
         if (pvcsData.length > 0) {
           // Debug: log used_bytes from agent for each PVC
@@ -389,7 +383,9 @@ serve(async (req) => {
             console.log(`  PVC ${pvc.namespace}/${pvc.name}: used_bytes=${pvc.used_bytes ?? 'undefined'} (${usedGB}GB), requested=${reqGB}GB, source=${pvc.usage_source ?? 'n/a'}`);
           }
 
-          const pvcsToInsert = pvcsData.map(pvc => ({
+          // Upsert PVCs: update existing rows (preserving used_bytes if agent sends 0 this cycle),
+          // insert new ones. onConflict matches the unique index (cluster_id, namespace, name).
+          const pvcsToUpsert = pvcsData.map(pvc => ({
             cluster_id,
             user_id: clusterData.user_id,
             name: pvc.name,
@@ -403,15 +399,18 @@ serve(async (req) => {
 
           const { error: pvcError } = await supabaseClient
             .from('pvcs')
-            .insert(pvcsToInsert);
+            .upsert(pvcsToUpsert, {
+              onConflict: 'cluster_id,namespace,name',
+              ignoreDuplicates: false,
+            });
 
           if (pvcError) {
-            console.error('Error storing PVCs:', pvcError);
+            console.error('Error upserting PVCs:', pvcError);
           } else {
             // Log with real usage info
             const totalUsed = pvcsData.reduce((sum, p) => sum + (p.used_bytes || 0), 0);
             const totalRequested = pvcsData.reduce((sum, p) => sum + (p.requested_bytes || 0), 0);
-            console.log(`✅ Stored ${pvcsToInsert.length} PVCs (real usage: ${(totalUsed / (1024**3)).toFixed(2)}GB / ${(totalRequested / (1024**3)).toFixed(2)}GB allocated)`);
+            console.log(`✅ Upserted ${pvcsToUpsert.length} PVCs (real usage: ${(totalUsed / (1024**3)).toFixed(2)}GB / ${(totalRequested / (1024**3)).toFixed(2)}GB allocated)`);
 
             // Insert into pvc_usage_history for historical tracking (AI analysis)
             const historyToInsert = pvcsData.map(pvc => ({
@@ -444,7 +443,29 @@ serve(async (req) => {
               }
             }
           }
+          // Remove PVCs that no longer exist in the cluster
+          const currentNames = pvcsData.map((p: any) => p.name);
+          const currentNamespaces = pvcsData.map((p: any) => p.namespace);
+          // Simple approach: delete PVCs for this cluster that aren't in the current list
+          if (currentNames.length > 0) {
+            const { data: stale } = await supabaseClient
+              .from('pvcs')
+              .select('id, name, namespace')
+              .eq('cluster_id', cluster_id);
+            const toDelete = (stale || []).filter(
+              (row: any) => !pvcsData.some((p: any) => p.name === row.name && p.namespace === row.namespace)
+            );
+            if (toDelete.length > 0) {
+              await supabaseClient
+                .from('pvcs')
+                .delete()
+                .in('id', toDelete.map((r: any) => r.id));
+              console.log(`🗑️ Removed ${toDelete.length} stale PVCs`);
+            }
+          }
         } else {
+          // No PVCs in cluster — clear all
+          await supabaseClient.from('pvcs').delete().eq('cluster_id', cluster_id);
           console.log(`✅ Cleared all PVCs for cluster (no PVCs in cluster)`);
         }
       }
