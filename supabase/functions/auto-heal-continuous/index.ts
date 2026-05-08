@@ -214,7 +214,8 @@ serve(async (req) => {
       'flux-system', 'argocd', 'argo',
       'velero', 'external-secrets', 'sealed-secrets',
       'gatekeeper-system', 'kyverno',
-      'kodo-agent', 'local-path-storage', 'default',
+      'kodo', 'kodo-agent', // Agent namespace — NEVER auto-restart, manual only
+      'local-path-storage', 'default',
     ];
 
     // Determine what to apply based on settings

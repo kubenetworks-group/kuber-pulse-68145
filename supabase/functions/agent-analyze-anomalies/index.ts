@@ -513,6 +513,7 @@ Return ONLY valid JSON (no markdown fences):
         'cert-manager', 'monitoring', 'prometheus', 'grafana',
         'flux-system', 'argocd', 'argo', 'velero', 'gatekeeper-system',
         'kyverno', 'local-path-storage', 'lens-metrics',
+        'kodo', 'kodo-agent', // Agent namespace — manual restart only, NEVER auto-fix
       ]);
 
       // Issue types that always require user intervention

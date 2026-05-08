@@ -1963,6 +1963,13 @@ func sendMetrics(clientset *kubernetes.Clientset, metricsClient *metricsv.Client
 			"data":         collectPreviousLogs(clientset),
 			"collected_at": time.Now().UTC().Format(time.RFC3339),
 		},
+		{
+			"type": "namespace_resources",
+			"data": map[string]interface{}{
+				"namespaces": collectNamespaceSummary(clientset),
+			},
+			"collected_at": time.Now().UTC().Format(time.RFC3339),
+		},
 	}
 
 	payload := map[string]interface{}{
@@ -2198,6 +2205,12 @@ func executeCommands(clientset *kubernetes.Clientset, config AgentConfig, comman
 		case "validate_migration":
 			log.Printf("   → Running migration validations...")
 			result, err = validateMigration(clientset, cmd.CommandParams)
+		case "create_namespace":
+			log.Printf("   → Creating namespace...")
+			result, err = createNamespace(clientset, cmd.CommandParams)
+		case "delete_namespace":
+			log.Printf("   → Deleting namespace...")
+			result, err = deleteNamespace(clientset, cmd.CommandParams)
 		default:
 			err = fmt.Errorf("unknown command type: %s", cmd.CommandType)
 			log.Printf("   ❌ Unknown command type!")
@@ -2211,6 +2224,158 @@ func executeCommands(clientset *kubernetes.Clientset, config AgentConfig, comman
 
 		updateCommandStatus(config, cmd.ID, result, err)
 	}
+}
+
+// ---------------------------------------------
+// NAMESPACE MANAGEMENT
+// ---------------------------------------------
+
+// protectedNamespaces cannot be deleted via agent commands
+var protectedNamespaces = map[string]bool{
+	"default":          true,
+	"kube-system":      true,
+	"kube-public":      true,
+	"kube-node-lease":  true,
+	"kodo":             true,
+	"kodo-agent":       true,
+	"calico-system":    true,
+	"calico-apiserver": true,
+	"tigera-operator":  true,
+	"cert-manager":     true,
+	"ingress-nginx":    true,
+	"monitoring":       true,
+}
+
+func collectNamespaceSummary(clientset *kubernetes.Clientset) []map[string]interface{} {
+	namespaces, err := clientset.CoreV1().Namespaces().List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		log.Printf("⚠️  Error listing namespaces: %v", err)
+		return []map[string]interface{}{}
+	}
+
+	result := make([]map[string]interface{}, 0, len(namespaces.Items))
+
+	for _, ns := range namespaces.Items {
+		nsName := ns.Name
+
+		// Count pods
+		pods, _ := clientset.CoreV1().Pods(nsName).List(context.Background(), metav1.ListOptions{})
+		podList := []string{}
+		if pods != nil {
+			for _, p := range pods.Items {
+				podList = append(podList, p.Name)
+			}
+		}
+
+		// Count PVCs
+		pvcs, _ := clientset.CoreV1().PersistentVolumeClaims(nsName).List(context.Background(), metav1.ListOptions{})
+		pvcList := []string{}
+		if pvcs != nil {
+			for _, p := range pvcs.Items {
+				pvcList = append(pvcList, p.Name)
+			}
+		}
+
+		// Count services (skip the built-in kubernetes service)
+		svcs, _ := clientset.CoreV1().Services(nsName).List(context.Background(), metav1.ListOptions{})
+		svcList := []string{}
+		if svcs != nil {
+			for _, s := range svcs.Items {
+				if s.Name == "kubernetes" && nsName == "default" {
+					continue
+				}
+				svcList = append(svcList, s.Name)
+			}
+		}
+
+		// Count user secrets (skip service-account tokens and helm releases)
+		secrets, _ := clientset.CoreV1().Secrets(nsName).List(context.Background(), metav1.ListOptions{})
+		secretList := []string{}
+		if secrets != nil {
+			for _, s := range secrets.Items {
+				if s.Type == corev1.SecretTypeServiceAccountToken {
+					continue
+				}
+				// Skip helm managed secrets
+				if strings.HasPrefix(s.Name, "sh.helm.release.") {
+					continue
+				}
+				secretList = append(secretList, s.Name)
+			}
+		}
+
+		// Count deployments
+		deploys, _ := clientset.AppsV1().Deployments(nsName).List(context.Background(), metav1.ListOptions{})
+		deployCount := 0
+		if deploys != nil {
+			deployCount = len(deploys.Items)
+		}
+
+		isEmpty := len(podList) == 0 && len(pvcList) == 0 && len(svcList) == 0 && len(secretList) == 0 && deployCount == 0
+
+		result = append(result, map[string]interface{}{
+			"name":         nsName,
+			"pods":         len(podList),
+			"pod_list":     podList,
+			"pvcs":         len(pvcList),
+			"pvc_list":     pvcList,
+			"services":     len(svcList),
+			"service_list": svcList,
+			"secrets":      len(secretList),
+			"secret_list":  secretList,
+			"deployments":  deployCount,
+			"is_empty":     isEmpty,
+			"is_protected": protectedNamespaces[nsName],
+			"phase":        string(ns.Status.Phase),
+			"created_at":   ns.CreationTimestamp.Format(time.RFC3339),
+		})
+	}
+
+	return result
+}
+
+func createNamespace(clientset *kubernetes.Clientset, params map[string]interface{}) (map[string]interface{}, error) {
+	name, _ := params["namespace"].(string)
+	if name == "" {
+		return nil, fmt.Errorf("namespace name is required")
+	}
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+			Labels: map[string]string{
+				"managed-by": "kodo",
+				"created-by": "kodo-developer",
+			},
+		},
+	}
+	_, err := clientset.CoreV1().Namespaces().Create(context.Background(), ns, metav1.CreateOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{
+		"action":    "namespace_created",
+		"namespace": name,
+		"message":   fmt.Sprintf("Namespace '%s' created successfully", name),
+	}, nil
+}
+
+func deleteNamespace(clientset *kubernetes.Clientset, params map[string]interface{}) (map[string]interface{}, error) {
+	name, _ := params["namespace"].(string)
+	if name == "" {
+		return nil, fmt.Errorf("namespace name is required")
+	}
+	if protectedNamespaces[name] {
+		return nil, fmt.Errorf("cannot delete protected namespace: %s", name)
+	}
+	err := clientset.CoreV1().Namespaces().Delete(context.Background(), name, metav1.DeleteOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{
+		"action":    "namespace_deleted",
+		"namespace": name,
+		"message":   fmt.Sprintf("Namespace '%s' deletion initiated", name),
+	}, nil
 }
 
 func deletePod(clientset *kubernetes.Clientset, params map[string]interface{}) (map[string]interface{}, error) {

@@ -59,26 +59,33 @@ serve(async (req) => {
       );
     }
 
-    // Log the action
-    const { data: actionLog } = await supabase
-      .from('auto_heal_actions_log')
-      .insert({
-        cluster_id,
-        user_id: user.id,
-        action_type: 'security_fix',
-        trigger_reason: `Manual fix for: ${threat.title}`,
-        trigger_entity_id: threat_id,
-        trigger_entity_type: 'security_threat',
-        action_details: {
-          fix_type,
-          threat_type: threat.threat_type,
-          severity: threat.severity,
-        },
-        status: 'executing',
-        started_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
+    // Log the action (non-fatal — table may not exist in all environments)
+    let actionLog: { id?: string } | null = null;
+    try {
+      const { data } = await supabase
+        .from('auto_heal_actions_log')
+        .insert({
+          cluster_id,
+          user_id: user.id,
+          action_type: 'security_fix',
+          trigger_reason: `Manual fix for: ${threat.title}`,
+          trigger_entity_id: threat_id,
+          trigger_entity_type: 'security_threat',
+          action_details: {
+            fix_type,
+            threat_type: threat.threat_type,
+            severity: threat.severity,
+          },
+          status: 'executing',
+          started_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+      actionLog = data;
+    } catch (_logErr) {
+      // Audit log is best-effort; don't fail the fix if it can't be written
+      console.warn('Could not write to auto_heal_actions_log:', _logErr);
+    }
 
     // Determine the fix command based on fix_type
     let commandType = '';
@@ -141,6 +148,155 @@ serve(async (req) => {
         };
         break;
 
+      case 'auto_fix': {
+        // Map threat_type to the appropriate command
+        const threatTypeToCommand: Record<string, { type: string; params: any }> = {
+          privilege_escalation: {
+            type: 'restrict_rbac',
+            params: {
+              namespace: threat.affected_resources?.[0]?.namespace || 'default',
+              role_name: threat.affected_resources?.[0]?.name,
+              action: 'restrict',
+            },
+          },
+          privileged_container: {
+            type: 'apply_pod_security',
+            params: {
+              namespace: threat.affected_resources?.[0]?.namespace || 'default',
+              level: 'restricted',
+              enforce: true,
+            },
+          },
+          host_network: {
+            type: 'apply_pod_security',
+            params: {
+              namespace: threat.affected_resources?.[0]?.namespace || 'default',
+              level: 'baseline',
+              enforce: true,
+            },
+          },
+          host_pid: {
+            type: 'apply_pod_security',
+            params: {
+              namespace: threat.affected_resources?.[0]?.namespace || 'default',
+              level: 'baseline',
+              enforce: true,
+            },
+          },
+          missing_security_context: {
+            type: 'apply_pod_security',
+            params: {
+              namespace: threat.affected_resources?.[0]?.namespace || 'default',
+              level: 'restricted',
+              enforce: true,
+            },
+          },
+          writable_root_filesystem: {
+            type: 'apply_pod_security',
+            params: {
+              namespace: threat.affected_resources?.[0]?.namespace || 'default',
+              level: 'restricted',
+              enforce: true,
+            },
+          },
+          // Container running as root — enforce non-root via pod security
+          suspicious_process: {
+            type: 'apply_pod_security',
+            params: {
+              namespace: threat.affected_resources?.[0]?.namespace || 'default',
+              level: 'restricted',
+              enforce: true,
+              run_as_non_root: true,
+            },
+          },
+          root_container: {
+            type: 'apply_pod_security',
+            params: {
+              namespace: threat.affected_resources?.[0]?.namespace || 'default',
+              level: 'restricted',
+              enforce: true,
+              run_as_non_root: true,
+            },
+          },
+          container_as_root: {
+            type: 'apply_pod_security',
+            params: {
+              namespace: threat.affected_resources?.[0]?.namespace || 'default',
+              level: 'restricted',
+              enforce: true,
+              run_as_non_root: true,
+            },
+          },
+          run_as_root: {
+            type: 'apply_pod_security',
+            params: {
+              namespace: threat.affected_resources?.[0]?.namespace || 'default',
+              level: 'restricted',
+              enforce: true,
+              run_as_non_root: true,
+            },
+          },
+          // Network anomalies — isolate with deny-all ingress policy
+          suspicious_network: {
+            type: 'create_network_policy',
+            params: {
+              namespace: threat.affected_resources?.[0]?.namespace || 'default',
+              policy_name: `kodo-isolate-${Date.now()}`,
+              policy_type: 'deny-all-ingress',
+            },
+          },
+          // Overprivileged RBAC — restrict the role
+          excessive_rbac: {
+            type: 'restrict_rbac',
+            params: {
+              namespace: threat.affected_resources?.[0]?.namespace || 'default',
+              role_name: threat.affected_resources?.[0]?.name,
+              action: 'restrict',
+            },
+          },
+          overprivileged_rbac: {
+            type: 'restrict_rbac',
+            params: {
+              namespace: threat.affected_resources?.[0]?.namespace || 'default',
+              role_name: threat.affected_resources?.[0]?.name,
+              action: 'restrict',
+            },
+          },
+          // Resource abuse / crypto mining — apply resource limits
+          resource_abuse: {
+            type: 'update_deployment_resources',
+            params: {
+              namespace: threat.affected_resources?.[0]?.namespace || 'default',
+              deployment_name: threat.affected_resources?.[0]?.name,
+              container_name: threat.affected_resources?.[0]?.container || '',
+              cpu_limit: '200m',
+              memory_limit: '256Mi',
+            },
+          },
+          crypto_mining: {
+            type: 'update_deployment_resources',
+            params: {
+              namespace: threat.affected_resources?.[0]?.namespace || 'default',
+              deployment_name: threat.affected_resources?.[0]?.name,
+              container_name: threat.affected_resources?.[0]?.container || '',
+              cpu_limit: '100m',
+              memory_limit: '128Mi',
+            },
+          },
+        };
+
+        const mapped = threatTypeToCommand[threat.threat_type];
+        if (!mapped) {
+          return new Response(
+            JSON.stringify({ error: `No auto_fix mapping for threat type: ${threat.threat_type}` }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        commandType = mapped.type;
+        commandParams = mapped.params;
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Unknown fix type: ${fix_type}` }),
@@ -162,16 +318,19 @@ serve(async (req) => {
       .single();
 
     if (commandError) {
-      // Update action log with error
-      await supabase
-        .from('auto_heal_actions_log')
-        .update({
-          status: 'failed',
-          completed_at: new Date().toISOString(),
-          error_message: commandError.message,
-        })
-        .eq('id', actionLog?.id);
-
+      // Update action log with error (non-fatal)
+      if (actionLog?.id) {
+        try {
+          await supabase
+            .from('auto_heal_actions_log')
+            .update({
+              status: 'failed',
+              completed_at: new Date().toISOString(),
+              error_message: commandError.message,
+            })
+            .eq('id', actionLog.id);
+        } catch (_) { /* best-effort */ }
+      }
       throw commandError;
     }
 
@@ -189,31 +348,37 @@ serve(async (req) => {
       })
       .eq('id', threat_id);
 
-    // Update action log
-    await supabase
-      .from('auto_heal_actions_log')
-      .update({
-        status: 'completed',
-        completed_at: new Date().toISOString(),
-        result: {
-          command_id: command.id,
-          command_type: commandType,
-          params: commandParams,
-        },
-      })
-      .eq('id', actionLog?.id);
+    // Update action log (non-fatal)
+    if (actionLog?.id) {
+      try {
+        await supabase
+          .from('auto_heal_actions_log')
+          .update({
+            status: 'completed',
+            completed_at: new Date().toISOString(),
+            result: {
+              command_id: command.id,
+              command_type: commandType,
+              params: commandParams,
+            },
+          })
+          .eq('id', actionLog.id);
+      } catch (_) { /* best-effort */ }
+    }
 
-    // Create notification
-    await supabase
-      .from('notifications')
-      .insert({
-        user_id: user.id,
-        title: '🔧 Correção de Segurança Aplicada',
-        message: `Correção "${fix_type}" foi enviada para o cluster`,
-        type: 'success',
-        related_entity_type: 'security_threat',
-        related_entity_id: threat_id,
-      });
+    // Create notification (non-fatal)
+    try {
+      await supabase
+        .from('notifications')
+        .insert({
+          user_id: user.id,
+          title: '🔧 Correção de Segurança Aplicada',
+          message: `Correção "${fix_type}" foi enviada para o cluster`,
+          type: 'success',
+          related_entity_type: 'security_threat',
+          related_entity_id: threat_id,
+        });
+    } catch (_) { /* best-effort */ }
 
     return new Response(
       JSON.stringify({

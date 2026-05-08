@@ -7,8 +7,6 @@ import { AIIncidentCard } from "@/components/AIIncidentCard";
 import { MetricCard } from "@/components/MetricCard";
 import { CronJobsStatus } from "@/components/CronJobsStatus";
 import { ScanHistoryTab } from "@/components/ScanHistoryTab";
-import { SecurityThreatCard } from "@/components/SecurityThreatCard";
-import { ContainerTerminalAlert } from "@/components/ContainerTerminalAlert";
 import { AgentUpdateBanner } from "@/components/AgentUpdateBanner";
 import { useSecurityThreats } from "@/hooks/useSecurityThreats";
 import { Bot, Activity, CheckCircle, Shield, Zap, AlertCircle, History, ShieldAlert, Settings, Clock, Server, AlertTriangle, RefreshCw, Search, FileText } from "lucide-react";
@@ -69,14 +67,7 @@ export default function AIMonitor() {
   const [latestAgentVersion, setLatestAgentVersion] = useState<string | null>(null);
 
   // Security Threats Hook - Real-time monitoring
-  const {
-    threats,
-    stats: threatStats,
-    loading: threatsLoading,
-    mitigateThreat,
-    markAsFalsePositive,
-    updateThreatStatus,
-  } = useSecurityThreats();
+  const { stats: threatStats } = useSecurityThreats();
 
   useEffect(() => {
     if (user) {
@@ -608,115 +599,60 @@ export default function AIMonitor() {
 
           {/* Security Threats Tab */}
           <TabsContent value="security" className="space-y-4">
-            {/* Real-time Security Monitoring Status */}
-            <Card className="border-red-500/20 bg-gradient-to-br from-red-500/5 to-orange-500/5">
-              <CardHeader className="pb-2 sm:pb-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4">
-                  <div className="flex items-center gap-2">
-                    <ShieldAlert className="w-4 h-4 sm:w-5 sm:h-5 text-red-400 shrink-0" />
-                    <CardTitle className="text-sm sm:text-base">Monitoramento de Seguranca em Tempo Real</CardTitle>
+            {/* Compact security overview */}
+            <div className="rounded-xl border border-border bg-card overflow-hidden">
+              {/* Header row */}
+              <div className="flex items-center justify-between px-4 py-3 border-b border-border/60 bg-muted/20">
+                <div className="flex items-center gap-2.5">
+                  <div className="relative">
+                    <ShieldAlert className="w-4 h-4 text-red-400" />
+                    <span className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
                   </div>
-                  <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                    <Badge className="bg-green-500/20 text-green-400 border-green-500/30 animate-pulse text-xs">
-                      <Activity className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1" />
-                      Monitorando
+                  <span className="text-sm font-medium">Segurança em tempo real</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="flex items-center gap-1 text-[11px] text-green-500 font-mono">
+                    <Activity className="w-3 h-3" />
+                    LIVE
+                  </span>
+                  {threatStats.critical > 0 && (
+                    <Badge variant="destructive" className="text-[10px] h-5 px-1.5 animate-pulse">
+                      {threatStats.critical} críticas
                     </Badge>
-                    {threatStats.critical > 0 && (
-                      <Badge variant="destructive" className="animate-pulse text-xs">
-                        {threatStats.critical} Criticas
-                      </Badge>
-                    )}
-                    {threatStats.high > 0 && (
-                      <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30 text-xs">
-                        {threatStats.high} Altas
-                      </Badge>
-                    )}
-                  </div>
+                  )}
                 </div>
-                <CardDescription>
-                  IA monitorando continuamente seus containers para detectar DDoS, hackers, cryptomining e atividades suspeitas em tempo real
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3 sm:space-y-4">
-                <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-3">
-                  <div className="text-center p-2 sm:p-3 rounded-lg bg-red-500/10 border border-red-500/20">
-                    <div className="text-lg sm:text-2xl font-bold text-red-400">{threatStats.critical}</div>
-                    <div className="text-[10px] sm:text-xs text-muted-foreground">Criticas</div>
-                  </div>
-                  <div className="text-center p-2 sm:p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
-                    <div className="text-lg sm:text-2xl font-bold text-orange-400">{threatStats.high}</div>
-                    <div className="text-[10px] sm:text-xs text-muted-foreground">Altas</div>
-                  </div>
-                  <div className="text-center p-2 sm:p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
-                    <div className="text-lg sm:text-2xl font-bold text-yellow-400">{threatStats.medium}</div>
-                    <div className="text-[10px] sm:text-xs text-muted-foreground">Medias</div>
-                  </div>
-                  <div className="text-center p-2 sm:p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 col-span-1">
-                    <div className="text-lg sm:text-2xl font-bold text-blue-400">{threatStats.low}</div>
-                    <div className="text-[10px] sm:text-xs text-muted-foreground">Baixas</div>
-                  </div>
-                  <div className="text-center p-2 sm:p-3 rounded-lg bg-green-500/10 border border-green-500/20 col-span-2 sm:col-span-1">
-                    <div className="text-lg sm:text-2xl font-bold text-green-400">{threatStats.mitigated}</div>
-                    <div className="text-[10px] sm:text-xs text-muted-foreground">Mitigadas</div>
-                  </div>
-                </div>
+              </div>
 
-                {/* Real-time monitoring info */}
-                <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
-                  <div className="flex items-center gap-2 text-sm">
-                    <Bot className="w-4 h-4 text-primary animate-pulse" />
-                    <span className="text-muted-foreground">
-                      O agente Kodo esta analisando automaticamente metricas de rede, CPU, memoria e processos suspeitos para detectar ameacas como DDoS, brute force e cryptomining.
+              {/* Stats strip */}
+              <div className="grid grid-cols-5 divide-x divide-border/50">
+                {[
+                  { label: "Críticas", value: threatStats.critical, color: "text-red-500", dot: "bg-red-500" },
+                  { label: "Altas", value: threatStats.high, color: "text-orange-500", dot: "bg-orange-500" },
+                  { label: "Médias", value: threatStats.medium, color: "text-yellow-500", dot: "bg-yellow-500" },
+                  { label: "Baixas", value: threatStats.low, color: "text-blue-400", dot: "bg-blue-400" },
+                  { label: "Resolvidas", value: threatStats.mitigated, color: "text-green-500", dot: "bg-green-500" },
+                ].map(({ label, value, color, dot }) => (
+                  <div key={label} className="flex flex-col items-center py-3 gap-0.5">
+                    <span className={`text-xl font-bold tabular-nums ${color}`}>{value}</span>
+                    <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                      <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />
+                      {label}
                     </span>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
+                ))}
+              </div>
 
-            {/* Container Terminal Alerts */}
-            {threats.filter(t => t.status === 'active').length > 0 && (
-              <ContainerTerminalAlert threats={threats.filter(t => t.status === 'active')} maxItems={5} />
-            )}
-
-            {/* Security Threats List */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Shield className="h-5 w-5" />
-                  Ameacas Detectadas
-                </CardTitle>
-                <CardDescription>
-                  Ameacas de seguranca identificadas pela IA em seus clusters Kubernetes
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {threatsLoading ? (
-                  <div className="text-center py-12 text-muted-foreground">
-                    Carregando ameacas...
-                  </div>
-                ) : threats.length === 0 ? (
-                  <div className="text-center py-12">
-                    <Shield className="h-16 w-16 mx-auto mb-4 text-green-500 opacity-50" />
-                    <h3 className="text-lg font-semibold mb-2 text-green-400">Cluster Seguro</h3>
-                    <p className="text-muted-foreground text-sm">
-                      Nenhuma ameaca de seguranca detectada. Execute uma varredura para verificar.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {threats.map((threat) => (
-                      <SecurityThreatCard
-                        key={threat.id}
-                        threat={threat}
-                        onMitigate={mitigateThreat}
-                        onMarkFalsePositive={markAsFalsePositive}
-                        onInvestigate={(id) => updateThreatStatus(id, 'investigating')}
-                      />
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+              {/* Monitoring scope note */}
+              <div className="px-4 py-2.5 border-t border-border/50 bg-muted/10">
+                <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                  <Bot className="w-3 h-3 text-primary flex-shrink-0" />
+                  IA analisando rede, CPU, memória e processos — detectando DDoS, brute-force e cryptomining.
+                  <span className="ml-auto text-primary font-medium cursor-pointer hover:underline whitespace-nowrap">
+                    Ver detalhes no Painel de Risco →
+                  </span>
+                </p>
+              </div>
+            </div>
 
             {/* Cluster Security Analysis - RBAC, Network Policies, Pod Security, etc */}
             <ClusterSecurityAnalysis />

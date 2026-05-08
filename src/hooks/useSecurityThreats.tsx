@@ -231,6 +231,11 @@ export function useSecurityThreats() {
 
   // Mark threat as mitigated
   const mitigateThreat = async (threatId: string, action: string) => {
+    // Route auto-fix authorization to implementSecurityFix
+    if (action === 'auto_fix_authorized') {
+      return implementSecurityFix(threatId, 'auto_fix');
+    }
+
     try {
       const { error } = await supabase
         .from('security_threats' as any)

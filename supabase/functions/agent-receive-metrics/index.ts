@@ -714,7 +714,14 @@ serve(async (req) => {
           .single();
 
         if (clusterOwner) {
+          // Namespaces excluded from any automated action — must be manual only
+          const excludedNamespaces = new Set([
+            'kodo', 'kodo-agent',
+            'kube-system', 'kube-public', 'kube-node-lease',
+          ]);
+
           for (const pod of pods) {
+            if (excludedNamespaces.has(pod.namespace)) continue; // never auto-act on agent or system pods
             const totalRestarts = pod.total_restarts || 0;
             if (totalRestarts === 0) continue;
 

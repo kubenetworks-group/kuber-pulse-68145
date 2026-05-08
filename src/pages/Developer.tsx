@@ -30,6 +30,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { NamespaceManager } from "@/components/NamespaceManager";
 
 interface GeneratedResult {
   yaml: string;
@@ -854,6 +855,11 @@ COMPONENTS_END`;
               </>
             )}
           </div>
+        </div>
+
+        {/* Namespace Manager */}
+        <div className="border-t border-border/50 pt-6">
+          <NamespaceManager />
         </div>
       </div>
     </DashboardLayout>
