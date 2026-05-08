@@ -46,7 +46,7 @@ export const Sidebar = ({ collapsed = false, onNavigate, onToggleCollapse, onCol
     { name: "Observabilidade", href: "/observability", icon: Activity },
     { name: t('common.storage'), href: "/storage", icon: HardDrive },
     { name: t('common.aiMonitor'), href: "/ai-monitor", icon: Bot },
-    ...(isPro ? [{ name: "Economia com IA", href: "/ai-savings", icon: Sparkles }] : []),
+    ...(isPro ? [{ name: "FinOps", href: "/ai-savings", icon: Sparkles }] : []),
     { name: "Plataforma Dev", href: "/developer", icon: Code2 },
     { name: t('common.clusters'), href: "/clusters", icon: Server },
     { name: t('common.agents'), href: "/agents", icon: Bot },

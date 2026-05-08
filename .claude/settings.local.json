@@ -34,7 +34,11 @@
       "Read(//Users/denercavalcante/.supabase/**)",
       "Bash(/opt/homebrew/bin/supabase login:*)",
       "Bash(wc:*)",
-      "Bash(ls /Users/denercavalcante/Workspace/Pessoal/kuber-pulse-68145/*.env*)"
+      "Bash(ls /Users/denercavalcante/Workspace/Pessoal/kuber-pulse-68145/*.env*)",
+      "WebFetch(domain:demo.kubecost.io)",
+      "WebFetch(domain:docs.kubecost.com)",
+      "WebFetch(domain:www.ibm.com)",
+      "WebFetch(domain:spacelift.io)"
     ]
   }
 }

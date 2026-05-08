@@ -28,7 +28,7 @@ import (
 )
 
 // Agent version - update this when releasing new versions
-const AgentVersion = "v0.1.62"
+const AgentVersion = "v0.1.63"
 
 // ---------------------------------------------
 // PVC USAGE VIA DF COMMAND (EXEC IN CONTAINERS)
@@ -615,9 +615,59 @@ type PVCVolumeUsage struct {
 	AvailableBytes int64
 }
 
+// fetchKubeletStatsSummary tries to get the Kubelet stats/summary from a node using
+// multiple strategies: API-server proxy, nodes/stats subresource, and direct Kubelet HTTP.
+func fetchKubeletStatsSummary(clientset *kubernetes.Clientset, node *corev1.Node) ([]byte, error) {
+	// Strategy 1: nodes/proxy via API server (standard)
+	data, err := clientset.CoreV1().RESTClient().Get().
+		Resource("nodes").
+		Name(node.Name).
+		SubResource("proxy").
+		Suffix("stats/summary").
+		DoRaw(context.Background())
+	if err == nil {
+		return data, nil
+	}
+	proxyErr := err
+
+	// Strategy 2: nodes/stats subresource (works on some clusters)
+	data, err = clientset.CoreV1().RESTClient().Get().
+		Resource("nodes").
+		Name(node.Name).
+		SubResource("stats").
+		Suffix("summary").
+		DoRaw(context.Background())
+	if err == nil {
+		return data, nil
+	}
+
+	// Strategy 3: Direct Kubelet read-only HTTP (port 10255, no auth)
+	// Works on clusters that expose the read-only Kubelet port
+	for _, addr := range node.Status.Addresses {
+		if addr.Type != corev1.NodeInternalIP && addr.Type != corev1.NodeExternalIP {
+			continue
+		}
+		url := fmt.Sprintf("http://%s:10255/stats/summary", addr.Address)
+		httpClient := &http.Client{Timeout: 5 * time.Second}
+		resp, httpErr := httpClient.Get(url)
+		if httpErr != nil {
+			continue
+		}
+		body, readErr := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if readErr == nil && resp.StatusCode == 200 && len(body) > 10 {
+			log.Printf("   📡 Got Kubelet stats for node %s via direct HTTP (port 10255)", node.Name)
+			return body, nil
+		}
+	}
+
+	// All strategies failed — return the original proxy error for logging
+	return nil, proxyErr
+}
+
 func collectPVCVolumeStats(clientset *kubernetes.Clientset) map[string]PVCVolumeUsage {
 	pvcUsage := make(map[string]PVCVolumeUsage)
-	
+
 	nodes, err := clientset.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
 	if err != nil {
 		log.Printf("⚠️  Error listing nodes for PVC stats: %v", err)
@@ -625,38 +675,19 @@ func collectPVCVolumeStats(clientset *kubernetes.Clientset) map[string]PVCVolume
 	}
 
 	log.Printf("🔍 Fetching PVC volume stats from %d nodes...", len(nodes.Items))
-	
+
 	totalVolumes := 0
 	totalPVCVolumes := 0
 
 	for _, node := range nodes.Items {
-		// Try stats/summary via nodes/proxy first (standard approach)
-		var responseBytes []byte
-		var fetchErr error
+		responseBytes, fetchErr := fetchKubeletStatsSummary(clientset, &node)
 
-		responseBytes, fetchErr = clientset.CoreV1().RESTClient().Get().
-			Resource("nodes").
-			Name(node.Name).
-			SubResource("proxy").
-			Suffix("stats/summary").
-			DoRaw(context.Background())
-
-		// Fallback: try via nodes/stats subresource (works on some clusters where proxy is blocked)
 		if fetchErr != nil {
-			responseBytes, fetchErr = clientset.CoreV1().RESTClient().Get().
-				Resource("nodes").
-				Name(node.Name).
-				SubResource("stats").
-				Suffix("summary").
-				DoRaw(context.Background())
-		}
-
-		if err := fetchErr; err != nil {
-			errStr := err.Error()
+			errStr := fetchErr.Error()
 			if strings.Contains(errStr, "forbidden") {
 				log.Printf("⚠️  Kubelet stats forbidden for node %s — needs nodes/proxy and nodes/stats permission in ClusterRole", node.Name)
 			} else {
-				log.Printf("⚠️  Kubelet stats unavailable for node %s (%v) — will use df fallback", node.Name, err)
+				log.Printf("⚠️  Kubelet stats unavailable for node %s (%v) — will use df fallback", node.Name, fetchErr)
 			}
 			continue
 		}

@@ -424,12 +424,18 @@ export const StorageChart = ({ total, allocated, used, available, pvcs }: Storag
           {/* Info message when real usage data is not available */}
           {boundPVCs.length > 0 && !hasRealUsageData && (
             <div className="pt-4 border-t border-border/50">
-              <Alert className="bg-muted/30 border-muted">
-                <HardDrive className="h-4 w-4" />
-                <AlertTitle className="text-sm">Métricas de uso não disponíveis</AlertTitle>
-                <AlertDescription className="text-xs text-muted-foreground">
-                  O storage provider deste cluster (CSI driver) não expõe métricas de uso de volume. 
-                  Apenas os valores alocados são exibidos.
+              <Alert className="bg-amber-500/5 border-amber-500/20">
+                <AlertTriangle className="h-4 w-4 text-amber-500" />
+                <AlertTitle className="text-sm text-amber-600 dark:text-amber-400">Métricas de uso real não disponíveis</AlertTitle>
+                <AlertDescription className="text-xs text-muted-foreground space-y-2 mt-1">
+                  <p>
+                    O agente não conseguiu coletar dados reais de uso via Kubelet stats ou exec.
+                    Apenas valores alocados estão sendo exibidos.
+                  </p>
+                  <p className="font-medium text-foreground/80">Para habilitar métricas reais, aplique as permissões RBAC atualizadas:</p>
+                  <code className="block bg-muted/50 px-3 py-2 rounded text-[11px] font-mono break-all">
+                    kubectl apply -f agent/kubernetes/deployment.yaml
+                  </code>
                 </AlertDescription>
               </Alert>
             </div>
