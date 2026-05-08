@@ -10,7 +10,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -106,11 +105,16 @@ func findPVCMountInPod(pod *corev1.Pod, pvcName string) (containerName, mountPat
 	return "", "", false
 }
 
-// execDfInContainer executes df -B1 command inside a container to get real disk usage
+// execDfInContainer executes df -Pk (POSIX portable, 1K-blocks) inside a container.
+// df -Pk is supported by virtually every df implementation (GNU, busybox, alpine).
+// Output format (fixed columns):
+//   Filesystem     1024-blocks      Used Available Capacity Mounted on
+//   /dev/sda1         10485760   2097152   8388608      20% /prometheus
 func execDfInContainer(clientset *kubernetes.Clientset, restConfig *rest.Config,
 	namespace, podName, containerName, mountPath string) (*PVCDfUsage, error) {
 
-	// Build the exec request
+	log.Printf("   💾 exec df -Pk in %s/%s (container: %s, mount: %s)", namespace, podName, containerName, mountPath)
+
 	req := clientset.CoreV1().RESTClient().Post().
 		Resource("pods").
 		Name(podName).
@@ -118,112 +122,91 @@ func execDfInContainer(clientset *kubernetes.Clientset, restConfig *rest.Config,
 		SubResource("exec").
 		VersionedParams(&corev1.PodExecOptions{
 			Container: containerName,
-			Command:   []string{"df", "-B1", mountPath},
+			Command:   []string{"df", "-Pk", mountPath},
 			Stdout:    true,
 			Stderr:    true,
 		}, scheme.ParameterCodec)
 
-	// Create executor with 5 second timeout
-	exec, err := remotecommand.NewSPDYExecutor(restConfig, "POST", req.URL())
+	executor, err := remotecommand.NewSPDYExecutor(restConfig, "POST", req.URL())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create executor: %v", err)
 	}
 
-	// Create buffers for output
 	var stdout, stderr bytes.Buffer
-
-	// Execute with timeout context
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err = exec.StreamWithContext(ctx, remotecommand.StreamOptions{
+	if err = executor.StreamWithContext(ctx, remotecommand.StreamOptions{
 		Stdout: &stdout,
 		Stderr: &stderr,
-	})
-
-	if err != nil {
-		// Check if it's a "command not found" type error (distroless containers)
-		if strings.Contains(err.Error(), "executable file not found") ||
-			strings.Contains(stderr.String(), "not found") {
-			return nil, fmt.Errorf("df command not available in container")
+	}); err != nil {
+		errStr := err.Error()
+		stderrStr := stderr.String()
+		if strings.Contains(errStr, "forbidden") || strings.Contains(errStr, "cannot create resource") {
+			return nil, fmt.Errorf("forbidden: %v", err)
 		}
-		return nil, fmt.Errorf("exec failed: %v, stderr: %s", err, stderr.String())
+		if strings.Contains(errStr, "executable file not found") || strings.Contains(stderrStr, "not found") {
+			return nil, fmt.Errorf("df not available in container")
+		}
+		return nil, fmt.Errorf("exec failed: %v (stderr: %s)", err, stderrStr)
 	}
 
-	// Parse df output
-	// Format: Filesystem 1B-blocks Used Available Use% Mounted on
-	// Example: /dev/sda1 107374182400 21474836480 85899345920 20% /data
-	return parseDfOutput(stdout.String(), mountPath)
+	return parseDfPosixOutput(stdout.String(), mountPath)
 }
 
-// parseDfOutput parses the output of df -B1 command
-func parseDfOutput(output, mountPath string) (*PVCDfUsage, error) {
+// parseDfPosixOutput parses df -Pk output (POSIX, 1K-block columns).
+// Expected header + 1 data line:
+//   Filesystem     1024-blocks      Used Available Capacity Mounted on
+//   /dev/sda1         10485760   2097152   8388608      20% /prometheus
+// All values are in 1024-byte blocks → multiply by 1024 to get bytes.
+func parseDfPosixOutput(output, mountPath string) (*PVCDfUsage, error) {
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 	if len(lines) < 2 {
-		return nil, fmt.Errorf("unexpected df output format")
+		return nil, fmt.Errorf("unexpected df output (got %d lines): %q", len(lines), output)
 	}
 
-	// Skip header, parse data line(s)
-	// Sometimes mount paths wrap to next line, so we need to handle that
-	for i := 1; i < len(lines); i++ {
-		line := strings.TrimSpace(lines[i])
-		if line == "" {
-			continue
-		}
-
-		// Use regex to extract numbers more reliably
-		// Pattern: filesystem total used available use% mountpoint
+	// POSIX df -P guarantees no line-wrapping, so we can rely on field positions.
+	// Some implementations concatenate long filesystem names, producing ≥6 fields;
+	// others may wrap to 5 fields when filesystem is on a separate line.
+	for _, line := range lines[1:] {
 		fields := strings.Fields(line)
 		if len(fields) < 5 {
 			continue
 		}
 
-		// Find the line with our mount path or just use the first data line
-		var total, used, available int64
-		var usePercent int
-
-		// Parse based on field positions
-		// fields[1] = total, fields[2] = used, fields[3] = available, fields[4] = use%
-		var err error
-
-		// Handle case where filesystem name is very long and wraps
-		offset := 0
+		// Determine offset: if filesystem name takes up field[0], data starts at [1]
+		offset := 1
 		if len(fields) == 5 {
-			// Normal case: all fields on one line but first field might be empty
-			offset = 0
-		} else if len(fields) >= 6 {
-			// Full line with filesystem name
-			offset = 1
+			offset = 0 // filesystem was on previous line (rare), values start at 0
 		}
 
-		if len(fields) > offset+3 {
-			total, err = strconv.ParseInt(fields[offset], 10, 64)
-			if err != nil {
-				continue
-			}
-			used, err = strconv.ParseInt(fields[offset+1], 10, 64)
-			if err != nil {
-				continue
-			}
-			available, err = strconv.ParseInt(fields[offset+2], 10, 64)
-			if err != nil {
-				continue
-			}
-
-			// Parse use percentage (remove % sign)
-			useStr := strings.TrimSuffix(fields[offset+3], "%")
-			if pct, err := strconv.Atoi(useStr); err == nil {
-				usePercent = pct
-			}
-
-			return &PVCDfUsage{
-				MountPath:      mountPath,
-				TotalBytes:     total,
-				UsedBytes:      used,
-				AvailableBytes: available,
-				UsePercent:     usePercent,
-			}, nil
+		if offset+4 > len(fields) {
+			continue
 		}
+
+		total1K, err := strconv.ParseInt(fields[offset], 10, 64)
+		if err != nil {
+			continue
+		}
+		used1K, err := strconv.ParseInt(fields[offset+1], 10, 64)
+		if err != nil {
+			continue
+		}
+		avail1K, err := strconv.ParseInt(fields[offset+2], 10, 64)
+		if err != nil {
+			continue
+		}
+		pctStr := strings.TrimSuffix(fields[offset+3], "%")
+		pct, _ := strconv.Atoi(pctStr)
+
+		const kib = int64(1024)
+		return &PVCDfUsage{
+			MountPath:      mountPath,
+			TotalBytes:     total1K * kib,
+			UsedBytes:      used1K * kib,
+			AvailableBytes: avail1K * kib,
+			UsePercent:     pct,
+		}, nil
 	}
 
 	return nil, fmt.Errorf("could not parse df output for mount path %s", mountPath)
@@ -319,9 +302,6 @@ func collectPVCUsageViaDf(clientset *kubernetes.Clientset, restConfig *rest.Conf
 
 	return nil, fmt.Errorf("no suitable pod found for PVC %s/%s", pvcNamespace, pvcName)
 }
-
-// Compile regex once for performance
-var dfFieldsRegex = regexp.MustCompile(`\s+`)
 
 // ---------------------------------------------
 // CONFIG
