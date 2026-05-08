@@ -158,6 +158,20 @@ serve(async (req) => {
       })
       .eq('id', cluster_id);
 
+    // Delete commands stuck >30 min (sent or pending) — unresolvable, clean up
+    const deleteThreshold = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    const { data: deletedStale } = await supabaseClient
+      .from('agent_commands')
+      .delete()
+      .eq('cluster_id', cluster_id)
+      .in('status', ['sent', 'pending'])
+      .lt('created_at', deleteThreshold)
+      .select('id, command_type');
+
+    if (deletedStale && deletedStale.length > 0) {
+      console.log(`🗑️  Deleted ${deletedStale.length} stuck commands (>30 min): ${deletedStale.map((c: any) => c.command_type).join(', ')}`);
+    }
+
     // Reset stale 'sent' commands (sent >5 min ago but never completed) back to pending
     const staleThreshold = new Date(Date.now() - 5 * 60 * 1000).toISOString();
     await supabaseClient

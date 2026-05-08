@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -55,6 +56,10 @@ var dfCache = &pvcDfCache{
 	data: make(map[string]PVCDfUsage),
 	ttl:  5 * time.Minute, // Cache results for 5 minutes
 }
+
+// dfExecForbidden is set to true when pods/exec is denied by RBAC,
+// so we skip further exec attempts and only log the fix once per process run.
+var dfExecForbidden int32 // atomic: 0 = allowed, 1 = forbidden
 
 // blockedNamespaces are system namespaces where we won't exec into containers
 var blockedNamespaces = map[string]bool{
@@ -228,6 +233,11 @@ func parseDfOutput(output, mountPath string) (*PVCDfUsage, error) {
 func collectPVCUsageViaDf(clientset *kubernetes.Clientset, restConfig *rest.Config,
 	pvcNamespace, pvcName string) (*PVCDfUsage, error) {
 
+	// Skip immediately if we already know exec is forbidden (RBAC not applied yet)
+	if atomic.LoadInt32(&dfExecForbidden) == 1 {
+		return nil, fmt.Errorf("pods/exec forbidden — re-apply ClusterRole to fix")
+	}
+
 	// Check cache first
 	cacheKey := pvcNamespace + "/" + pvcName
 	dfCache.RLock()
@@ -278,12 +288,15 @@ func collectPVCUsageViaDf(clientset *kubernetes.Clientset, restConfig *rest.Conf
 		usage, err := execDfInContainer(clientset, restConfig, pvcNamespace, pod.Name, containerName, mountPath)
 		if err != nil {
 			errStr := err.Error()
-			// Detect RBAC forbidden — no point retrying other pods, same SA will be rejected
+			// Detect RBAC forbidden — set global flag so all future PVCs skip exec silently
 			if strings.Contains(errStr, "forbidden") || strings.Contains(errStr, "cannot create resource") {
-				log.Printf("   ❌ RBAC: pods/exec not allowed for service account kodo:kodo-agent.")
-				log.Printf("      Fix: kubectl apply -f https://raw.githubusercontent.com/kubenetworks-group/kodo-agent/main/kubernetes/deployment.yaml")
-				log.Printf("      Or:  kubectl apply -f agent/kubernetes/deployment.yaml")
-				return nil, fmt.Errorf("pods/exec forbidden — re-apply ClusterRole to fix (see above)")
+				if atomic.CompareAndSwapInt32(&dfExecForbidden, 0, 1) {
+					// Log only on first detection
+					log.Printf("   ❌ RBAC: pods/exec not allowed for service account kodo:kodo-agent.")
+					log.Printf("      Fix: kubectl apply -f https://raw.githubusercontent.com/kubenetworks-group/kodo-agent/main/kubernetes/deployment.yaml")
+					log.Printf("      Or:  kubectl apply -f agent/kubernetes/deployment.yaml")
+				}
+				return nil, fmt.Errorf("pods/exec forbidden — re-apply ClusterRole to fix")
 			}
 			log.Printf("   ⚠️  df exec failed for PVC %s in pod %s: %v", pvcName, pod.Name, err)
 			continue
@@ -637,22 +650,33 @@ func collectPVCVolumeStats(clientset *kubernetes.Clientset) map[string]PVCVolume
 	totalPVCVolumes := 0
 
 	for _, node := range nodes.Items {
-		// Call Kubelet stats/summary API via API server proxy
-		request := clientset.CoreV1().RESTClient().Get().
+		// Try stats/summary via nodes/proxy first (standard approach)
+		var responseBytes []byte
+		var fetchErr error
+
+		responseBytes, fetchErr = clientset.CoreV1().RESTClient().Get().
 			Resource("nodes").
 			Name(node.Name).
 			SubResource("proxy").
-			Suffix("stats/summary")
+			Suffix("stats/summary").
+			DoRaw(context.Background())
 
-		responseBytes, err := request.DoRaw(context.Background())
-		if err != nil {
+		// Fallback: try via nodes/stats subresource (works on some clusters where proxy is blocked)
+		if fetchErr != nil {
+			responseBytes, fetchErr = clientset.CoreV1().RESTClient().Get().
+				Resource("nodes").
+				Name(node.Name).
+				SubResource("stats").
+				Suffix("summary").
+				DoRaw(context.Background())
+		}
+
+		if err := fetchErr; err != nil {
 			errStr := err.Error()
 			if strings.Contains(errStr, "forbidden") {
-				log.Printf("⚠️  Kubelet stats forbidden for node %s — needs nodes/proxy permission in ClusterRole", node.Name)
-			} else if strings.Contains(errStr, "unknown") || strings.Contains(errStr, "connection refused") {
-				log.Printf("⚠️  Kubelet stats unavailable for node %s (stats/summary endpoint not accessible — will use df fallback)", node.Name)
+				log.Printf("⚠️  Kubelet stats forbidden for node %s — needs nodes/proxy and nodes/stats permission in ClusterRole", node.Name)
 			} else {
-				log.Printf("⚠️  Error fetching stats from node %s: %v", node.Name, err)
+				log.Printf("⚠️  Kubelet stats unavailable for node %s (%v) — will use df fallback", node.Name, err)
 			}
 			continue
 		}
