@@ -4,6 +4,7 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCurrency } from "@/hooks/useCurrency";
 import { Brain, Zap, DollarSign, TrendingUp, Loader2 } from "lucide-react";
 
 interface UsageStats {
@@ -19,6 +20,7 @@ interface UsageStats {
 
 export const AIUsageWidget = () => {
   const { user } = useAuth();
+  const { formatCurrency } = useCurrency();
   const [stats, setStats] = useState<UsageStats>({
     dailyRequests: 0,
     dailyLimit: 500,
@@ -179,9 +181,9 @@ export const AIUsageWidget = () => {
               </div>
               <div className="flex items-baseline gap-1">
                 <span className="text-2xl font-bold text-foreground">
-                  ${stats.monthlyCost.toFixed(4)}
+                  {formatCurrency(stats.monthlyCost, { sourceCurrency: 'USD' }).value}
                 </span>
-                <span className="text-xs text-muted-foreground">USD/mês</span>
+                <span className="text-xs text-muted-foreground">/mês</span>
               </div>
               {stats.monthlyCost === 0 && (
                 <p className="text-xs text-emerald-500 mt-1">Usando tier gratuito</p>

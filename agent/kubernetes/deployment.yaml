@@ -29,6 +29,15 @@ rules:
 - apiGroups: ["apps"]
   resources: ["deployments", "daemonsets", "replicasets", "statefulsets"]
   verbs: ["get", "list", "watch", "update", "patch"]
+- apiGroups: ["autoscaling"]
+  resources: ["horizontalpodautoscalers"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["batch"]
+  resources: ["jobs", "cronjobs"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["storage.k8s.io"]
+  resources: ["storageclasses", "volumeattachments"]
+  verbs: ["get", "list", "watch"]
 - apiGroups: ["metrics.k8s.io"]
   resources: ["nodes", "pods"]
   verbs: ["get", "list", "watch"]
@@ -40,6 +49,9 @@ rules:
   verbs: ["get", "list", "watch"]
 - apiGroups: ["coordination.k8s.io"]
   resources: ["leases"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["policy"]
+  resources: ["poddisruptionbudgets"]
   verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -97,7 +109,7 @@ spec:
       # - name: ghcr-secret
       containers:
       - name: agent
-        image: ghcr.io/kubenetworks-group/kodo-agent:v0.1.70
+        image: ghcr.io/kubenetworks-group/kodo-agent:v0.1.71
         imagePullPolicy: Always
         envFrom:
         - configMapRef:
@@ -106,11 +118,11 @@ spec:
             name: kodo-secret
         resources:
           requests:
-            memory: "64Mi"
+            memory: "128Mi"
             cpu: "100m"
           limits:
-            memory: "128Mi"
-            cpu: "200m"
+            memory: "512Mi"
+            cpu: "500m"
         securityContext:
           readOnlyRootFilesystem: true
           runAsNonRoot: true

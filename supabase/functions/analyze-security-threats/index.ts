@@ -153,6 +153,21 @@ function getThreatType(reason: string, source: string): { type: string; isAttack
     return { type: 'suspicious_process', isAttack: true };
   }
 
+  // New threat sources from agent v0.1.72+
+  if (source === 'rbac_wildcard' || source === 'rbac_privilege') {
+    return { type: 'excessive_rbac', isAttack: false };
+  }
+  if (source === 'suspicious_job' || source === 'suspicious_job_image' || source === 'failed_job' || source === 'privileged_job') {
+    const isRealAttack = source === 'suspicious_job_image' || reasonLower.includes('suspicious') && reasonLower.includes('image');
+    return { type: isRealAttack ? 'malware' : 'misconfiguration', isAttack: isRealAttack };
+  }
+  if (source === 'no_network_policy') {
+    return { type: 'misconfiguration', isAttack: false };
+  }
+  if (source === 'configmap_secret') {
+    return { type: 'unauthorized_access', isAttack: false };
+  }
+
   return { type: 'misconfiguration', isAttack: false };
 }
 
@@ -256,6 +271,19 @@ serve(async (req) => {
     }
     for (const event of securityData.suspicious_events || []) {
       allThreats.push({ source: 'suspicious_event', ...event });
+    }
+    // New: RBAC threats, suspicious jobs, network policy gaps, ConfigMap secrets
+    for (const rbac of securityData.rbac_threats || []) {
+      allThreats.push({ source: rbac.source || 'rbac_wildcard', ...rbac });
+    }
+    for (const job of securityData.suspicious_jobs || []) {
+      allThreats.push({ source: job.source || 'suspicious_job', ...job });
+    }
+    for (const gap of securityData.network_policy_gaps || []) {
+      allThreats.push({ source: 'no_network_policy', ...gap });
+    }
+    for (const cm of securityData.configmap_secrets || []) {
+      allThreats.push({ source: 'configmap_secret', ...cm });
     }
 
     if (allThreats.length === 0) {

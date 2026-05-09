@@ -27,7 +27,7 @@ export function SecurityThreatsFloatingAlert() {
   const [threats, setThreats] = useState<SecurityThreat[]>([]);
   const [loading, setLoading] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const [isMinimized, setIsMinimized] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(true);
   const [isDismissed, setIsDismissed] = useState(false);
 
   const fetchThreats = useCallback(async () => {

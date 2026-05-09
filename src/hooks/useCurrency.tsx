@@ -2,6 +2,9 @@ import { useTranslation } from 'react-i18next';
 
 export type Currency = 'BRL' | 'USD' | 'EUR';
 
+// Chave versionada para evitar herdar antigos defaults de localStorage
+const CURRENCY_STORAGE_KEY = 'currency_v2';
+
 interface CurrencyConfig {
   symbol: string;
   code: string;
@@ -11,7 +14,7 @@ interface CurrencyConfig {
 const CURRENCY_CONFIG: Record<Currency, CurrencyConfig> = {
   BRL: { symbol: 'R$', code: 'BRL', locale: 'pt-BR' },
   USD: { symbol: '$', code: 'USD', locale: 'en-US' },
-  EUR: { symbol: '€', code: 'EUR', locale: 'es-ES' },
+  EUR: { symbol: '€', code: 'EUR', locale: 'de-DE' },
 };
 
 // Taxas de conversão aproximadas (em produção, use uma API de câmbio)
@@ -25,22 +28,14 @@ const EXCHANGE_RATES: Record<string, number> = {
 };
 
 export const useCurrency = () => {
-  const { i18n, t } = useTranslation();
-  
+  const { t } = useTranslation();
+
   const getDefaultCurrency = (): Currency => {
-    const saved = localStorage.getItem('currency');
-    if (saved) return saved as Currency;
-    
-    // Define moeda padrão baseado no idioma
-    switch (i18n.language) {
-      case 'pt-BR':
-        return 'BRL';
-      case 'es-ES':
-        return 'EUR';
-      case 'en-US':
-      default:
-        return 'USD';
-    }
+    const saved = localStorage.getItem(CURRENCY_STORAGE_KEY) as Currency | null;
+    // Apenas respeita escolha explícita do usuário feita com a versão atual da chave
+    if (saved && ['BRL', 'USD', 'EUR'].includes(saved)) return saved;
+    // Padrão: BRL (produto focado no mercado brasileiro)
+    return 'BRL';
   };
 
   const currency = getDefaultCurrency();
@@ -90,8 +85,8 @@ export const useCurrency = () => {
   };
 
   const setCurrency = (newCurrency: Currency) => {
-    localStorage.setItem('currency', newCurrency);
-    window.location.reload(); // Recarrega para aplicar mudanças
+    localStorage.setItem(CURRENCY_STORAGE_KEY, newCurrency);
+    window.location.reload();
   };
 
   return {

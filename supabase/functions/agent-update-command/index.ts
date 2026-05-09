@@ -12,8 +12,8 @@ const UpdateCommandSchema = z.object({
   command_id: z.string().uuid(),
   status: z.enum(['sent', 'executing', 'completed', 'failed']),
   result: z.record(z.unknown()).optional().refine(
-    (data) => !data || JSON.stringify(data).length < 50000,
-    { message: 'Result data too large (max 50KB)' }
+    (data) => !data || JSON.stringify(data).length < 200000,
+    { message: 'Result data too large (max 200KB)' }
   ),
 });
 
@@ -138,10 +138,10 @@ serve(async (req) => {
 
     const { command_id, status, result } = validationResult.data;
 
-    // Get current command to check retry settings
+    // Get current command to check retry settings and command type
     const { data: currentCommand, error: fetchError } = await supabaseClient
       .from('agent_commands')
-      .select('retry_count, max_retries')
+      .select('retry_count, max_retries, command_type, command_params')
       .eq('id', command_id)
       .eq('cluster_id', apiKeyData.cluster_id)
       .single();
@@ -188,16 +188,60 @@ serve(async (req) => {
       });
     }
 
+    // ── Snapshot finalization ──────────────────────────────────────────────────
+    // When a collect_cluster_snapshot command completes or fails, update the
+    // cluster_snapshots table accordingly (the agent never calls this directly).
+    if (currentCommand.command_type === 'collect_cluster_snapshot') {
+      const params = currentCommand.command_params as any;
+      const snapshotId = params?.snapshot_id || (result as any)?.snapshot_id;
+
+      if (snapshotId) {
+        if (status === 'completed' && result) {
+          const r = result as any;
+          const namespaces: string[] = Array.isArray(r.namespaces) ? r.namespaces : [];
+          const storageClasses: string[] = Array.isArray(r.storage_classes) ? r.storage_classes : [];
+
+          const { error: snapErr } = await supabaseClient
+            .from('cluster_snapshots')
+            .update({
+              status: 'completed',
+              manifest_count: r.resource_count ?? 0,
+              storage_size_bytes: r.size_bytes ?? 0,
+              namespace_count: namespaces.length,
+              resource_summary: {
+                namespaces,
+                storageClasses: storageClasses,
+                resourceCounts: {},
+              },
+              completed_at: new Date().toISOString(),
+              error_message: null,
+            })
+            .eq('id', snapshotId);
+
+          if (snapErr) {
+            console.error('Failed to finalize snapshot:', snapErr.message);
+          } else {
+            console.log(`✅ Snapshot ${snapshotId} finalized: ${r.resource_count} resources`);
+          }
+        } else if (status === 'failed') {
+          const errorMsg = (result as any)?.error || (result as any)?.message || 'Agent failed to collect snapshot';
+          await supabaseClient
+            .from('cluster_snapshots')
+            .update({
+              status: 'failed',
+              error_message: errorMsg,
+              completed_at: new Date().toISOString(),
+            })
+            .eq('id', snapshotId);
+          console.log(`❌ Snapshot ${snapshotId} marked as failed: ${errorMsg}`);
+        }
+      }
+    }
+
     // Auto-capture: if this was an auto-triggered log fetch for restart analysis,
     // save the logs to pod_restart_audit and invoke AI analysis
     if (status === 'completed' && result) {
-      const { data: fullCmd } = await supabaseClient
-        .from('agent_commands')
-        .select('command_params')
-        .eq('id', command_id)
-        .single();
-
-      const params = fullCmd?.command_params as any;
+      const params = currentCommand.command_params as any;
       if (params?.trigger === 'auto_restart_capture') {
         const logs = (result as any).logs || '';
 

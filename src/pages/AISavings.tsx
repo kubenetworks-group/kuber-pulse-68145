@@ -66,10 +66,13 @@ const COLORS = [
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function fmtUSD(v: number) {
+// Taxa de conversão USD → BRL (em produção usar API de câmbio)
+const USD_TO_BRL = 5.20;
+
+function fmtBRL(v: number) {
   return new Intl.NumberFormat("pt-BR", {
-    style: "currency", currency: "USD", maximumFractionDigits: 2,
-  }).format(v);
+    style: "currency", currency: "BRL", maximumFractionDigits: 2,
+  }).format(v * USD_TO_BRL);
 }
 
 function effColor(e: number) {
@@ -133,13 +136,13 @@ function CostTooltip({ active, payload, label }: any) {
             <span className="h-2 w-2 rounded-full" style={{ background: p.color }} />
             {p.name}
           </span>
-          <span className="font-mono font-medium">{fmtUSD(p.value)}</span>
+          <span className="font-mono font-medium">{fmtBRL(p.value)}</span>
         </div>
       ))}
       <div className="border-t border-border mt-1.5 pt-1 flex justify-between">
         <span className="text-muted-foreground">Total</span>
         <span className="font-mono font-bold">
-          {fmtUSD(payload.reduce((s: number, p: any) => s + (p.value || 0), 0))}
+          {fmtBRL(payload.reduce((s: number, p: any) => s + (p.value || 0), 0))}
         </span>
       </div>
     </div>
@@ -379,7 +382,7 @@ const FinOps = () => {
             <KpiCard
               icon={DollarSign}
               label="Custo mensal estimado"
-              value={fmtUSD(kpis.monthlyCost)}
+              value={fmtBRL(kpis.monthlyCost)}
               sub="todos os namespaces"
               delta={kpis.monthlyCostDelta}
               highlight="blue"
@@ -387,7 +390,7 @@ const FinOps = () => {
             <KpiCard
               icon={TrendingDown}
               label="Economia possível"
-              value={fmtUSD(kpis.possibleSavings)}
+              value={fmtBRL(kpis.possibleSavings)}
               sub="com otimização de recursos"
               highlight="green"
             />
@@ -401,7 +404,7 @@ const FinOps = () => {
             <KpiCard
               icon={Sparkles}
               label="Economia com IA"
-              value={fmtUSD(kpis.aiSavings)}
+              value={fmtBRL(kpis.aiSavings)}
               sub={`${aiSavingsEvents.length} ações no período`}
               highlight="green"
             />
@@ -454,7 +457,7 @@ const FinOps = () => {
                     tick={{ fontSize: 10 }}
                     tickLine={false}
                     axisLine={false}
-                    tickFormatter={(v) => `$${v.toFixed(0)}`}
+                    tickFormatter={(v) => `R$${(v * USD_TO_BRL).toFixed(0)}`}
                     width={48}
                   />
                   <Tooltip content={<CostTooltip />} />
@@ -504,7 +507,7 @@ const FinOps = () => {
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                     <XAxis hide />
                     <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false}
-                      tickFormatter={(v) => `$${v.toFixed(0)}`} width={44} />
+                      tickFormatter={(v) => `R$${(v * USD_TO_BRL).toFixed(0)}`} width={44} />
                     <Tooltip content={<CostTooltip />} />
                     <Bar dataKey="cpu" name="CPU" fill="#6366f1" radius={[4, 4, 0, 0]} />
                     <Bar dataKey="ram" name="RAM" fill="#22d3ee" radius={[4, 4, 0, 0]} />
@@ -530,7 +533,7 @@ const FinOps = () => {
                         <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
                           <div className={cn("h-full rounded-full", color)} style={{ width: `${pct}%` }} />
                         </div>
-                        <span className="text-xs font-mono w-16 text-right">{fmtUSD(total)}</span>
+                        <span className="text-xs font-mono w-16 text-right">{fmtBRL(total)}</span>
                       </div>
                     );
                   })}
@@ -596,12 +599,12 @@ const FinOps = () => {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums text-xs">{ns.pods}</td>
-                      <td className="px-4 py-3 text-right tabular-nums text-xs font-mono">{fmtUSD(ns.cpu)}</td>
-                      <td className="px-4 py-3 text-right tabular-nums text-xs font-mono">{fmtUSD(ns.ram)}</td>
-                      <td className="px-4 py-3 text-right tabular-nums text-xs font-mono">{fmtUSD(ns.storage)}</td>
-                      <td className="px-4 py-3 text-right tabular-nums text-xs font-mono">{fmtUSD(ns.network)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-xs font-mono">{fmtBRL(ns.cpu)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-xs font-mono">{fmtBRL(ns.ram)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-xs font-mono">{fmtBRL(ns.storage)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-xs font-mono">{fmtBRL(ns.network)}</td>
                       <td className="px-4 py-3 text-right tabular-nums text-xs font-mono font-semibold">
-                        {fmtUSD(ns.total)}
+                        {fmtBRL(ns.total)}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1.5">
@@ -630,19 +633,19 @@ const FinOps = () => {
                       {namespaceCosts.reduce((s, n) => s + n.pods, 0)}
                     </td>
                     <td className="px-4 py-3 text-right text-xs font-mono tabular-nums">
-                      {fmtUSD(namespaceCosts.reduce((s, n) => s + n.cpu, 0))}
+                      {fmtBRL(namespaceCosts.reduce((s, n) => s + n.cpu, 0))}
                     </td>
                     <td className="px-4 py-3 text-right text-xs font-mono tabular-nums">
-                      {fmtUSD(namespaceCosts.reduce((s, n) => s + n.ram, 0))}
+                      {fmtBRL(namespaceCosts.reduce((s, n) => s + n.ram, 0))}
                     </td>
                     <td className="px-4 py-3 text-right text-xs font-mono tabular-nums">
-                      {fmtUSD(namespaceCosts.reduce((s, n) => s + n.storage, 0))}
+                      {fmtBRL(namespaceCosts.reduce((s, n) => s + n.storage, 0))}
                     </td>
                     <td className="px-4 py-3 text-right text-xs font-mono tabular-nums">
-                      {fmtUSD(namespaceCosts.reduce((s, n) => s + n.network, 0))}
+                      {fmtBRL(namespaceCosts.reduce((s, n) => s + n.network, 0))}
                     </td>
                     <td className="px-4 py-3 text-right text-xs font-mono font-bold tabular-nums">
-                      {fmtUSD(namespaceCosts.reduce((s, n) => s + n.total, 0))}
+                      {fmtBRL(namespaceCosts.reduce((s, n) => s + n.total, 0))}
                     </td>
                     <td />
                   </tr>
@@ -663,7 +666,7 @@ const FinOps = () => {
                 <div>
                   <p className="text-sm font-semibold">Economia gerada pela IA</p>
                   <p className="text-[11px] text-muted-foreground">
-                    {aiSavingsEvents.length} ações no período · Total: {fmtUSD(kpis.aiSavings)}
+                    {aiSavingsEvents.length} ações no período · Total: {fmtBRL(kpis.aiSavings)}
                   </p>
                 </div>
               </div>
@@ -685,7 +688,7 @@ const FinOps = () => {
                       </p>
                     </div>
                     <div className="text-right flex-shrink-0">
-                      <p className="text-xs font-semibold text-green-500 font-mono">+{fmtUSD(ev.savings)}</p>
+                      <p className="text-xs font-semibold text-green-500 font-mono">+{fmtBRL(ev.savings)}</p>
                       <p className="text-[10px] text-muted-foreground">{ev.type}</p>
                     </div>
                   </div>

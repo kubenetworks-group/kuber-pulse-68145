@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCluster } from "@/contexts/ClusterContext";
 
@@ -36,6 +36,30 @@ export interface ResourceIssue {
   issue: "no_limits" | "no_requests" | "high_memory" | "high_cpu";
   currentUsage?: string;
   limit?: string;
+  cpuLimitMilli?: number;
+  cpuRequestMilli?: number;
+  memoryLimitBytes?: number;
+  memoryRequestBytes?: number;
+}
+
+export interface ServicePort {
+  name: string;
+  protocol: string;
+  port: number;
+  targetPort: string;
+  nodePort?: number;
+}
+
+export interface ServiceData {
+  name: string;
+  namespace: string;
+  type: "ClusterIP" | "NodePort" | "LoadBalancer" | "ExternalName" | string;
+  clusterIP: string;
+  ports: ServicePort[];
+  endpointCount: number;
+  hasNoEndpoints: boolean;
+  lbIngress: string[];
+  externalIPs: string[];
 }
 
 export interface VolumeProblem {
@@ -117,6 +141,7 @@ export interface RiskAnalysis {
   recentChanges: ClusterChange[];
   availability: AvailabilityData;
   publicExposures: PublicExposure[];
+  services: ServiceData[];
 }
 
 const defaultRiskCategory: RiskCategory = {
@@ -154,12 +179,18 @@ const defaultAnalysis: RiskAnalysis = {
   recentChanges: [],
   availability: { ...defaultAvailability },
   publicExposures: [],
+  services: [],
 };
+
+const POLL_INTERVAL_MS = 60_000; // 60s fallback polling
 
 export const useRiskAnalysis = () => {
   const { selectedClusterId } = useCluster();
   const [analysis, setAnalysis] = useState<RiskAnalysis>(defaultAnalysis);
   const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const fetchingRef = useRef(false);
 
   const calculateRiskLevel = (score: number): "critical" | "high" | "medium" | "low" => {
     if (score >= 75) return "critical";
@@ -168,14 +199,18 @@ export const useRiskAnalysis = () => {
     return "low";
   };
 
-  const fetchRiskData = async () => {
+  const fetchRiskData = useCallback(async (silent = false) => {
     if (!selectedClusterId) {
       setAnalysis(defaultAnalysis);
       setLoading(false);
       return;
     }
+    // Prevent concurrent fetches
+    if (fetchingRef.current) return;
+    fetchingRef.current = true;
 
-    setLoading(true);
+    if (!silent) setLoading(true);
+    else setRefreshing(true);
 
     try {
       // Fetch security threats
@@ -238,46 +273,76 @@ export const useRiskAnalysis = () => {
         .select("*")
         .eq("cluster_id", selectedClusterId);
 
-      // Fetch historical incidents for trends
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      
-      const { data: historicalIncidents } = await supabase
-        .from("ai_incidents")
-        .select("severity, created_at")
+      // Fetch services metric
+      const { data: servicesMetrics } = await supabase
+        .from("agent_metrics")
+        .select("metric_data")
         .eq("cluster_id", selectedClusterId)
-        .gte("created_at", thirtyDaysAgo.toISOString());
+        .eq("metric_type", "services")
+        .order("collected_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-      // Process security risks
+      // Fetch historical incidents + security threats for trends (last 7 days)
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+      const [{ data: historicalIncidents }, { data: historicalThreats }] = await Promise.all([
+        supabase
+          .from("ai_incidents")
+          .select("severity, created_at")
+          .eq("cluster_id", selectedClusterId)
+          .gte("created_at", sevenDaysAgo.toISOString()),
+        supabase
+          .from("security_threats")
+          .select("severity, created_at")
+          .eq("cluster_id", selectedClusterId)
+          .gte("created_at", sevenDaysAgo.toISOString()),
+      ]);
+
+      // Split threats: real attacks vs configuration risks
+      // is_attack === false  → config risk (probe missing, RBAC, etc.)
+      // is_attack !== false  → real attack (matches what the Ameaças tab shows)
+      const allThreats = threats || [];
+      const attackThreats = allThreats.filter((t: any) => t.is_attack !== false);
+      const configThreatList = allThreats.filter((t: any) => t.is_attack === false);
+
+      // Process security risks — real attacks only
       const securityItems: RiskItem[] = [];
       let securityScore = 0;
 
-      if (threats && threats.length > 0) {
-        threats.forEach((threat: any) => {
-          securityItems.push({
-            id: threat.id,
-            title: threat.threat_type || "Security Threat",
-            description: threat.description || "",
-            severity: threat.severity as any,
-            category: "security",
-            resource: threat.affected_resource,
-            namespace: threat.namespace,
-            detectedAt: threat.created_at,
-          });
-
-          if (threat.severity === "critical") securityScore += 25;
-          else if (threat.severity === "high") securityScore += 15;
-          else if (threat.severity === "medium") securityScore += 8;
-          else securityScore += 3;
+      attackThreats.forEach((threat: any) => {
+        securityItems.push({
+          id: threat.id,
+          title: threat.threat_type || "Security Threat",
+          description: threat.description || "",
+          severity: threat.severity as any,
+          category: "security",
+          resource: threat.affected_resource,
+          namespace: threat.namespace,
+          detectedAt: threat.created_at,
         });
-      }
+
+        if (threat.severity === "critical") securityScore += 25;
+        else if (threat.severity === "high") securityScore += 15;
+        else if (threat.severity === "medium") securityScore += 8;
+        else securityScore += 3;
+      });
+
+      // Config risks (is_attack === false) contribute to configuration score
+      let configurationScore = 0;
+      configThreatList.forEach((threat: any) => {
+        if (threat.severity === "critical") configurationScore += 10;
+        else if (threat.severity === "high") configurationScore += 6;
+        else if (threat.severity === "medium") configurationScore += 3;
+        else configurationScore += 1;
+      });
 
       // Process pod data for unstable pods and probes
       const unstablePods: UnstablePod[] = [];
       const probeIssues: ProbeIssue[] = [];
       const resourceIssues: ResourceIssue[] = [];
       let availabilityScore = 0;
-      let configurationScore = 0;
       
       const availability: AvailabilityData = { ...defaultAvailability };
 
@@ -303,34 +368,38 @@ export const useRiskAnalysis = () => {
             availabilityScore += 10;
           }
 
-          // Check for unstable pods - look at individual container restart counts too
-          let totalContainerRestarts = podTotalRestarts;
-          if (podContainers && Array.isArray(podContainers)) {
-            podContainers.forEach((c: any) => {
-              totalContainerRestarts += c.restart_count || c.RestartCount || 0;
-            });
-          }
-          
-          if (totalContainerRestarts > 5 || podPhase === "CrashLoopBackOff" || podPhase === "Failed") {
+          // Use pod-level restart count directly — total_restarts already sums all containers.
+          // Do NOT add container restart counts on top (would double-count).
+          const totalRestarts = podTotalRestarts;
+
+          // Only flag as unstable if actively crashing OR restart count is very high.
+          // Running pods with moderate restarts from the past are NOT unstable.
+          const isCrashing = podPhase === "CrashLoopBackOff" || podPhase === "Error";
+          const isFailed   = podPhase === "Failed";
+          if (isCrashing || isFailed || (totalRestarts > 20 && podPhase !== "Running")) {
             unstablePods.push({
               name: podName,
               namespace: podNamespace,
-              restartCount: totalContainerRestarts,
+              restartCount: totalRestarts,
               status: podPhase,
               reason: pod.status_reason || pod.StatusReason,
             });
           }
 
+          // Skip system namespaces for probe/resource checks — those are managed by Kubernetes itself.
+          const systemNamespaces = ["kube-system", "kube-public", "kube-node-lease"];
+          const isSystemNs = systemNamespaces.includes(podNamespace);
+
           // Check for missing probes (if available in data)
-          if (podContainers && Array.isArray(podContainers)) {
+          if (!isSystemNs && podContainers && Array.isArray(podContainers)) {
             podContainers.forEach((container: any) => {
               const containerName = container.name || container.Name || "unknown";
               const missing: ("readiness" | "liveness" | "startup")[] = [];
-              
+
               // Check both lowercase and PascalCase property names
               if (!container.readiness_probe && !container.ReadinessProbe) missing.push("readiness");
               if (!container.liveness_probe && !container.LivenessProbe) missing.push("liveness");
-              
+
               if (missing.length > 0) {
                 probeIssues.push({
                   podName: podName,
@@ -343,21 +412,38 @@ export const useRiskAnalysis = () => {
 
               // Check resource limits - look at resources object
               const resources = container.resources || container.Resources;
-              if (!resources?.limits && !resources?.Limits) {
+              const limits = resources?.limits || resources?.Limits;
+              const requests = resources?.requests || resources?.Requests;
+
+              // Extract numeric CPU/memory values if present
+              const cpuLimitMilli: number | undefined = limits?.cpu != null ? Number(limits.cpu) : undefined;
+              const memoryLimitBytes: number | undefined = limits?.memory != null ? Number(limits.memory) : undefined;
+              const cpuRequestMilli: number | undefined = requests?.cpu != null ? Number(requests.cpu) : undefined;
+              const memoryRequestBytes: number | undefined = requests?.memory != null ? Number(requests.memory) : undefined;
+
+              if (!limits) {
                 resourceIssues.push({
                   podName: podName,
                   namespace: podNamespace,
                   containerName,
                   issue: "no_limits",
+                  cpuLimitMilli,
+                  memoryLimitBytes,
+                  cpuRequestMilli,
+                  memoryRequestBytes,
                 });
                 configurationScore += 5;
               }
-              if (!resources?.requests && !resources?.Requests) {
+              if (!requests) {
                 resourceIssues.push({
                   podName: podName,
                   namespace: podNamespace,
                   containerName,
                   issue: "no_requests",
+                  cpuLimitMilli,
+                  memoryLimitBytes,
+                  cpuRequestMilli,
+                  memoryRequestBytes,
                 });
                 configurationScore += 3;
               }
@@ -512,25 +598,53 @@ export const useRiskAnalysis = () => {
         }
       }
 
-      // Calculate trends from historical data
-      const trends: TrendData[] = [];
-      if (historicalIncidents && historicalIncidents.length > 0) {
-        const last7Days = Array.from({ length: 7 }, (_, i) => {
-          const date = new Date();
-          date.setDate(date.getDate() - (6 - i));
-          return date.toISOString().split("T")[0];
-        });
+      // Calculate trends — always generate 7 days, combining ai_incidents + security_threats
+      const last7Days = Array.from({ length: 7 }, (_, i) => {
+        const date = new Date();
+        date.setDate(date.getDate() - (6 - i));
+        return date.toISOString().split("T")[0];
+      });
 
-        last7Days.forEach((date) => {
-          const dayIncidents = historicalIncidents.filter(
-            (inc: any) => inc.created_at.split("T")[0] === date
-          );
-          trends.push({
-            date,
-            critical: dayIncidents.filter((i: any) => i.severity === "critical").length,
-            high: dayIncidents.filter((i: any) => i.severity === "high").length,
-            medium: dayIncidents.filter((i: any) => i.severity === "medium").length,
-            low: dayIncidents.filter((i: any) => i.severity === "low").length,
+      const allHistorical = [
+        ...(historicalIncidents || []),
+        ...(historicalThreats || []),
+      ];
+
+      const trends: TrendData[] = last7Days.map((date) => {
+        const dayItems = allHistorical.filter(
+          (item: any) => item.created_at.split("T")[0] === date
+        );
+        return {
+          date,
+          critical: dayItems.filter((i: any) => i.severity === "critical").length,
+          high:     dayItems.filter((i: any) => i.severity === "high").length,
+          medium:   dayItems.filter((i: any) => i.severity === "medium").length,
+          low:      dayItems.filter((i: any) => i.severity === "low").length,
+        };
+      });
+
+      // Parse services data
+      const services: ServiceData[] = [];
+      const servicesData = servicesMetrics?.metric_data as any;
+      if (servicesData?.services && Array.isArray(servicesData.services)) {
+        servicesData.services.forEach((svc: any) => {
+          const ports = (svc.ports || []).map((p: any) => ({
+            name: p.name || "",
+            protocol: p.protocol || "TCP",
+            port: p.port,
+            targetPort: p.target_port || String(p.port),
+            nodePort: p.node_port,
+          }));
+          services.push({
+            name: svc.name,
+            namespace: svc.namespace,
+            type: svc.type || "ClusterIP",
+            clusterIP: svc.cluster_ip || "",
+            ports,
+            endpointCount: svc.endpoint_count ?? 0,
+            hasNoEndpoints: svc.has_no_endpoints ?? false,
+            lbIngress: svc.lb_ingress || [],
+            externalIPs: svc.external_ips || [],
           });
         });
       }
@@ -586,52 +700,70 @@ export const useRiskAnalysis = () => {
         recentChanges,
         availability,
         publicExposures,
+        services,
       });
     } catch (error) {
       console.error("Error fetching risk data:", error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
+      setLastUpdated(new Date());
+      fetchingRef.current = false;
     }
-  };
+  }, [selectedClusterId]);
 
   useEffect(() => {
     fetchRiskData();
 
-    // Set up real-time subscription
-    if (selectedClusterId) {
-      const channel = supabase
-        .channel("risk-analysis-realtime")
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "security_threats",
-            filter: `cluster_id=eq.${selectedClusterId}`,
-          },
-          () => fetchRiskData()
-        )
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "agent_metrics",
-            filter: `cluster_id=eq.${selectedClusterId}`,
-          },
-          () => fetchRiskData()
-        )
-        .subscribe();
+    if (!selectedClusterId) return;
 
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    }
-  }, [selectedClusterId]);
+    // ── Realtime subscriptions ─────────────────────────────────────────
+    const channel = supabase
+      .channel(`risk-analysis-${selectedClusterId}`)
+      // security_threats: any change
+      .on("postgres_changes", {
+        event: "*", schema: "public", table: "security_threats",
+        filter: `cluster_id=eq.${selectedClusterId}`,
+      }, () => fetchRiskData(true))
+      // agent_metrics: INSERT or UPDATE (agent sends fresh metrics)
+      .on("postgres_changes", {
+        event: "INSERT", schema: "public", table: "agent_metrics",
+        filter: `cluster_id=eq.${selectedClusterId}`,
+      }, () => fetchRiskData(true))
+      .on("postgres_changes", {
+        event: "UPDATE", schema: "public", table: "agent_metrics",
+        filter: `cluster_id=eq.${selectedClusterId}`,
+      }, () => fetchRiskData(true))
+      // agent_commands: when a fix completes, refresh score
+      .on("postgres_changes", {
+        event: "UPDATE", schema: "public", table: "agent_commands",
+        filter: `cluster_id=eq.${selectedClusterId}`,
+      }, () => fetchRiskData(true))
+      // auto_heal_actions_log: new heal action = score might change
+      .on("postgres_changes", {
+        event: "INSERT", schema: "public", table: "auto_heal_actions_log",
+        filter: `cluster_id=eq.${selectedClusterId}`,
+      }, () => fetchRiskData(true))
+      .subscribe();
+
+    // ── Polling fallback: every 60s ────────────────────────────────────
+    const poll = setInterval(() => fetchRiskData(true), POLL_INTERVAL_MS);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(poll);
+    };
+  }, [selectedClusterId, fetchRiskData]);
+
+  const manualRefresh = useCallback(async () => {
+    await fetchRiskData(false);
+  }, [fetchRiskData]);
 
   return {
     analysis,
     loading,
-    refetch: fetchRiskData,
+    refreshing,
+    lastUpdated,
+    refetch: manualRefresh,
   };
 };

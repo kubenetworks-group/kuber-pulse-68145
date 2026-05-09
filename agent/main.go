@@ -16,6 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -28,7 +29,7 @@ import (
 )
 
 // Agent version - update this when releasing new versions
-const AgentVersion = "v0.1.71"
+const AgentVersion = "v0.1.73"
 
 // ---------------------------------------------
 // PVC USAGE VIA DF COMMAND (EXEC IN CONTAINERS)
@@ -472,21 +473,89 @@ func main() {
 func collectPodDetails(clientset *kubernetes.Clientset) []map[string]interface{} {
 	pods, _ := clientset.CoreV1().Pods("").List(context.Background(), metav1.ListOptions{})
 
+	// Build index of spec containers by name for resource lookup
 	var podDetails []map[string]interface{}
 
 	for _, pod := range pods.Items {
 		totalRestarts := int32(0)
 		var containerStatuses []map[string]interface{}
 
+		// Index spec containers by name to get resources
+		specResources := make(map[string]map[string]interface{})
+		for _, c := range pod.Spec.Containers {
+			res := map[string]interface{}{}
+			if c.Resources.Limits != nil {
+				limits := map[string]interface{}{}
+				if cpu := c.Resources.Limits.Cpu(); cpu != nil {
+					limits["cpu"] = cpu.MilliValue() // millicores
+				}
+				if mem := c.Resources.Limits.Memory(); mem != nil {
+					limits["memory"] = mem.Value() // bytes
+				}
+				res["limits"] = limits
+			}
+			if c.Resources.Requests != nil {
+				requests := map[string]interface{}{}
+				if cpu := c.Resources.Requests.Cpu(); cpu != nil {
+					requests["cpu"] = cpu.MilliValue()
+				}
+				if mem := c.Resources.Requests.Memory(); mem != nil {
+					requests["memory"] = mem.Value()
+				}
+				res["requests"] = requests
+			}
+			// Probes
+			res["liveness_probe"]  = c.LivenessProbe != nil
+			res["readiness_probe"] = c.ReadinessProbe != nil
+			res["startup_probe"]   = c.StartupProbe != nil
+			res["image"]           = c.Image
+			specResources[c.Name] = res
+		}
+
 		for _, cs := range pod.Status.ContainerStatuses {
 			totalRestarts += cs.RestartCount
-			containerStatuses = append(containerStatuses, map[string]interface{}{
+			entry := map[string]interface{}{
 				"name":          cs.Name,
 				"ready":         cs.Ready,
 				"restart_count": cs.RestartCount,
 				"state":         getContainerState(cs.State),
 				"last_state":    getContainerState(cs.LastTerminationState),
-			})
+			}
+			if res, ok := specResources[cs.Name]; ok {
+				entry["resources"]       = res
+				entry["liveness_probe"]  = res["liveness_probe"]
+				entry["readiness_probe"] = res["readiness_probe"]
+				entry["startup_probe"]   = res["startup_probe"]
+				entry["image"]           = res["image"]
+			}
+			containerStatuses = append(containerStatuses, entry)
+		}
+
+		// For init containers not in status yet, include spec data
+		for _, c := range pod.Spec.Containers {
+			found := false
+			for _, cs := range pod.Status.ContainerStatuses {
+				if cs.Name == c.Name {
+					found = true
+					break
+				}
+			}
+			if !found {
+				entry := map[string]interface{}{
+					"name":          c.Name,
+					"ready":         false,
+					"restart_count": 0,
+					"state":         map[string]interface{}{"status": "unknown"},
+					"last_state":    map[string]interface{}{"status": "unknown"},
+				}
+				if res, ok := specResources[c.Name]; ok {
+					entry["resources"]       = res
+					entry["liveness_probe"]  = res["liveness_probe"]
+					entry["readiness_probe"] = res["readiness_probe"]
+					entry["image"]           = res["image"]
+				}
+				containerStatuses = append(containerStatuses, entry)
+			}
 		}
 
 		podDetails = append(podDetails, map[string]interface{}{
@@ -503,6 +572,77 @@ func collectPodDetails(clientset *kubernetes.Clientset) []map[string]interface{}
 	}
 
 	return podDetails
+}
+
+// collectServicesData collects all services across namespaces for the dashboard
+func collectServicesData(clientset *kubernetes.Clientset) []map[string]interface{} {
+	ctx := context.Background()
+	var result []map[string]interface{}
+
+	svcs, err := clientset.CoreV1().Services("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		log.Printf("⚠️  Error listing services: %v", err)
+		return result
+	}
+
+	skipNS := map[string]bool{"kube-system": true, "kube-public": true, "kube-node-lease": true}
+
+	for _, svc := range svcs.Items {
+		if skipNS[svc.Namespace] {
+			continue
+		}
+
+		ports := []map[string]interface{}{}
+		for _, p := range svc.Spec.Ports {
+			portEntry := map[string]interface{}{
+				"name":        p.Name,
+				"protocol":    string(p.Protocol),
+				"port":        p.Port,
+				"target_port": p.TargetPort.String(),
+			}
+			if p.NodePort > 0 {
+				portEntry["node_port"] = p.NodePort
+			}
+			ports = append(ports, portEntry)
+		}
+
+		// Get endpoint count for health check
+		endpoints, epErr := clientset.CoreV1().Endpoints(svc.Namespace).Get(ctx, svc.Name, metav1.GetOptions{})
+		endpointCount := 0
+		if epErr == nil {
+			for _, sub := range endpoints.Subsets {
+				endpointCount += len(sub.Addresses)
+			}
+		}
+
+		// External IPs
+		externalIPs := svc.Spec.ExternalIPs
+		lbIngress := []string{}
+		for _, ing := range svc.Status.LoadBalancer.Ingress {
+			if ing.IP != "" {
+				lbIngress = append(lbIngress, ing.IP)
+			} else if ing.Hostname != "" {
+				lbIngress = append(lbIngress, ing.Hostname)
+			}
+		}
+
+		svcEntry := map[string]interface{}{
+			"name":            svc.Name,
+			"namespace":       svc.Namespace,
+			"type":            string(svc.Spec.Type),
+			"cluster_ip":      svc.Spec.ClusterIP,
+			"ports":           ports,
+			"selector":        svc.Spec.Selector,
+			"endpoint_count":  endpointCount,
+			"external_ips":    externalIPs,
+			"lb_ingress":      lbIngress,
+			"created_at":      svc.CreationTimestamp.Time,
+			"has_no_endpoints": endpointCount == 0 && svc.Spec.Type != corev1.ServiceTypeExternalName && svc.Spec.ClusterIP != "None",
+		}
+		result = append(result, svcEntry)
+	}
+
+	return result
 }
 
 func getContainerState(state corev1.ContainerState) map[string]interface{} {
@@ -2091,6 +2231,13 @@ func sendMetrics(clientset *kubernetes.Clientset, metricsClient *metricsv.Client
 			},
 			"collected_at": time.Now().UTC().Format(time.RFC3339),
 		},
+		{
+			"type": "services",
+			"data": map[string]interface{}{
+				"services": collectServicesData(clientset),
+			},
+			"collected_at": time.Now().UTC().Format(time.RFC3339),
+		},
 	}
 
 	payload := map[string]interface{}{
@@ -3444,8 +3591,25 @@ func collectSecurityThreatsData(clientset *kubernetes.Clientset) map[string]inte
 	securityThreatsData["host_pid_pods"] = hostPidPods
 	securityThreatsData["resource_anomalies"] = resourceAnomalies
 
+	// 4. RBAC wildcard scanning
+	rbacFindings := collectRBACThreats(clientset)
+	securityThreatsData["rbac_threats"] = rbacFindings
+
+	// 5. Suspicious Jobs scanning
+	jobThreats := collectJobThreats(clientset)
+	securityThreatsData["suspicious_jobs"] = jobThreats
+
+	// 6. Missing NetworkPolicies
+	netPolGaps := collectNetworkPolicyGaps(clientset)
+	securityThreatsData["network_policy_gaps"] = netPolGaps
+
+	// 7. Secrets in ConfigMaps
+	cmSecrets := collectConfigMapSecrets(clientset)
+	securityThreatsData["configmap_secrets"] = cmSecrets
+
 	// Log summary
-	totalThreats := len(suspiciousPods) + len(privilegedContainers) + len(hostNetworkPods) + len(hostPidPods) + len(resourceAnomalies)
+	totalThreats := len(suspiciousPods) + len(privilegedContainers) + len(hostNetworkPods) + len(hostPidPods) +
+		len(resourceAnomalies) + len(rbacFindings) + len(jobThreats) + len(netPolGaps) + len(cmSecrets)
 	log.Printf("🔒 Security threats scan complete: %d potential threats detected", totalThreats)
 
 	if totalThreats > 0 {
@@ -3454,9 +3618,301 @@ func collectSecurityThreatsData(clientset *kubernetes.Clientset) map[string]inte
 		log.Printf("   - Host network pods: %d", len(hostNetworkPods))
 		log.Printf("   - Host PID pods: %d", len(hostPidPods))
 		log.Printf("   - Resource anomalies: %d", len(resourceAnomalies))
+		log.Printf("   - RBAC threats: %d", len(rbacFindings))
+		log.Printf("   - Suspicious jobs: %d", len(jobThreats))
+		log.Printf("   - Network policy gaps: %d", len(netPolGaps))
+		log.Printf("   - ConfigMap secrets: %d", len(cmSecrets))
 	}
 
 	return securityThreatsData
+}
+
+// collectRBACThreats scans ClusterRoles for wildcard permissions and dangerous bindings
+func collectRBACThreats(clientset *kubernetes.Clientset) []map[string]interface{} {
+	ctx := context.Background()
+	var findings []map[string]interface{}
+
+	clusterRoles, err := clientset.RbacV1().ClusterRoles().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		log.Printf("⚠️  RBAC scan: error listing ClusterRoles: %v", err)
+		return findings
+	}
+
+	// Index ClusterRoles by name for binding lookup
+	roleRules := make(map[string][]rbacv1.PolicyRule)
+	for _, cr := range clusterRoles.Items {
+		roleRules[cr.Name] = cr.Rules
+	}
+
+	// Find roles with wildcard permissions
+	for _, cr := range clusterRoles.Items {
+		// Skip built-in cluster-admin and system roles - they are expected
+		if strings.HasPrefix(cr.Name, "system:") {
+			continue
+		}
+		for _, rule := range cr.Rules {
+			hasWildcardVerb := false
+			hasWildcardResource := false
+			for _, v := range rule.Verbs {
+				if v == "*" {
+					hasWildcardVerb = true
+				}
+			}
+			for _, r := range rule.Resources {
+				if r == "*" {
+					hasWildcardResource = true
+				}
+			}
+			if hasWildcardVerb || hasWildcardResource {
+				findings = append(findings, map[string]interface{}{
+					"kind":         "ClusterRole",
+					"name":         cr.Name,
+					"threat_level": "high",
+					"source":       "rbac_wildcard",
+					"reason":       fmt.Sprintf("ClusterRole '%s' has wildcard permissions (verbs=%v resources=%v)", cr.Name, rule.Verbs, rule.Resources),
+				})
+				break
+			}
+		}
+	}
+
+	// Find ClusterRoleBindings that grant cluster-admin or wildcard roles to non-system subjects
+	bindings, err := clientset.RbacV1().ClusterRoleBindings().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		log.Printf("⚠️  RBAC scan: error listing ClusterRoleBindings: %v", err)
+		return findings
+	}
+
+	for _, crb := range bindings.Items {
+		isDangerous := crb.RoleRef.Name == "cluster-admin"
+		if !isDangerous {
+			// Check if referenced role has wildcard
+			for _, rule := range roleRules[crb.RoleRef.Name] {
+				for _, v := range rule.Verbs {
+					if v == "*" {
+						isDangerous = true
+						break
+					}
+				}
+			}
+		}
+		if !isDangerous {
+			continue
+		}
+		for _, subj := range crb.Subjects {
+			// Skip system serviceaccounts
+			if subj.Kind == "ServiceAccount" && subj.Namespace == "kube-system" {
+				continue
+			}
+			if subj.Name == "system:masters" || strings.HasPrefix(subj.Name, "system:") {
+				continue
+			}
+			// Flag non-system subjects bound to cluster-admin or wildcard roles
+			threatLevel := "high"
+			if crb.RoleRef.Name == "cluster-admin" {
+				threatLevel = "critical"
+			}
+			findings = append(findings, map[string]interface{}{
+				"kind":         "ClusterRoleBinding",
+				"name":         crb.Name,
+				"subject_kind": subj.Kind,
+				"subject_name": subj.Name,
+				"namespace":    subj.Namespace,
+				"role_ref":     crb.RoleRef.Name,
+				"threat_level": threatLevel,
+				"source":       "rbac_privilege",
+				"reason":       fmt.Sprintf("Subject '%s/%s' is bound to powerful role '%s' via ClusterRoleBinding '%s'", subj.Kind, subj.Name, crb.RoleRef.Name, crb.Name),
+			})
+		}
+	}
+
+	return findings
+}
+
+// collectJobThreats scans Kubernetes Jobs for suspicious or failed patterns
+func collectJobThreats(clientset *kubernetes.Clientset) []map[string]interface{} {
+	ctx := context.Background()
+	var findings []map[string]interface{}
+
+	jobs, err := clientset.BatchV1().Jobs("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		log.Printf("⚠️  Jobs scan: error listing Jobs: %v", err)
+		return findings
+	}
+
+	suspiciousJobPatterns := []string{
+		"miner", "xmrig", "monero", "hack", "exploit", "shell", "backdoor",
+		"crypto", "attack", "malware", "scan", "brute", "flood",
+	}
+
+	oneHourAgo := time.Now().Add(-1 * time.Hour)
+
+	for _, job := range jobs.Items {
+		isSystemNS := job.Namespace == "kube-system" || job.Namespace == "kube-public" || job.Namespace == "kube-node-lease"
+		if isSystemNS {
+			continue
+		}
+
+		nameLower := strings.ToLower(job.Name)
+
+		// Check for suspicious job names
+		for _, pattern := range suspiciousJobPatterns {
+			if strings.Contains(nameLower, pattern) {
+				findings = append(findings, map[string]interface{}{
+					"job_name":     job.Name,
+					"namespace":    job.Namespace,
+					"threat_level": "high",
+					"source":       "suspicious_job",
+					"reason":       fmt.Sprintf("Job '%s/%s' has suspicious name pattern: '%s'", job.Namespace, job.Name, pattern),
+					"created_at":   job.CreationTimestamp.Time,
+				})
+				break
+			}
+		}
+
+		// Check for failed jobs with high retry count
+		if job.Status.Failed > 3 {
+			findings = append(findings, map[string]interface{}{
+				"job_name":     job.Name,
+				"namespace":    job.Namespace,
+				"failed_count": job.Status.Failed,
+				"threat_level": "medium",
+				"source":       "failed_job",
+				"reason":       fmt.Sprintf("Job '%s/%s' has %d failures - possible attack pattern or misconfiguration", job.Namespace, job.Name, job.Status.Failed),
+				"created_at":   job.CreationTimestamp.Time,
+			})
+		}
+
+		// Check for recently created jobs (last hour) without owner references (not from CronJob)
+		isOrphaned := len(job.OwnerReferences) == 0
+		isRecent := job.CreationTimestamp.Time.After(oneHourAgo)
+		if isOrphaned && isRecent {
+			// Check container images for suspicious patterns
+			for _, container := range job.Spec.Template.Spec.Containers {
+				if isSuspiciousImage(container.Image) {
+					findings = append(findings, map[string]interface{}{
+						"job_name":     job.Name,
+						"namespace":    job.Namespace,
+						"image":        container.Image,
+						"threat_level": "critical",
+						"source":       "suspicious_job_image",
+						"reason":       fmt.Sprintf("Recently created orphaned Job '%s/%s' uses suspicious image '%s'", job.Namespace, job.Name, container.Image),
+						"created_at":   job.CreationTimestamp.Time,
+					})
+				}
+			}
+		}
+
+		// Check for jobs with privileged containers
+		for _, container := range job.Spec.Template.Spec.Containers {
+			if container.SecurityContext != nil && container.SecurityContext.Privileged != nil && *container.SecurityContext.Privileged {
+				findings = append(findings, map[string]interface{}{
+					"job_name":       job.Name,
+					"namespace":      job.Namespace,
+					"container_name": container.Name,
+					"image":          container.Image,
+					"threat_level":   "high",
+					"source":         "privileged_job",
+					"reason":         fmt.Sprintf("Job '%s/%s' runs container '%s' in privileged mode", job.Namespace, job.Name, container.Name),
+					"created_at":     job.CreationTimestamp.Time,
+				})
+			}
+		}
+
+		_ = batchv1.JobConditionType("") // ensure batchv1 is used
+	}
+
+	return findings
+}
+
+// collectNetworkPolicyGaps finds namespaces without NetworkPolicies (open pod-to-pod traffic)
+func collectNetworkPolicyGaps(clientset *kubernetes.Clientset) []map[string]interface{} {
+	ctx := context.Background()
+	var findings []map[string]interface{}
+
+	namespaces, err := clientset.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		log.Printf("⚠️  NetworkPolicy scan: error listing namespaces: %v", err)
+		return findings
+	}
+
+	systemNS := map[string]bool{
+		"kube-system": true, "kube-public": true, "kube-node-lease": true,
+		"calico-system": true, "tigera-operator": true,
+		"kodo": true,
+	}
+
+	for _, ns := range namespaces.Items {
+		if systemNS[ns.Name] {
+			continue
+		}
+
+		// Check if namespace has any pods (only flag non-empty namespaces)
+		pods, err := clientset.CoreV1().Pods(ns.Name).List(ctx, metav1.ListOptions{LabelSelector: "!job-name"})
+		if err != nil || len(pods.Items) == 0 {
+			continue
+		}
+
+		netPols, err := clientset.NetworkingV1().NetworkPolicies(ns.Name).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			continue
+		}
+
+		if len(netPols.Items) == 0 {
+			findings = append(findings, map[string]interface{}{
+				"namespace":    ns.Name,
+				"pod_count":    len(pods.Items),
+				"threat_level": "medium",
+				"source":       "no_network_policy",
+				"reason":       fmt.Sprintf("Namespace '%s' has %d pods but NO NetworkPolicy — unrestricted pod-to-pod traffic", ns.Name, len(pods.Items)),
+			})
+		}
+	}
+
+	return findings
+}
+
+// collectConfigMapSecrets finds ConfigMaps that appear to contain credentials (anti-pattern)
+func collectConfigMapSecrets(clientset *kubernetes.Clientset) []map[string]interface{} {
+	ctx := context.Background()
+	var findings []map[string]interface{}
+
+	credentialPatterns := []string{
+		"password", "passwd", "secret", "api_key", "apikey",
+		"token", "credential", "private_key", "auth_token", "bearer",
+	}
+
+	cms, err := clientset.CoreV1().ConfigMaps("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		log.Printf("⚠️  ConfigMap scan: error listing ConfigMaps: %v", err)
+		return findings
+	}
+
+	for _, cm := range cms.Items {
+		isSystemNS := cm.Namespace == "kube-system" || cm.Namespace == "kube-public" || cm.Namespace == "kube-node-lease"
+		if isSystemNS {
+			continue
+		}
+
+		for key := range cm.Data {
+			keyLower := strings.ToLower(key)
+			for _, pattern := range credentialPatterns {
+				if strings.Contains(keyLower, pattern) {
+					findings = append(findings, map[string]interface{}{
+						"configmap_name": cm.Name,
+						"namespace":      cm.Namespace,
+						"key":            key,
+						"threat_level":   "high",
+						"source":         "configmap_secret",
+						"reason":         fmt.Sprintf("ConfigMap '%s/%s' has key '%s' that may contain credentials (use Secrets instead)", cm.Namespace, cm.Name, key),
+					})
+					break
+				}
+			}
+		}
+	}
+
+	return findings
 }
 
 // isDangerousCapability checks if a Linux capability is considered dangerous
@@ -3808,17 +4264,22 @@ func collectClusterSnapshot(clientset *kubernetes.Clientset, config AgentConfig,
 		return nil, fmt.Errorf("failed to marshal snapshot: %w", err)
 	}
 
+	sizeBytes := len(body)
+	log.Printf("📦 Snapshot %s: %d resources, %d bytes — uploading...", snapshotID, resourceCount, sizeBytes)
+
 	// Upload to Supabase Storage via pre-signed URL (PUT)
-	req, err := http.NewRequest("PUT", uploadURL, bytes.NewBuffer(body))
+	// Use a longer timeout for large clusters (up to 10 minutes)
+	uploadReq, err := http.NewRequest("PUT", uploadURL, bytes.NewBuffer(body))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create upload request: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/json")
+	uploadReq.Header.Set("Content-Type", "application/json")
+	uploadReq.ContentLength = int64(sizeBytes)
 
-	client := &http.Client{Timeout: 120 * time.Second}
-	resp, err := client.Do(req)
+	uploadClient := &http.Client{Timeout: 600 * time.Second}
+	resp, err := uploadClient.Do(uploadReq)
 	if err != nil {
-		return nil, fmt.Errorf("failed to upload snapshot: %w", err)
+		return nil, fmt.Errorf("failed to upload snapshot (size=%d bytes): %w", sizeBytes, err)
 	}
 	defer resp.Body.Close()
 
@@ -3827,12 +4288,12 @@ func collectClusterSnapshot(clientset *kubernetes.Clientset, config AgentConfig,
 		return nil, fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(respBody))
 	}
 
-	log.Printf("✅ Snapshot %s uploaded: %d resources, %d bytes", snapshotID, resourceCount, len(body))
+	log.Printf("✅ Snapshot %s uploaded successfully: %d resources, %d bytes", snapshotID, resourceCount, sizeBytes)
 
 	return map[string]interface{}{
 		"snapshot_id":     snapshotID,
 		"resource_count":  resourceCount,
-		"size_bytes":      len(body),
+		"size_bytes":      sizeBytes,
 		"namespaces":      namespaceList,
 		"storage_classes": storageClasses,
 	}, nil

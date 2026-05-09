@@ -9,7 +9,7 @@ import { CronJobsStatus } from "@/components/CronJobsStatus";
 import { ScanHistoryTab } from "@/components/ScanHistoryTab";
 import { AgentUpdateBanner } from "@/components/AgentUpdateBanner";
 import { useSecurityThreats } from "@/hooks/useSecurityThreats";
-import { Bot, Activity, CheckCircle, Shield, Zap, AlertCircle, History, ShieldAlert, Settings, Clock, Server, AlertTriangle, RefreshCw, Search, FileText } from "lucide-react";
+import { Bot, Activity, CheckCircle, Shield, Zap, AlertCircle, History, ShieldAlert, Settings2, Clock, Server, AlertTriangle, RefreshCw, Search, FileText, Sliders } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AutoHealConfig } from "@/components/AutoHealConfig";
 import { AutoHealActionsLog } from "@/components/AutoHealActionsLog";
@@ -491,105 +491,67 @@ export default function AIMonitor() {
 
   return (
     <DashboardLayout>
-      <div className="p-4 sm:p-6 lg:p-8 space-y-6">
+      <div className="p-4 sm:p-6 lg:p-8 space-y-5">
         {/* Agent Update Banner */}
         <AgentUpdateBanner />
 
-        {/* Header */}
-        <div>
-          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-2 bg-gradient-primary bg-clip-text text-transparent">
-            {t('aiMonitor.title')}
-          </h1>
-          <p className="text-muted-foreground text-sm sm:text-base">
-            {t('aiMonitor.description')}
-          </p>
+        {/* ── Header + Stats strip ── */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-xl font-bold tracking-tight">{t('aiMonitor.title')}</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">{t('aiMonitor.description')}</p>
+          </div>
+
+          {/* Compact stats */}
+          <div className="flex items-center gap-1 rounded-xl border border-border bg-card px-3 py-2 divide-x divide-border/60 overflow-x-auto shrink-0">
+            {[
+              { icon: Bot, label: "Agentes", value: stats.activeAgents, color: "text-primary" },
+              { icon: CheckCircle, label: "Sucesso", value: `${successRate}%`, color: "text-green-500" },
+              { icon: Shield, label: "Downtime evitado", value: `${stats.preventedDowntime}m`, color: "text-amber-500" },
+              { icon: Activity, label: "Incidentes", value: stats.total, color: "text-blue-500" },
+            ].map(({ icon: Icon, label, value, color }) => (
+              <div key={label} className="flex flex-col items-center px-4 first:pl-1 last:pr-1 gap-0.5 min-w-fit">
+                <div className="flex items-center gap-1.5">
+                  <Icon className={`h-3.5 w-3.5 ${color}`} />
+                  <span className={`text-lg font-bold tabular-nums ${color}`}>{value}</span>
+                </div>
+                <span className="text-[10px] text-muted-foreground whitespace-nowrap">{label}</span>
+              </div>
+            ))}
+          </div>
         </div>
 
-        {/* Cron Jobs Status */}
-        <CronJobsStatus />
-
-        {/* Stats Grid com visualizações melhoradas */}
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-          <Card className="bg-gradient-to-br from-primary/10 to-primary/5 border-primary/20">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Bot className="h-4 w-4 text-primary" />
-                {t('aiMonitor.activeAIs')}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-primary">{stats.activeAgents}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {t('aiMonitor.workingNow')}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-to-br from-success/10 to-success/5 border-success/20">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 text-success" />
-                {t('aiMonitor.successRate')}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-success">{successRate}%</div>
-              <Progress value={successRate} className="mt-2 h-2" />
-              <p className="text-xs text-muted-foreground mt-1">
-                {t('aiMonitor.incidentsResolved', { resolved: stats.resolved, total: stats.total })}
-              </p>
-            </CardContent>
-          </Card>
-
-
-          <Card className="bg-gradient-to-br from-warning/10 to-warning/5 border-warning/20">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Shield className="h-4 w-4 text-warning" />
-                {t('aiMonitor.preventedTime')}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-warning">{stats.preventedDowntime}m</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {t('aiMonitor.downtimePrevented')}
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-
-
-        {/* Tabs para diferentes visualizações */}
+        {/* ── Tabs ── */}
         <Tabs defaultValue="autoheal" className="space-y-4">
-          <TabsList className="flex flex-nowrap overflow-x-auto w-full max-w-full h-auto p-1">
+          <TabsList className="flex flex-nowrap overflow-x-auto w-full max-w-full h-auto p-1 gap-0.5">
+            <TabsTrigger value="autoheal" className="flex items-center gap-2 text-sm whitespace-nowrap px-3 py-2">
+              <Sliders className="h-4 w-4" />
+              <span>Automação</span>
+            </TabsTrigger>
+            <TabsTrigger value="anomalies" className="flex items-center gap-2 text-sm whitespace-nowrap px-3 py-2">
+              <AlertCircle className="h-4 w-4" />
+              <span>Anomalias {recentAnomalies.length > 0 && `(${recentAnomalies.length})`}</span>
+            </TabsTrigger>
             <TabsTrigger value="security" className="flex items-center gap-2 text-sm whitespace-nowrap px-3 py-2">
               <ShieldAlert className="h-4 w-4" />
-              <span>Seguranca ({threatStats.active})</span>
+              <span>Segurança</span>
               {threatStats.critical > 0 && (
                 <Badge variant="destructive" className="ml-1 h-5 w-5 p-0 flex items-center justify-center text-xs animate-pulse">
                   {threatStats.critical}
                 </Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="anomalies" className="flex items-center gap-2 text-sm whitespace-nowrap px-3 py-2">
-              <AlertCircle className="h-4 w-4" />
-              <span>Anomalias ({recentAnomalies.length})</span>
-            </TabsTrigger>
-            <TabsTrigger value="commands" className="flex items-center gap-2 text-sm whitespace-nowrap px-3 py-2">
-              <Zap className="h-4 w-4" />
-              <span>Comandos ({agentCommands.length})</span>
-            </TabsTrigger>
             <TabsTrigger value="incidents" className="flex items-center gap-2 text-sm whitespace-nowrap px-3 py-2">
               <Activity className="h-4 w-4" />
               <span>{t('aiMonitor.incidents')}</span>
             </TabsTrigger>
+            <TabsTrigger value="commands" className="flex items-center gap-2 text-sm whitespace-nowrap px-3 py-2">
+              <Zap className="h-4 w-4" />
+              <span>Comandos {agentCommands.length > 0 && `(${agentCommands.length})`}</span>
+            </TabsTrigger>
             <TabsTrigger value="history" className="flex items-center gap-2 text-sm whitespace-nowrap px-3 py-2">
               <History className="h-4 w-4" />
               <span>Histórico</span>
-            </TabsTrigger>
-            <TabsTrigger value="autoheal" className="flex items-center gap-2 text-sm whitespace-nowrap px-3 py-2">
-              <Settings className="h-4 w-4" />
-              <span>Auto-Heal</span>
             </TabsTrigger>
             <TabsTrigger value="audit" className="flex items-center gap-2 text-sm whitespace-nowrap px-3 py-2">
               <FileText className="h-4 w-4" />
@@ -1192,14 +1154,23 @@ export default function AIMonitor() {
 
           {/* History Tab - Histórico consolidado */}
           <TabsContent value="history" className="space-y-4">
+            {/* Schedule + History split layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
+              {/* CronJobsStatus - left panel */}
+              <div className="lg:col-span-2">
+                <CronJobsStatus />
+              </div>
+
+              {/* Unified history - right panel */}
+              <div className="lg:col-span-3">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <History className="h-5 w-5" />
-                  Histórico de Ações da IA
+                  Histórico de Ações
                 </CardTitle>
                 <CardDescription>
-                  Registro completo de incidentes resolvidos, comandos executados e anomalias tratadas
+                  Incidentes resolvidos, comandos executados e anomalias tratadas
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -1326,19 +1297,19 @@ export default function AIMonitor() {
                 })()}
               </CardContent>
             </Card>
-            
-            {/* Manter o histórico de scans também */}
+            </div>{/* end right panel */}
+            </div>{/* end grid */}
+
+            {/* Scan history below */}
             {scanHistory.length > 0 && (
               <ScanHistoryTab scanHistory={scanHistory} loading={loading} />
             )}
           </TabsContent>
 
           {/* Auto-Heal Tab */}
-          <TabsContent value="autoheal" className="space-y-4">
-            <div className="grid gap-6 lg:grid-cols-2">
-              <AutoHealConfig />
-              <AutoHealActionsLog />
-            </div>
+          <TabsContent value="autoheal" className="space-y-5">
+            <AutoHealConfig />
+            <AutoHealActionsLog />
           </TabsContent>
 
           {/* Audit Tab */}

@@ -39,7 +39,8 @@
       "WebFetch(domain:docs.kubecost.com)",
       "WebFetch(domain:www.ibm.com)",
       "WebFetch(domain:spacelift.io)",
-      "Bash(docker buildx:*)"
+      "Bash(docker buildx:*)",
+      "Bash(npx vite:*)"
     ]
   }
 }

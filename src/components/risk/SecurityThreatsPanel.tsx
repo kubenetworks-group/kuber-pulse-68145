@@ -1,241 +1,281 @@
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  ShieldAlert,
-  ShieldOff,
-  AlertTriangle,
-  CheckCircle,
-  XCircle,
-  ChevronDown,
-  ChevronUp,
-  RefreshCw,
-  Shield,
-  Clock,
-  Target,
-  Lightbulb,
-  ChevronRight,
-  Lock,
-  Wrench,
-  Eye,
-  Info,
-  Sparkles,
-  Zap,
+  ShieldAlert, ShieldOff, CheckCircle, XCircle, ChevronDown, ChevronUp,
+  RefreshCw, Shield, Clock, Target, Lightbulb, ChevronRight,
+  Wrench, Eye, Info, Sparkles, Zap, FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SecurityThreat, ThreatStats } from "@/hooks/useSecurityThreats";
+import { SecurityReportModal } from "./SecurityReportModal";
 
-// System namespaces — threats here are informational only, no auto-fix
-const SYSTEM_NAMESPACES = new Set([
-  "kube-system", "kube-public", "kube-node-lease",
-  "calico-system", "calico-apiserver", "tigera-operator",
-  "cilium", "cilium-system", "istio-system", "istio-operator",
-  "linkerd", "linkerd-viz", "metallb-system",
-  "ingress-nginx", "ingress", "cert-manager",
-  "monitoring", "prometheus", "grafana", "lens-metrics",
-  "flux-system", "argocd", "argo", "velero",
-  "gatekeeper-system", "kyverno", "local-path-storage",
-  "kodo", "kodo-agent",
-]);
+// ─── Status colors only (consistent across light/dark themes) ────────────────
 
-// Threat types that can be auto-fixed with user authorization
-const AUTO_FIXABLE_TYPES = new Set([
-  // Security context / privilege issues
-  "privilege_escalation",
-  "privileged_container",
-  "host_network",
-  "host_pid",
-  "missing_security_context",
-  "writable_root_filesystem",
-  // Suspicious process / root container
-  "suspicious_process",
-  "root_container",
-  "container_as_root",
-  "run_as_root",
-  // Network / RBAC
-  "suspicious_network",
-  "excessive_rbac",
-  "overprivileged_rbac",
-  // Resource abuse
-  "resource_abuse",
-  "crypto_mining",
-]);
+const STATUS = {
+  accent:   "#00E5A0",
+  critical: "#FF2D2D", critDim: "rgba(255,45,45,0.15)",  critBdr: "rgba(255,45,45,0.3)",
+  high:     "#FF7A00", highDim: "rgba(255,122,0,0.15)",  highBdr: "rgba(255,122,0,0.3)",
+  medium:   "#F5C518", medDim:  "rgba(245,197,24,0.15)", medBdr:  "rgba(245,197,24,0.3)",
+  low:      "#00E5A0", lowDim:  "rgba(0,229,160,0.12)",  lowBdr:  "rgba(0,229,160,0.25)",
+} as const;
 
-function getThreatNamespace(threat: SecurityThreat): string | null {
-  const resources = threat.affected_resources || [];
-  if (resources.length > 0 && resources[0]?.namespace) return resources[0].namespace;
-  return threat.namespace || null;
-}
-
-function isSystemThreat(threat: SecurityThreat): boolean {
-  const ns = getThreatNamespace(threat);
-  if (!ns) return false;
-  return SYSTEM_NAMESPACES.has(ns);
-}
-
-function isFixable(threat: SecurityThreat): boolean {
-  return AUTO_FIXABLE_TYPES.has(threat.threat_type) && !isSystemThreat(threat);
-}
-
-const severityDot: Record<string, string> = {
-  critical: "bg-red-500",
-  high: "bg-orange-500",
-  medium: "bg-yellow-500",
-  low: "bg-blue-400",
+const SEV: Record<string, { dot: string; text: string; bg: string; bdr: string; label: string }> = {
+  critical: { dot: STATUS.critical, text: STATUS.critical, bg: STATUS.critDim, bdr: STATUS.critBdr, label: "Crítica" },
+  high:     { dot: STATUS.high,     text: STATUS.high,     bg: STATUS.highDim, bdr: STATUS.highBdr, label: "Alta"    },
+  medium:   { dot: STATUS.medium,   text: STATUS.medium,   bg: STATUS.medDim,  bdr: STATUS.medBdr,  label: "Média"   },
+  low:      { dot: STATUS.low,      text: STATUS.low,      bg: STATUS.lowDim,  bdr: STATUS.lowBdr,  label: "Baixa"   },
 };
 
-const severityLabel: Record<string, { text: string; className: string }> = {
-  critical: { text: "Crítica", className: "text-red-500 bg-red-500/10 border-red-500/20" },
-  high: { text: "Alta", className: "text-orange-500 bg-orange-500/10 border-orange-500/20" },
-  medium: { text: "Média", className: "text-yellow-500 bg-yellow-500/10 border-yellow-500/20" },
-  low: { text: "Baixa", className: "text-blue-400 bg-blue-400/10 border-blue-400/20" },
-};
+// ─── Constants ────────────────────────────────────────────────────────────────
 
-interface SecurityThreatsPanelProps {
-  threats: SecurityThreat[];
-  stats: ThreatStats;
-  loading: boolean;
-  scanning: boolean;
-  onScan: () => void;
-  onMitigate: (threatId: string, action: string) => void;
-  onMarkFalsePositive: (threatId: string) => void;
-  onUpdateStatus: (threatId: string, status: string) => void;
+const SYS_NS = new Set([
+  "kube-system","kube-public","kube-node-lease","calico-system","calico-apiserver",
+  "tigera-operator","cilium","cilium-system","istio-system","istio-operator",
+  "linkerd","linkerd-viz","metallb-system","ingress-nginx","ingress","cert-manager",
+  "monitoring","prometheus","grafana","lens-metrics","flux-system","argocd","argo",
+  "velero","gatekeeper-system","kyverno","local-path-storage","kodo","kodo-agent",
+]);
+
+const FIXABLE = new Set([
+  "privilege_escalation","privileged_container","host_network","host_pid",
+  "missing_security_context","writable_root_filesystem","suspicious_process",
+  "root_container","container_as_root","run_as_root","suspicious_network",
+  "excessive_rbac","overprivileged_rbac","resource_abuse","crypto_mining",
+]);
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function getNS(t: SecurityThreat): string | null {
+  return t.affected_resources?.[0]?.namespace || t.namespace || null;
 }
 
-function ThreatRow({
-  threat,
-  onMitigate,
-  onMarkFalsePositive,
-  onUpdateStatus,
-}: {
-  threat: SecurityThreat;
-  onMitigate: (id: string, action: string) => void;
-  onMarkFalsePositive: (id: string) => void;
-  onUpdateStatus: (id: string, status: string) => void;
+const isSys  = (t: SecurityThreat) => { const ns = getNS(t); return !!ns && SYS_NS.has(ns); };
+const canFix = (t: SecurityThreat) => FIXABLE.has(t.threat_type) && !isSys(t);
+
+// ─── AI Fix button ────────────────────────────────────────────────────────────
+
+function AIBtn({ label, count, loading, onClick }: {
+  label: string; count?: number; loading: boolean; onClick: () => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const [authorizing, setAuthorizing] = useState(false);
+  return (
+    <button
+      onClick={onClick} disabled={loading}
+      className={cn(
+        "inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-[13px] font-medium border-none",
+        "transition-all duration-150 hover:-translate-y-px disabled:opacity-60",
+      )}
+      style={{
+        background: STATUS.accent, color: "#000", cursor: loading ? "not-allowed" : "pointer",
+        outline: "none",
+      }}
+      onMouseEnter={e => { if (!loading) (e.currentTarget as HTMLElement).style.boxShadow = "0 4px 20px rgba(0,229,160,0.35)"; }}
+      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.boxShadow = "none"; }}
+    >
+      {loading
+        ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+        : <Zap className="w-3.5 h-3.5" />}
+      {label}
+      {count !== undefined && count > 0 && (
+        <span className="flex items-center justify-center h-4 min-w-4 px-1 rounded-full text-[10px] font-bold"
+          style={{ background: "rgba(0,0,0,0.2)" }}>
+          {count}
+        </span>
+      )}
+    </button>
+  );
+}
 
-  const sev = severityLabel[threat.severity] ?? severityLabel.low;
-  const dot = severityDot[threat.severity] ?? "bg-blue-400";
-  const ns = getThreatNamespace(threat);
-  const resources = threat.affected_resources || [];
-  const aiAnalysis = threat.ai_analysis || {};
-  const steps = aiAnalysis.mitigation_steps || [];
-  const canFix = isFixable(threat);
-  const system = isSystemThreat(threat);
+// ─── Inner tab bar ────────────────────────────────────────────────────────────
 
-  const handleAuthorize = async () => {
-    setAuthorizing(true);
-    try {
-      await onMitigate(threat.id, "auto_fix_authorized");
-    } finally {
-      setAuthorizing(false);
-    }
+function InnerTabBar({ tabs, active, onChange }: {
+  tabs: { id: string; label: string; badge?: number }[];
+  active: string;
+  onChange: (id: string) => void;
+}) {
+  return (
+    <div className="flex border-b border-border">
+      {tabs.map(({ id, label, badge }) => {
+        const on = active === id;
+        return (
+          <button key={id} onClick={() => onChange(id)}
+            className={cn(
+              "flex items-center gap-2 px-5 py-2.5 text-xs transition-colors duration-150",
+              "border-b-2 -mb-px outline-none",
+              on ? "text-foreground font-medium" : "text-muted-foreground hover:text-foreground font-normal"
+            )}
+            style={{
+              borderBottomColor: on ? STATUS.accent : "transparent",
+              background: "none", border: "none",
+              borderBottom: on ? `2px solid ${STATUS.accent}` : "2px solid transparent",
+              marginBottom: -1, cursor: "pointer",
+            }}
+          >
+            {label}
+            {badge !== undefined && badge > 0 && (
+              <span
+                className="flex items-center justify-center h-4 min-w-4 px-1 rounded-full text-[10px] font-bold"
+                style={{
+                  background: on ? STATUS.critDim : undefined,
+                  color: on ? STATUS.critical : undefined,
+                  border: on ? `1px solid ${STATUS.critBdr}` : undefined,
+                }}
+                // fallback to Tailwind when not "on"
+                {...(!on ? { className: "flex items-center justify-center h-4 min-w-4 px-1 rounded-full text-[10px] font-bold bg-muted text-muted-foreground border border-border" } : {})}
+              >
+                {badge}
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── ThreatRow ────────────────────────────────────────────────────────────────
+
+function ThreatRow({ threat, idx, onMitigate, onMarkFalsePositive, onUpdateStatus }: {
+  threat: SecurityThreat; idx: number;
+  onMitigate: (id: string, act: string) => void;
+  onMarkFalsePositive: (id: string) => void;
+  onUpdateStatus: (id: string, s: string) => void;
+}) {
+  const [open, setOpen]         = useState(false);
+  const [authorizing, setAuth]  = useState(false);
+
+  const sev     = SEV[threat.severity] ?? SEV.low;
+  const ns      = getNS(threat);
+  const res     = threat.affected_resources || [];
+  const ai      = (threat as any).ai_analysis || {};
+  const steps   = ai.mitigation_steps as string[] || [];
+  const fixable = canFix(threat);
+  const system  = isSys(threat);
+  const pod     = res[0]?.pod || threat.pod_name || null;
+
+  const authorize = async () => {
+    setAuth(true);
+    try { await onMitigate(threat.id, "auto_fix_authorized"); }
+    finally { setAuth(false); }
   };
 
   return (
-    <div className={cn(
-      "border-b border-border/40 last:border-0 transition-colors",
-      expanded ? "bg-muted/30" : "hover:bg-muted/20"
-    )}>
+    <div
+      className={cn(
+        "border-b border-border last:border-0 transition-colors duration-150",
+        open ? "bg-muted/60" : "hover:bg-muted/30"
+      )}
+      style={{ animation: "rp-in 280ms ease both", animationDelay: `${idx * 28}ms` }}
+    >
       {/* Row header */}
       <button
-        className="w-full flex items-center gap-3 px-4 py-3 text-left"
-        onClick={() => setExpanded(v => !v)}
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center gap-3 px-4 py-3 text-left bg-transparent border-none cursor-pointer outline-none"
       >
-        <span className={cn("h-2 w-2 rounded-full flex-shrink-0 mt-0.5", dot)} />
+        {/* Severity dot */}
+        <span
+          className="rounded-full flex-shrink-0"
+          style={{ width: 8, height: 8, background: sev.dot, boxShadow: `0 0 5px ${sev.dot}70` }}
+        />
 
+        {/* Content */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-medium truncate">{threat.title}</span>
-            <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0 h-4 border", sev.className)}>
-              {sev.text}
-            </Badge>
+            {/* Pod or title */}
+            <span
+              className={cn("text-sm font-medium text-foreground truncate max-w-[220px]",
+                pod ? "font-mono" : "")}
+            >
+              {pod ?? threat.title}
+            </span>
+            {pod && (
+              <span className="text-xs text-muted-foreground truncate max-w-[180px]">
+                {threat.title}
+              </span>
+            )}
+            {/* Severity pill */}
+            <span
+              className="flex-shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full"
+              style={{ background: sev.bg, color: sev.text, border: `1px solid ${sev.bdr}` }}
+            >
+              {sev.label}
+            </span>
+            {/* Namespace badge */}
             {ns && (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 font-mono">
+              <span className="flex-shrink-0 text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted border border-border text-muted-foreground">
                 {ns}
-              </Badge>
+              </span>
             )}
-            {system && (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-muted-foreground">
-                sistema
-              </Badge>
-            )}
-            {canFix && (
-              <Badge className="text-[10px] px-1.5 py-0 h-4 bg-primary/10 text-primary border border-primary/20">
-                <Wrench className="h-2.5 w-2.5 mr-0.5" />
+            {/* Fix available */}
+            {fixable && (
+              <span
+                className="flex-shrink-0 inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full"
+                style={{ background: "rgba(0,229,160,0.10)", color: STATUS.accent, border: "1px solid rgba(0,229,160,0.25)" }}
+              >
+                <Wrench className="w-2.5 h-2.5" />
                 correção disponível
-              </Badge>
+              </span>
+            )}
+            {/* System badge */}
+            {system && (
+              <span className="flex-shrink-0 text-[10px] px-2 py-0.5 rounded-full bg-muted border border-border text-muted-foreground">
+                sistema
+              </span>
             )}
           </div>
-          <div className="flex items-center gap-3 mt-0.5 text-[11px] text-muted-foreground">
-            <span className="flex items-center gap-1">
-              <Clock className="h-2.5 w-2.5" />
+
+          <div className="flex items-center gap-3 mt-0.5">
+            <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+              <Clock className="w-2.5 h-2.5" />
               {new Date(threat.created_at).toLocaleString("pt-BR")}
             </span>
             {threat.threat_type && (
-              <span className="font-mono opacity-70">{threat.threat_type}</span>
+              <span className="text-[11px] text-muted-foreground font-mono opacity-70">
+                {threat.threat_type}
+              </span>
             )}
           </div>
         </div>
 
+        {/* Status indicators */}
         <div className="flex items-center gap-2 flex-shrink-0">
           {threat.status === "active" && (
-            <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
+            <span className="rounded-full animate-pulse" style={{ width: 6, height: 6, background: STATUS.critical }} />
           )}
-          {threat.status === "mitigated" && (
-            <CheckCircle className="h-3.5 w-3.5 text-green-500" />
-          )}
-          {threat.status === "investigating" && (
-            <Eye className="h-3.5 w-3.5 text-blue-400" />
-          )}
-          {expanded ? (
-            <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
-          ) : (
-            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-          )}
+          {threat.status === "mitigated"    && <CheckCircle className="w-3.5 h-3.5" style={{ color: STATUS.low }} />}
+          {threat.status === "investigating"&& <Eye className="w-3.5 h-3.5 text-blue-500" />}
+          {open ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
         </div>
       </button>
 
       {/* Expanded detail */}
-      {expanded && (
-        <div className="px-4 pb-4 space-y-4">
-          {/* Description */}
+      {open && (
+        <div className="px-4 pb-4 pl-10 flex flex-col gap-4">
           {threat.description && (
-            <p className="text-sm text-muted-foreground border-l-2 border-border pl-3">
+            <p className="text-sm text-muted-foreground leading-relaxed border-l-2 border-border pl-3 m-0">
               {threat.description}
             </p>
           )}
 
-          {/* Affected resources */}
-          {(resources.length > 0 || threat.pod_name) && (
-            <div className="space-y-1.5">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-                <Target className="h-3 w-3" /> Recursos afetados
-              </p>
+          {(res.length > 0 || threat.pod_name) && (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+                <Target className="w-2.5 h-2.5" /> Recursos afetados
+              </span>
               <div className="flex flex-wrap gap-2">
-                {resources.map((r: any, i: number) => (
-                  <div key={i} className="text-xs font-mono bg-muted px-2 py-1 rounded flex flex-wrap gap-x-3 gap-y-0.5">
+                {res.map((r: any, i: number) => (
+                  <div key={i} className="font-mono text-xs px-2 py-1 rounded-md bg-muted border border-border text-foreground flex gap-2.5 flex-wrap">
                     {r.namespace && <span><span className="text-muted-foreground">ns/</span>{r.namespace}</span>}
-                    {r.pod && <span><span className="text-muted-foreground">pod/</span>{r.pod}</span>}
+                    {r.pod       && <span><span className="text-muted-foreground">pod/</span>{r.pod}</span>}
                     {r.container && <span><span className="text-muted-foreground">ctr/</span>{r.container}</span>}
-                    {r.node && <span><span className="text-muted-foreground">node/</span>{r.node}</span>}
+                    {r.node      && <span><span className="text-muted-foreground">node/</span>{r.node}</span>}
                   </div>
                 ))}
-                {!resources.length && threat.pod_name && (
-                  <div className="text-xs font-mono bg-muted px-2 py-1 rounded flex gap-3">
+                {!res.length && threat.pod_name && (
+                  <div className="font-mono text-xs px-2 py-1 rounded-md bg-muted border border-border text-foreground flex gap-2.5">
                     {ns && <span><span className="text-muted-foreground">ns/</span>{ns}</span>}
                     <span><span className="text-muted-foreground">pod/</span>{threat.pod_name}</span>
                     {threat.container_name && <span><span className="text-muted-foreground">ctr/</span>{threat.container_name}</span>}
@@ -245,94 +285,60 @@ function ThreatRow({
             </div>
           )}
 
-          {/* AI Recommendation */}
-          {aiAnalysis.recommendation && (
-            <div className="space-y-1.5">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-                <Lightbulb className="h-3 w-3" /> Análise de IA
-              </p>
-              <p className="text-sm text-foreground/80 pl-1">{aiAnalysis.recommendation}</p>
-              {aiAnalysis.confidence && (
-                <p className="text-[11px] text-muted-foreground">
-                  Confiança: {Math.round(aiAnalysis.confidence * 100)}%
-                </p>
+          {ai.recommendation && (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+                <Lightbulb className="w-2.5 h-2.5" /> Análise de IA
+              </span>
+              <p className="text-sm text-muted-foreground leading-relaxed m-0">{ai.recommendation}</p>
+              {ai.confidence && (
+                <span className="text-[11px] text-muted-foreground">
+                  Confiança: {Math.round(ai.confidence * 100)}%
+                </span>
               )}
             </div>
           )}
 
-          {/* Steps */}
           {steps.length > 0 && (
-            <div className="space-y-1.5">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Passos de mitigação</p>
-              <ol className="space-y-1">
-                {steps.map((step: string, i: number) => (
-                  <li key={i} className="flex items-start gap-2 text-sm">
-                    <span className="flex-shrink-0 text-[10px] font-bold text-muted-foreground mt-1 w-4">{i + 1}.</span>
-                    <span className="text-foreground/80">{step}</span>
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] text-muted-foreground uppercase tracking-widest">Passos de mitigação</span>
+              <ol className="flex flex-col gap-1 list-none p-0 m-0">
+                {steps.map((step, i) => (
+                  <li key={i} className="flex gap-2 text-sm">
+                    <span className="font-mono text-[10px] font-bold text-muted-foreground mt-0.5 w-4 flex-shrink-0">{i + 1}.</span>
+                    <span className="text-muted-foreground">{step}</span>
                   </li>
                 ))}
               </ol>
             </div>
           )}
 
-          {/* System namespace notice */}
           {system && (
-            <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 border border-border text-xs text-muted-foreground">
-              <Info className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
-              <span>
-                Este recurso pertence a um namespace de sistema (<code className="font-mono">{ns}</code>).
-                Nenhuma ação automática é aplicada — verifique se o comportamento é esperado para este componente.
-              </span>
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-muted border border-border text-xs text-muted-foreground">
+              <Info className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+              <span>Namespace de sistema (<code className="font-mono">{ns}</code>). Nenhuma ação automática.</span>
             </div>
           )}
 
-          {/* Actions */}
           {threat.status === "active" && (
             <div className="flex flex-wrap gap-2 pt-1">
-              {/* Authorize fix — only for user namespace fixable issues */}
-              {canFix && (
-                <Button
-                  size="sm"
-                  className="gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
-                  onClick={handleAuthorize}
-                  disabled={authorizing}
-                >
-                  {authorizing ? (
-                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Lock className="h-3.5 w-3.5" />
-                  )}
-                  Autorizar Correção
-                </Button>
-              )}
-
-              <Button
-                size="sm"
-                variant="outline"
-                className="gap-1.5 text-green-600 border-green-500/30 hover:bg-green-500/10 hover:text-green-500"
-                onClick={() => onMitigate(threat.id, "manual_review")}
+              {fixable && <AIBtn label="Autorizar Correção" loading={authorizing} onClick={authorize} />}
+              <button onClick={() => onMitigate(threat.id, "manual_review")}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-transparent border border-border text-muted-foreground hover:bg-muted transition-colors cursor-pointer outline-none"
+                style={{ color: STATUS.low }}
               >
-                <CheckCircle className="h-3.5 w-3.5" />
-                Resolvido
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="gap-1.5"
-                onClick={() => onUpdateStatus(threat.id, "investigating")}
+                <CheckCircle className="w-3.5 h-3.5" />Resolvido
+              </button>
+              <button onClick={() => onUpdateStatus(threat.id, "investigating")}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-transparent border border-border text-muted-foreground hover:bg-muted transition-colors cursor-pointer outline-none"
               >
-                <Eye className="h-3.5 w-3.5" />
-                Investigando
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="gap-1.5 text-muted-foreground"
-                onClick={() => onMarkFalsePositive(threat.id)}
+                <Eye className="w-3.5 h-3.5" />Investigando
+              </button>
+              <button onClick={() => onMarkFalsePositive(threat.id)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-transparent border border-border text-muted-foreground hover:bg-muted transition-colors cursor-pointer outline-none"
               >
-                <XCircle className="h-3.5 w-3.5" />
-                Falso positivo
-              </Button>
+                <XCircle className="w-3.5 h-3.5" />Falso positivo
+              </button>
             </div>
           )}
         </div>
@@ -341,303 +347,195 @@ function ThreatRow({
   );
 }
 
-export function SecurityThreatsPanel({
-  threats,
-  stats,
-  loading,
-  scanning,
-  onScan,
-  onMitigate,
-  onMarkFalsePositive,
-  onUpdateStatus,
-}: SecurityThreatsPanelProps) {
-  const [showSystem, setShowSystem] = useState(false);
-  const [activeTab, setActiveTab] = useState<"active" | "resolved">("active");
-  const [showBulkFix, setShowBulkFix] = useState(false);
-  const [bulkFixing, setBulkFixing] = useState(false);
+// ─── Props ────────────────────────────────────────────────────────────────────
 
-  // Only real attacks
-  const attackThreats = threats.filter(t => t.is_attack !== false);
+interface Props {
+  threats: SecurityThreat[]; stats: ThreatStats;
+  loading: boolean; scanning: boolean; onScan: () => void;
+  onMitigate: (id: string, act: string) => void;
+  onMarkFalsePositive: (id: string) => void;
+  onUpdateStatus: (id: string, s: string) => void;
+}
 
-  // Split user vs system
-  const userThreats = attackThreats.filter(t => !isSystemThreat(t));
-  const systemThreats = attackThreats.filter(t => isSystemThreat(t));
+// ─── SecurityThreatsPanel ─────────────────────────────────────────────────────
 
-  const activeUser = userThreats.filter(t => t.status === "active");
-  const resolvedUser = userThreats.filter(t => t.status === "mitigated" || t.status === "false_positive");
+export function SecurityThreatsPanel({ threats, stats, loading, scanning, onScan, onMitigate, onMarkFalsePositive, onUpdateStatus }: Props) {
+  const [showSys, setShowSys]   = useState(false);
+  const [tab, setTab]           = useState<"active"|"resolved">("active");
+  const [showBulk, setShowBulk] = useState(false);
+  const [bulking, setBulking]   = useState(false);
+  const [showReport, setShowReport] = useState(false);
 
-  // Sort active: critical first, then high, then others
-  const severityOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
-  const sortedActive = [...activeUser].sort(
-    (a, b) => (severityOrder[a.severity] ?? 9) - (severityOrder[b.severity] ?? 9)
-  );
+  const attacks  = threats.filter(t => t.is_attack !== false);
+  const user     = attacks.filter(t => !isSys(t));
+  const system   = attacks.filter(t => isSys(t));
+  const active   = user.filter(t => t.status === "active");
+  const resolved = user.filter(t => t.status === "mitigated" || t.status === "false_positive");
+  const ORDER    = { critical: 0, high: 1, medium: 2, low: 3 } as Record<string, number>;
+  const sorted   = [...active].sort((a, b) => (ORDER[a.severity] ?? 9) - (ORDER[b.severity] ?? 9));
+  const fixable  = sorted.filter(t => canFix(t));
 
-  const criticalCount = activeUser.filter(t => t.severity === "critical").length;
-  const highCount = activeUser.filter(t => t.severity === "high").length;
-  const mediumCount = activeUser.filter(t => t.severity === "medium").length;
-
-  // Fixable = active user threats with an auto-fix mapping
-  const fixableThreats = sortedActive.filter(t => isFixable(t));
-
-  const handleBulkFix = async () => {
-    if (!fixableThreats.length) return;
-    setBulkFixing(true);
-    try {
-      for (const threat of fixableThreats) {
-        await onMitigate(threat.id, "auto_fix_authorized");
-      }
-    } finally {
-      setBulkFixing(false);
-      setShowBulkFix(false);
-    }
+  const doBulk = async () => {
+    setBulking(true);
+    try { for (const t of fixable) await onMitigate(t.id, "auto_fix_authorized"); }
+    finally { setBulking(false); setShowBulk(false); }
   };
 
-  if (loading) {
-    return (
-      <div className="rounded-xl border border-border bg-card">
-        <div className="flex items-center justify-center py-16 text-muted-foreground gap-3">
-          <RefreshCw className="h-4 w-4 animate-spin" />
-          <span className="text-sm">Carregando ameaças...</span>
-        </div>
-      </div>
-    );
-  }
+  /* ── Loading ── */
+  if (loading) return (
+    <div className="bg-card border border-border rounded-xl flex items-center justify-center py-16 gap-3 text-muted-foreground text-sm">
+      <RefreshCw className="w-4 h-4 animate-spin" />
+      Carregando ameaças…
+    </div>
+  );
 
-  if (activeUser.length === 0 && resolvedUser.length === 0) {
-    return (
-      <div className="rounded-xl border border-border bg-card">
-        <div className="flex flex-col items-center justify-center py-16 gap-3">
-          <div className="p-3 rounded-full bg-green-500/10">
-            <Shield className="h-6 w-6 text-green-500" />
-          </div>
-          <div className="text-center">
-            <p className="font-medium text-sm">Nenhuma ameaça em namespaces de usuário</p>
-            <p className="text-xs text-muted-foreground mt-1 max-w-xs">
-              Ameaças de sistema ({systemThreats.length}) são informacionais e não requerem ação.
-            </p>
-          </div>
-          <Button size="sm" variant="outline" onClick={onScan} disabled={scanning} className="gap-2">
-            {scanning ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-            Executar varredura
-          </Button>
-        </div>
+  /* ── Empty ── */
+  if (!active.length && !resolved.length) return (
+    <div className="bg-card border border-border rounded-xl flex flex-col items-center justify-center py-16 gap-4">
+      <div className="p-3.5 rounded-xl" style={{ background: "rgba(0,229,160,0.08)", border: "1px solid rgba(0,229,160,0.18)" }}>
+        <Shield className="w-5 h-5" style={{ color: STATUS.accent }} />
       </div>
-    );
-  }
+      <div className="text-center">
+        <p className="text-sm font-medium text-foreground">Nenhuma ameaça em namespaces de usuário</p>
+        <p className="text-xs text-muted-foreground mt-1 max-w-xs">
+          {system.length} componente{system.length !== 1 ? "s" : ""} de sistema detectado{system.length !== 1 ? "s" : ""} — apenas informacional.
+        </p>
+      </div>
+      <button onClick={onScan} disabled={scanning}
+        className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs bg-muted border border-border text-muted-foreground hover:bg-accent transition-colors cursor-pointer outline-none disabled:opacity-50"
+      >
+        <RefreshCw className={cn("w-3 h-3", scanning && "animate-spin")} />
+        Executar varredura
+      </button>
+    </div>
+  );
 
+  /* ── Main ── */
   return (
-    <div className="space-y-4">
-      {/* Summary bar */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-6">
-          {[
-            { label: "Críticas", count: criticalCount, className: "text-red-500" },
-            { label: "Altas", count: highCount, className: "text-orange-500" },
-            { label: "Médias", count: mediumCount, className: "text-yellow-500" },
-            { label: "Resolvidas", count: stats.mitigated, className: "text-green-500" },
-          ].map(({ label, count, className }) => (
-            <div key={label} className="text-center">
-              <p className={cn("text-2xl font-semibold tabular-nums", className)}>{count}</p>
-              <p className="text-[11px] text-muted-foreground">{label}</p>
-            </div>
-          ))}
-        </div>
-        <div className="flex items-center gap-2">
-          {fixableThreats.length > 0 && (
-            <Button
-              size="sm"
-              className="gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
-              onClick={() => setShowBulkFix(true)}
-              disabled={bulkFixing}
-            >
-              {bulkFixing ? (
-                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Sparkles className="h-3.5 w-3.5" />
-              )}
-              Corrigir com IA
-              <span className="ml-0.5 h-4 min-w-4 px-1 rounded-full bg-white/20 text-[10px] flex items-center justify-center">
-                {fixableThreats.length}
-              </span>
-            </Button>
-          )}
-          <Button size="sm" variant="outline" onClick={onScan} disabled={scanning} className="gap-2">
-            {scanning ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-            Varredura
-          </Button>
-        </div>
+    <div className="flex flex-col gap-3">
+
+      {/* ── Toolbar ── */}
+      <div className="flex items-center justify-end gap-2 flex-wrap">
+        {fixable.length > 0 && (
+          <AIBtn label="Corrigir com IA" count={fixable.length} loading={bulking} onClick={() => setShowBulk(true)} />
+        )}
+        <button onClick={() => setShowReport(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-muted border border-border text-muted-foreground hover:bg-accent transition-colors cursor-pointer outline-none"
+        >
+          <FileText className="w-3 h-3" />Relatório
+        </button>
+        <button onClick={onScan} disabled={scanning}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-muted border border-border text-muted-foreground hover:bg-accent transition-colors cursor-pointer outline-none disabled:opacity-50"
+        >
+          <RefreshCw className={cn("w-3 h-3", scanning && "animate-spin")} />
+          Varredura
+        </button>
+        <SecurityReportModal open={showReport} onClose={() => setShowReport(false)} />
       </div>
 
-      {/* Bulk fix confirmation dialog */}
-      <AlertDialog open={showBulkFix} onOpenChange={(o) => !o && setShowBulkFix(false)}>
+      {/* ── Bulk fix dialog ── */}
+      <AlertDialog open={showBulk} onOpenChange={o => !o && setShowBulk(false)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-primary" />
-              Corrigir {fixableThreats.length} ameaça{fixableThreats.length !== 1 ? "s" : ""} com IA
+              <Sparkles className="w-4 h-4" style={{ color: STATUS.accent }} />
+              Corrigir {fixable.length} ameaça{fixable.length !== 1 ? "s" : ""} com IA
             </AlertDialogTitle>
             <AlertDialogDescription asChild>
-              <div className="space-y-3">
-                <p>A IA enviará comandos de correção para o agente resolver as seguintes ameaças automaticamente:</p>
-                <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
-                  {fixableThreats.map((t) => (
-                    <div key={t.id} className="flex items-center gap-2 text-xs">
-                      <span className={cn(
-                        "h-1.5 w-1.5 rounded-full flex-shrink-0",
-                        t.severity === "critical" ? "bg-red-500" :
-                        t.severity === "high" ? "bg-orange-500" :
-                        t.severity === "medium" ? "bg-yellow-500" : "bg-blue-400"
-                      )} />
-                      <span className="font-medium truncate">{t.title}</span>
-                      <span className="font-mono text-muted-foreground flex-shrink-0">
-                        {getThreatNamespace(t)}
-                      </span>
-                    </div>
-                  ))}
+              <div className="flex flex-col gap-3">
+                <p>A IA enviará comandos de correção para o agente resolver automaticamente:</p>
+                <div className="max-h-48 overflow-y-auto flex flex-col gap-1.5">
+                  {fixable.map(t => {
+                    const s = SEV[t.severity] ?? SEV.low;
+                    return (
+                      <div key={t.id} className="flex items-center gap-2 text-xs">
+                        <span className="rounded-full flex-shrink-0" style={{ width: 6, height: 6, background: s.dot }} />
+                        <span className="font-medium flex-1 min-w-0 truncate">{t.title}</span>
+                        <span className="font-mono text-muted-foreground flex-shrink-0">{getNS(t)}</span>
+                      </div>
+                    );
+                  })}
                 </div>
                 <p className="text-xs text-muted-foreground border-t border-border pt-2">
-                  As correções são enviadas como comandos ao agente e podem levar alguns minutos para serem aplicadas.
+                  As correções podem levar alguns minutos para serem aplicadas pelo agente.
                 </p>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleBulkFix}
-              disabled={bulkFixing}
-              className="gap-1.5"
-            >
-              {bulkFixing ? (
-                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Zap className="h-3.5 w-3.5" />
-              )}
+            <AlertDialogAction onClick={doBulk} disabled={bulking} className="gap-1.5">
+              {bulking ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
               Autorizar e corrigir tudo
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Tabs */}
-      <div className="rounded-xl border border-border bg-card overflow-hidden">
-        {/* Tab bar */}
-        <div className="flex items-center border-b border-border px-1 bg-muted/30">
-          <button
-            onClick={() => setActiveTab("active")}
-            className={cn(
-              "flex items-center gap-1.5 px-4 py-2.5 text-sm border-b-2 transition-colors",
-              activeTab === "active"
-                ? "border-primary text-foreground font-medium"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <ShieldAlert className="h-3.5 w-3.5" />
-            Ativas
-            {activeUser.length > 0 && (
-              <span className="ml-1 h-4 min-w-4 px-1 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center">
-                {activeUser.length}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab("resolved")}
-            className={cn(
-              "flex items-center gap-1.5 px-4 py-2.5 text-sm border-b-2 transition-colors",
-              activeTab === "resolved"
-                ? "border-primary text-foreground font-medium"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <CheckCircle className="h-3.5 w-3.5" />
-            Resolvidas
-            {resolvedUser.length > 0 && (
-              <span className="ml-1 h-4 min-w-4 px-1 rounded-full bg-muted text-muted-foreground text-[10px] flex items-center justify-center">
-                {resolvedUser.length}
-              </span>
-            )}
-          </button>
-        </div>
+      {/* ── Threat list ── */}
+      <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <InnerTabBar
+          tabs={[
+            { id: "active",   label: "Ativas",     badge: active.length   },
+            { id: "resolved", label: "Resolvidas", badge: resolved.length },
+          ]}
+          active={tab}
+          onChange={id => setTab(id as "active"|"resolved")}
+        />
 
-        {/* Threat list */}
-        {activeTab === "active" && (
-          <>
-            {sortedActive.length === 0 ? (
-              <div className="flex items-center justify-center py-12 text-muted-foreground gap-2 text-sm">
-                <Shield className="h-4 w-4" />
-                Nenhuma ameaça ativa em namespaces de usuário
+        {tab === "active" && (
+          sorted.length === 0
+            ? <div className="flex items-center justify-center py-12 gap-2 text-sm text-muted-foreground">
+                <Shield className="w-4 h-4" />Nenhuma ameaça ativa em namespaces de usuário
               </div>
-            ) : (
-              <div className="divide-y divide-border/40">
-                {sortedActive.map(threat => (
-                  <ThreatRow
-                    key={threat.id}
-                    threat={threat}
-                    onMitigate={onMitigate}
-                    onMarkFalsePositive={onMarkFalsePositive}
-                    onUpdateStatus={onUpdateStatus}
-                  />
+            : <div>
+                {sorted.map((t, i) => (
+                  <ThreatRow key={t.id} threat={t} idx={i}
+                    onMitigate={onMitigate} onMarkFalsePositive={onMarkFalsePositive} onUpdateStatus={onUpdateStatus} />
                 ))}
               </div>
-            )}
-          </>
         )}
 
-        {activeTab === "resolved" && (
-          <>
-            {resolvedUser.length === 0 ? (
-              <div className="flex items-center justify-center py-12 text-muted-foreground gap-2 text-sm">
-                <CheckCircle className="h-4 w-4" />
-                Nenhuma ameaça resolvida ainda
+        {tab === "resolved" && (
+          resolved.length === 0
+            ? <div className="flex items-center justify-center py-12 gap-2 text-sm text-muted-foreground">
+                <CheckCircle className="w-4 h-4" />Nenhuma ameaça resolvida ainda
               </div>
-            ) : (
-              <ScrollArea className="max-h-[480px]">
-                <div className="divide-y divide-border/40">
-                  {resolvedUser.map(threat => (
-                    <ThreatRow
-                      key={threat.id}
-                      threat={threat}
-                      onMitigate={onMitigate}
-                      onMarkFalsePositive={onMarkFalsePositive}
-                      onUpdateStatus={onUpdateStatus}
-                    />
+            : <ScrollArea className="max-h-[480px]">
+                <div>
+                  {resolved.map((t, i) => (
+                    <ThreatRow key={t.id} threat={t} idx={i}
+                      onMitigate={onMitigate} onMarkFalsePositive={onMarkFalsePositive} onUpdateStatus={onUpdateStatus} />
                   ))}
                 </div>
               </ScrollArea>
-            )}
-          </>
         )}
       </div>
 
-      {/* System threats — collapsed by default */}
-      {systemThreats.length > 0 && (
-        <div className="rounded-xl border border-border/50 bg-card/50 overflow-hidden">
-          <button
-            className="w-full flex items-center justify-between px-4 py-3 text-sm text-muted-foreground hover:text-foreground transition-colors"
-            onClick={() => setShowSystem(v => !v)}
+      {/* ── System threats ── */}
+      {system.length > 0 && (
+        <div className="bg-card/60 border border-border rounded-xl overflow-hidden">
+          <button onClick={() => setShowSys(v => !v)}
+            className="w-full flex items-center justify-between px-4 py-3 text-xs text-muted-foreground hover:text-foreground bg-transparent border-none cursor-pointer outline-none transition-colors"
           >
             <span className="flex items-center gap-2">
-              <ShieldOff className="h-3.5 w-3.5" />
-              Componentes de sistema — informacional ({systemThreats.length})
+              <ShieldOff className="w-3 h-3" />
+              Componentes de sistema — informacional ({system.length})
             </span>
-            <ChevronRight className={cn("h-3.5 w-3.5 transition-transform", showSystem && "rotate-90")} />
+            <ChevronRight className={cn("w-3 h-3 transition-transform", showSys && "rotate-90")} />
           </button>
-
-          {showSystem && (
-            <div className="border-t border-border/50 divide-y divide-border/40">
-              {systemThreats.map(threat => (
-                <ThreatRow
-                  key={threat.id}
-                  threat={threat}
-                  onMitigate={onMitigate}
-                  onMarkFalsePositive={onMarkFalsePositive}
-                  onUpdateStatus={onUpdateStatus}
-                />
+          {showSys && (
+            <div className="border-t border-border">
+              {system.map((t, i) => (
+                <ThreatRow key={t.id} threat={t} idx={i}
+                  onMitigate={onMitigate} onMarkFalsePositive={onMarkFalsePositive} onUpdateStatus={onUpdateStatus} />
               ))}
             </div>
           )}
         </div>
       )}
+
+      <style>{`@keyframes rp-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}`}</style>
     </div>
   );
 }
