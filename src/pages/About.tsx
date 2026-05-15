@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { SEO } from "@/components/SEO";
 import { useEffect, useRef, useState } from "react";
 import {
   Brain,
