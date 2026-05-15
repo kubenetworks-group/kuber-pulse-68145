@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { SEO } from "@/components/SEO";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useNavigate, Link } from "react-router-dom";
@@ -25,6 +26,11 @@ export default function TermsOfService() {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO
+        title="Termos de Serviço — Kodo"
+        description="Termos de uso do Kodo: regras de cadastro, uso aceitável, cancelamento e responsabilidades da plataforma de gestão Kubernetes."
+        path="/terms"
+      />
       <div className="container mx-auto px-4 py-8 max-w-5xl">
         <Button
           variant="ghost"

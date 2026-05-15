@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { SEO } from "@/components/SEO";
 import { useEffect, useRef, useState } from "react";
 import {
   Brain,
@@ -1149,6 +1150,11 @@ export default function About() {
 
   return (
     <div className="min-h-screen bg-[#050810] text-white antialiased overflow-x-hidden">
+      <SEO
+        title="Sobre o Kodo — Kubernetes inteligente para LATAM"
+        description="Conheça o Kodo: a plataforma brasileira de gestão Kubernetes com IA para auto-healing, segurança, FinOps e observabilidade."
+        path="/sobre"
+      />
       <div className="fixed inset-0 -z-10 pointer-events-none">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_100%_50%_at_50%_-5%,rgba(59,130,246,0.08),transparent)]" />
       </div>

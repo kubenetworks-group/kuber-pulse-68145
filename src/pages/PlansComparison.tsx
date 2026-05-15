@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { SEO } from "@/components/SEO";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Footer } from "@/components/Footer";
@@ -120,6 +121,11 @@ const renderValue = (value: boolean | string) => {
 export default function PlansComparison() {
   return (
     <div className="min-h-screen bg-background">
+      <SEO
+        title="Comparativo de Planos — Kodo"
+        description="Compare em detalhes os planos Free e Pro do Kodo: clusters, IA, observabilidade e auto-healing para Kubernetes."
+        path="/plans"
+      />
       {/* Header */}
       <header className="border-b border-border/50 bg-background/80 backdrop-blur-xl sticky top-0 z-50">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4">

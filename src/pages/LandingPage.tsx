@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { SEO } from "@/components/SEO";
 import { Button } from "@/components/ui/button";
 import { Footer } from "@/components/Footer";
 import kodoLogo from "@/assets/kodo-logo.png";
@@ -250,6 +251,11 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-[#060912] text-white overflow-x-hidden">
+      <SEO
+        title="Kodo — Gestão Kubernetes com IA"
+        description="Plataforma de gestão Kubernetes com IA: auto-healing, segurança, FinOps e observabilidade em tempo real para seus clusters K8s."
+        path="/"
+      />
 
       {/* ── Background ── */}
       <div className="fixed inset-0 -z-10">

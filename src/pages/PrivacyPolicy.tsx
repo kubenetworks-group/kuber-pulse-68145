@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { SEO } from "@/components/SEO";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useNavigate, Link } from "react-router-dom";
@@ -30,6 +31,11 @@ export default function PrivacyPolicy() {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO
+        title="Política de Privacidade — Kodo"
+        description="Política de privacidade do Kodo: como coletamos, usamos e protegemos seus dados conforme a LGPD."
+        path="/privacy"
+      />
       <div className="container mx-auto px-4 py-8 max-w-5xl">
         <Button
           variant="ghost"

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { SEO } from '@/components/SEO';
 import { useSearchParams } from 'react-router-dom';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { PlanCard } from '@/components/PlanCard';
@@ -85,6 +86,11 @@ export default function Pricing() {
 
   return (
     <DashboardLayout>
+      <SEO
+        title="Planos e Preços — Kodo"
+        description="Compare os planos do Kodo: comece grátis ou ative o Pro com auto-healing, observabilidade e suporte multi-cluster."
+        path="/pricing"
+      />
       <div className="p-4 sm:p-6 lg:p-8 space-y-8">
         {/* Header */}
         <div className="text-center max-w-2xl mx-auto">
