@@ -1,7 +1,8 @@
+import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Server, Cpu, HardDrive, Activity, Layers, Shield, Zap } from "lucide-react";
+import { Server, Cpu, HardDrive, Activity, Layers, Shield, Zap, RefreshCw } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 
 interface NodeInfo {
@@ -29,6 +30,8 @@ interface NodeDetailsCardProps {
   cpuUsage: number;
   memoryUsage: number;
   loading: boolean;
+  collectedAt?: Date | null;
+  onRefresh?: () => void;
 }
 
 export const NodeDetailsCard = ({
@@ -38,7 +41,32 @@ export const NodeDetailsCard = ({
   cpuUsage,
   memoryUsage,
   loading,
+  collectedAt,
+  onRefresh,
 }: NodeDetailsCardProps) => {
+  const [refreshing, setRefreshing] = useState(false);
+  const [dataAge, setDataAge] = useState('');
+
+  // Update the "X seconds ago" label every second
+  useEffect(() => {
+    const update = () => {
+      if (!collectedAt) { setDataAge(''); return; }
+      const diffSec = Math.floor((Date.now() - collectedAt.getTime()) / 1000);
+      if (diffSec < 60) setDataAge(`${diffSec}s atrás`);
+      else if (diffSec < 3600) setDataAge(`${Math.floor(diffSec / 60)}m atrás`);
+      else setDataAge(`${Math.floor(diffSec / 3600)}h atrás`);
+    };
+    update();
+    const t = setInterval(update, 1000);
+    return () => clearInterval(t);
+  }, [collectedAt]);
+
+  const handleRefresh = async () => {
+    if (!onRefresh || refreshing) return;
+    setRefreshing(true);
+    onRefresh();
+    setTimeout(() => setRefreshing(false), 1500);
+  };
   if (loading) {
     return (
       <Card className="overflow-hidden bg-gradient-to-br from-card via-card/50 to-card/30">
@@ -163,23 +191,40 @@ export const NodeDetailsCard = ({
       <div className="relative p-6 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent overflow-hidden">
         <div className="absolute inset-0 bg-grid-white/[0.02] pointer-events-none"></div>
         <div className="absolute -top-24 -right-24 w-48 h-48 bg-primary/10 rounded-full blur-3xl animate-pulse"></div>
-        <div className="relative flex items-center gap-4">
-          <div className="p-4 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/10 backdrop-blur-sm shadow-lg">
-            <Server className="w-7 h-7 text-primary" />
-          </div>
-          <div>
-            <h3 className="text-2xl font-bold bg-gradient-to-r from-foreground via-foreground/90 to-foreground/70 bg-clip-text text-transparent">
-              Node Infrastructure
-            </h3>
-            <div className="flex items-center gap-2 mt-1">
-              <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                <Zap className="w-4 h-4 text-primary" />
-                <span className="font-medium">{nodes.length} nodes ativos</span>
+        <div className="relative flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="p-4 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/10 backdrop-blur-sm shadow-lg">
+              <Server className="w-7 h-7 text-primary" />
+            </div>
+            <div>
+              <h3 className="text-2xl font-bold bg-gradient-to-r from-foreground via-foreground/90 to-foreground/70 bg-clip-text text-transparent">
+                Node Infrastructure
+              </h3>
+              <div className="flex items-center gap-2 mt-1">
+                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                  <Zap className="w-4 h-4 text-primary" />
+                  <span className="font-medium">{nodes.length} nodes ativos</span>
+                </div>
+                {dataAge && (
+                  <>
+                    <span className="text-muted-foreground/50">•</span>
+                    <span className="text-xs text-muted-foreground">Atualizado {dataAge}</span>
+                  </>
+                )}
               </div>
-              <span className="text-muted-foreground/50">•</span>
-              <span className="text-xs text-muted-foreground">Real-time metrics</span>
             </div>
           </div>
+          {onRefresh && (
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all disabled:opacity-50"
+              title="Atualizar métricas"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+              Atualizar
+            </button>
+          )}
         </div>
       </div>
 

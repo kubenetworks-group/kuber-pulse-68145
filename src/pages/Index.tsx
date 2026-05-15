@@ -123,6 +123,12 @@ const Index = () => {
     }
   };
 
+  // Prefer clusters.cpu_usage/memory_usage when available — those are updated on every
+  // metric cycle by agent-receive-metrics and propagated in real-time via the clusters
+  // realtime subscription. Fall back to the hook's computed value when not set yet.
+  const liveCpuUsage    = clusterData?.cpu_usage    ?? nodeMetrics.cpuUsage;
+  const liveMemoryUsage = clusterData?.memory_usage ?? nodeMetrics.memoryUsage;
+
   return (
     <DashboardLayout>
       {/* Floating Security Alert */}
@@ -145,8 +151,8 @@ const Index = () => {
             {/* Top metrics row — minimal pill cards */}
             <CleanMetricsRow
               clusterData={clusterData}
-              cpuUsage={nodeMetrics.cpuUsage}
-              memoryUsage={nodeMetrics.memoryUsage}
+              cpuUsage={liveCpuUsage}
+              memoryUsage={liveMemoryUsage}
             />
 
             {/* Node infrastructure */}
@@ -155,9 +161,11 @@ const Index = () => {
                 nodes={nodeMetrics.nodes}
                 totalCPU={nodeMetrics.totalCPU}
                 totalMemory={nodeMetrics.totalMemory}
-                cpuUsage={nodeMetrics.cpuUsage}
-                memoryUsage={nodeMetrics.memoryUsage}
+                cpuUsage={liveCpuUsage}
+                memoryUsage={liveMemoryUsage}
                 loading={nodeMetrics.loading}
+                collectedAt={nodeMetrics.collectedAt}
+                onRefresh={nodeMetrics.refresh}
               />
             )}
 

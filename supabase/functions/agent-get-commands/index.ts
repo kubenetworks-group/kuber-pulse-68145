@@ -150,13 +150,33 @@ serve(async (req) => {
       .update({ last_seen: new Date().toISOString() })
       .eq('cluster_id', cluster_id);
 
+    // Fetch current cluster status so we can decide whether to bump it
+    const { data: currentCluster } = await supabaseClient
+      .from('clusters')
+      .select('status')
+      .eq('id', cluster_id)
+      .single();
+
+    // If the cluster is stuck in pending_agent or disconnected, the agent heartbeat is
+    // proof it is alive → promote to 'connecting' immediately so the UI reflects this.
+    // The full 'healthy'/'warning' status will be set by agent-receive-metrics once metrics arrive.
+    const staleBefore = ['pending_agent', 'disconnected'];
+    const heartbeatStatus = staleBefore.includes(currentCluster?.status ?? '')
+      ? { status: 'connecting' }
+      : {};
+
     await supabaseClient
       .from('clusters')
       .update({
         agent_last_seen_at: new Date().toISOString(),
         ...(agentVersion !== 'unknown' ? { agent_version: agentVersion } : {}),
+        ...heartbeatStatus,
       })
       .eq('id', cluster_id);
+
+    if (heartbeatStatus.status) {
+      console.log(`Cluster ${cluster_id}: status bumped ${currentCluster?.status} → connecting (agent heartbeat)`);
+    }
 
     // Delete commands stuck >10 min (sent or pending) — unresolvable, clean up
     // to avoid blocking the queue without needing an external broker (RabbitMQ etc).

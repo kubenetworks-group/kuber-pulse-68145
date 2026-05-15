@@ -7,7 +7,7 @@ import { useCluster } from "@/contexts/ClusterContext";
 import { toast } from "sonner";
 import {
   Terminal, Copy, Trash2, Plus, Download, CheckCircle,
-  AlertTriangle, Clock, Wifi, WifiOff, RefreshCw, ArrowUpCircle,
+  AlertTriangle, Clock, Wifi, WifiOff, RefreshCw, ArrowUpCircle, KeyRound, ShieldAlert,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger,
@@ -54,7 +54,7 @@ interface AgentKey {
 
 // ─── Status helpers ───────────────────────────────────────────────────────────
 
-function getAgentStatus(agent: AgentKey): {
+function getAgentStatus(agent: AgentKey, latestVersion?: string | null): {
   label: string; color: string; dim: string; border: string; pulse?: boolean
 } {
   if (!agent.is_active) {
@@ -70,7 +70,11 @@ function getAgentStatus(agent: AgentKey): {
   const minsAgo = (Date.now() - new Date(lastSeen).getTime()) / 60_000;
 
   if (minsAgo < 5) {
-    if (agent.clusters?.agent_update_available) {
+    // Only show "Desatualizado" if the agent version is truly behind the latest
+    const agentV = (agent.clusters?.agent_version ?? "").replace(/^v/, "");
+    const latestV = (latestVersion ?? "").replace(/^v/, "");
+    const trulyOutdated = agent.clusters?.agent_update_available && agentV && latestV && agentV !== latestV;
+    if (trulyOutdated) {
       return { label: "Desatualizado", color: C.warn, dim: C.warnD, border: C.warnB };
     }
     return { label: "Online", color: C.accent, dim: C.accentD, border: C.accentB, pulse: true };
@@ -79,6 +83,13 @@ function getAgentStatus(agent: AgentKey): {
     return { label: `${Math.floor(minsAgo)}min atrás`, color: C.warn, dim: C.warnD, border: C.warnB };
   }
   return { label: "Offline", color: C.danger, dim: C.dangerD, border: C.dangerB };
+}
+
+function isLikelyAuthFailure(agent: AgentKey): boolean {
+  const lastSeen = agent.clusters?.agent_last_seen_at ?? agent.last_seen;
+  if (!lastSeen) return false;
+  const hoursAgo = (Date.now() - new Date(lastSeen).getTime()) / 3_600_000;
+  return hoursAgo > 6 && agent.is_active;
 }
 
 function formatVersion(v: string | null | undefined): string {
@@ -99,8 +110,8 @@ function formatRelative(iso: string | null): string {
 
 // ─── StatusBadge ─────────────────────────────────────────────────────────────
 
-function StatusBadge({ agent }: { agent: AgentKey }) {
-  const s = getAgentStatus(agent);
+function StatusBadge({ agent, latestVersion }: { agent: AgentKey; latestVersion?: string | null }) {
+  const s = getAgentStatus(agent, latestVersion);
   return (
     <span
       className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium"
@@ -531,10 +542,18 @@ spec:
               const version     = formatVersion(agent.clusters?.agent_version);
               const lastSeen    = agent.clusters?.agent_last_seen_at ?? agent.last_seen;
               const updateAvail = agent.clusters?.agent_update_available;
-              const status      = getAgentStatus(agent);
-              const isOnline    = status.label === "Online";
-              const kubectlCmd  = `kubectl set image deployment/kodo-agent agent=ghcr.io/kubenetworks-group/kodo-agent:${latestAgentVersion ?? "latest"} -n kodo`;
-              const cmdId       = `cmd-${agent.id}`;
+              const status      = getAgentStatus(agent, latestAgentVersion);
+              const isOnline       = status.label === "Online";
+              const kubectlCmd     = `kubectl set image deployment/kodo-agent agent=ghcr.io/kubenetworks-group/kodo-agent:${latestAgentVersion ?? "latest"} -n kodo`;
+              const cmdId          = `cmd-${agent.id}`;
+              const authFailure    = isLikelyAuthFailure(agent);
+              const patchSecretId  = `patch-${agent.id}`;
+
+              // Client-side guard: if agent is already on latest version, never show update banner
+              // regardless of stale DB flag (may not have been cleared yet)
+              const agentVersionNorm = (agent.clusters?.agent_version ?? "").replace(/^v/, "");
+              const latestVersionNorm = (latestAgentVersion ?? "").replace(/^v/, "");
+              const effectiveUpdateAvail = updateAvail && agentVersionNorm !== latestVersionNorm && agentVersionNorm !== "";
 
               return (
                 <div
@@ -553,7 +572,7 @@ spec:
                         >
                           {agent.name}
                         </span>
-                        <StatusBadge agent={agent} />
+                        <StatusBadge agent={agent} latestVersion={latestAgentVersion} />
                         {version && (
                           <span
                             className="text-[10px] px-1.5 py-0.5 rounded bg-muted border border-border text-muted-foreground"
@@ -562,7 +581,7 @@ spec:
                             {version}
                           </span>
                         )}
-                        {updateAvail && latestAgentVersion && (
+                        {effectiveUpdateAvail && latestAgentVersion && (
                           <span
                             className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded"
                             style={{ background: C.accentD, color: C.accent, border: `1px solid ${C.accentB}` }}
@@ -603,7 +622,7 @@ spec:
                   </div>
 
                   {/* ── Update banner ── */}
-                  {updateAvail && (
+                  {effectiveUpdateAvail && (
                     <div
                       className="mx-5 mb-4 rounded-lg overflow-hidden"
                       style={{ border: `1px solid ${C.accentB}`, background: C.accentD }}
@@ -639,6 +658,73 @@ spec:
                     </div>
                   )}
 
+                  {/* ── Auth failure banner ── */}
+                  {authFailure && (
+                    <div
+                      className="mx-5 mb-4 rounded-lg overflow-hidden"
+                      style={{ border: `1px solid ${C.dangerB}`, background: C.dangerD }}
+                    >
+                      <div className="flex items-center gap-2 px-4 py-2.5 border-b" style={{ borderColor: C.dangerB }}>
+                        <ShieldAlert className="w-3.5 h-3.5 flex-shrink-0" style={{ color: C.danger }} />
+                        <span className="text-xs font-semibold" style={{ color: C.danger }}>
+                          Chave API inválida — agente não consegue autenticar
+                        </span>
+                      </div>
+                      <div className="px-4 py-3 flex flex-col gap-3">
+                        <p className="text-[11px] text-muted-foreground leading-relaxed">
+                          O agente está rodando no cluster mas retorna <code className="bg-card px-1 rounded" style={{ fontFamily: MONO }}>401 Invalid API key</code>.
+                          A chave no deployment não corresponde ao banco de dados. Crie uma nova chave e atualize o secret no cluster:
+                        </p>
+
+                        <div className="flex flex-col gap-1.5">
+                          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                            1. Crie uma nova API Key acima e copie-a
+                          </span>
+                          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                            2. Atualize o secret no cluster
+                          </span>
+                          <div className="relative">
+                            <code
+                              className="block text-[11px] bg-card border border-border rounded-md px-3 py-2 pr-9 overflow-x-auto"
+                              style={{ fontFamily: MONO, color: C.danger }}
+                            >
+                              {`kubectl patch secret kodo-secret -n kodo -p '{"stringData":{"API_KEY":"<nova-chave>"}}'`}
+                            </code>
+                            <button
+                              onClick={() => copy(`kubectl patch secret kodo-secret -n kodo -p '{"stringData":{"API_KEY":"<nova-chave>"}}'`, patchSecretId)}
+                              className="absolute top-1.5 right-1.5 flex items-center justify-center w-6 h-6 rounded bg-muted border border-border hover:bg-accent transition-colors cursor-pointer outline-none border-none"
+                            >
+                              {copiedId === patchSecretId
+                                ? <CheckCircle className="w-3 h-3" style={{ color: C.accent }} />
+                                : <Copy className="w-3 h-3 text-muted-foreground" />
+                              }
+                            </button>
+                          </div>
+                          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                            3. Reinicie o pod do agente
+                          </span>
+                          <div className="relative">
+                            <code
+                              className="block text-[11px] bg-card border border-border rounded-md px-3 py-2 pr-9 overflow-x-auto"
+                              style={{ fontFamily: MONO, color: "hsl(var(--muted-foreground))" }}
+                            >
+                              kubectl rollout restart deployment/kodo-agent -n kodo
+                            </code>
+                            <button
+                              onClick={() => copy("kubectl rollout restart deployment/kodo-agent -n kodo", `restart-${agent.id}`)}
+                              className="absolute top-1.5 right-1.5 flex items-center justify-center w-6 h-6 rounded bg-muted border border-border hover:bg-accent transition-colors cursor-pointer outline-none border-none"
+                            >
+                              {copiedId === `restart-${agent.id}`
+                                ? <CheckCircle className="w-3 h-3" style={{ color: C.accent }} />
+                                : <Copy className="w-3 h-3 text-muted-foreground" />
+                              }
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* ── API Key section ── */}
                   <div className="flex flex-col gap-3 px-5 pb-4">
                     <div className="flex flex-col gap-1.5">
@@ -658,14 +744,16 @@ spec:
                       </div>
                     </div>
 
-                    {/* YAML download hint */}
-                    <div
-                      className="flex items-start gap-2 rounded-lg px-3 py-2.5 text-[11px]"
-                      style={{ background: C.warnD, border: `1px solid ${C.warnB}`, color: C.warn }}
-                    >
-                      <AlertTriangle className="w-3 h-3 flex-shrink-0 mt-0.5" style={{ color: C.warn }} />
-                      Para baixar o YAML de deploy, crie uma nova API key. A chave completa é exibida apenas no momento da criação.
-                    </div>
+                    {/* YAML download hint — only show when no auth failure (avoid duplicate noise) */}
+                    {!authFailure && (
+                      <div
+                        className="flex items-start gap-2 rounded-lg px-3 py-2.5 text-[11px]"
+                        style={{ background: C.warnD, border: `1px solid ${C.warnB}`, color: C.warn }}
+                      >
+                        <AlertTriangle className="w-3 h-3 flex-shrink-0 mt-0.5" style={{ color: C.warn }} />
+                        Para baixar o YAML de deploy, crie uma nova API key. A chave completa é exibida apenas no momento da criação.
+                      </div>
+                    )}
                   </div>
                 </div>
               );

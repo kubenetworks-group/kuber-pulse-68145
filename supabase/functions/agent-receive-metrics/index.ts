@@ -176,18 +176,35 @@ serve(async (req) => {
       return patch1 - patch2;
     };
 
-    const updateAvailable = latestVersionData && agentVersion !== 'unknown' &&
-      compareVersions(agentVersion, latestVersionData.version) < 0;
+    const versionCmp = latestVersionData && agentVersion !== 'unknown'
+      ? compareVersions(agentVersion, latestVersionData.version)
+      : 0;
+    const updateAvailable = versionCmp < 0;
+    const alreadyUpToDate = latestVersionData && agentVersion !== 'unknown' && versionCmp >= 0;
 
     await supabaseClient
       .from('clusters')
       .update({
         agent_version: agentVersion,
         agent_last_seen_at: new Date().toISOString(),
-        agent_update_available: updateAvailable || false,
+        agent_update_available: updateAvailable,
         agent_update_message: updateAvailable ? latestVersionData?.release_notes : null,
       })
       .eq('id', cluster_id);
+
+    if (alreadyUpToDate) {
+      // Cancel any stale self_update commands — agent is already on latest version
+      const { data: cancelled } = await supabaseClient
+        .from('agent_commands')
+        .delete()
+        .eq('cluster_id', cluster_id)
+        .in('command_type', ['self_update', 'agent_update'])
+        .in('status', ['pending', 'sent'])
+        .select('id, command_type');
+      if (cancelled && cancelled.length > 0) {
+        console.log(`✅ Cancelled ${cancelled.length} stale self_update commands — agent already at ${agentVersion}`);
+      }
+    }
 
     // Auto-create self_update command if agent is outdated
     if (updateAvailable && latestVersionData) {
@@ -338,14 +355,14 @@ serve(async (req) => {
     const hasBasicMetrics  = ['cpu', 'memory', 'pods'].some(t => metricTypes.has(t));
     const hasEssentials    = ['pod_details', 'events'].every(t => metricTypes.has(t));
 
-    // Determine cluster health status from this batch
+    // Determine cluster health status from this batch.
+    // Basic metrics arriving = cluster is reachable and functional → healthy.
+    // The cron (check-cluster-health) does the stricter cumulative check over 5 min.
     let clusterStatus: string;
-    if (hasBasicMetrics && hasEssentials) {
+    if (hasBasicMetrics) {
       clusterStatus = 'healthy';
-    } else if (hasBasicMetrics) {
-      clusterStatus = 'warning'; // métricas básicas recebidas, mas faltam pod_details ou events
     } else {
-      clusterStatus = 'warning'; // alguma métrica chegou, mas não as básicas esperadas
+      clusterStatus = 'warning'; // some metric arrived but not the expected basic ones
     }
 
     const updateData: any = {

@@ -34,6 +34,15 @@ serve(async (req) => {
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
     const results = [];
 
+    // Fetch agent_last_seen_at for all clusters in one query
+    const { data: clusterHeartbeats } = await supabaseClient
+      .from('clusters')
+      .select('id, agent_last_seen_at');
+    const heartbeatMap: Record<string, string | null> = {};
+    for (const c of clusterHeartbeats || []) {
+      heartbeatMap[c.id] = c.agent_last_seen_at;
+    }
+
     for (const cluster of clusters || []) {
       try {
         // Check for recent metrics
@@ -49,6 +58,10 @@ serve(async (req) => {
           continue;
         }
 
+        // Check if agent was seen recently (heartbeat from agent-get-commands)
+        const lastSeen = heartbeatMap[cluster.id];
+        const agentSeenRecently = lastSeen && new Date(lastSeen) >= new Date(fiveMinutesAgo);
+
         // Determina o status do cluster com base nas métricas recentes
         let newStatus = 'disconnected'; // status válido para "sem métricas"
         let hasBasicMetrics = false;
@@ -57,19 +70,14 @@ serve(async (req) => {
         if (recentMetrics && recentMetrics.length > 0) {
           const metricTypes = new Set(recentMetrics.map(m => m.metric_type));
 
-          // Métricas básicas: cpu, memory, pods
           hasBasicMetrics = ['cpu', 'memory', 'pods'].some(type => metricTypes.has(type));
-
-          // Métricas essenciais: pod_details e events
           hasEssentialMetrics = ['pod_details', 'events'].every(type => metricTypes.has(type));
 
-          if (hasBasicMetrics && hasEssentialMetrics) {
-            newStatus = 'healthy';
-          } else if (hasBasicMetrics) {
-            newStatus = 'warning'; // tem básicas mas faltam pod_details ou events
-          } else {
-            newStatus = 'disconnected';
-          }
+          // Any basic metric = cluster is reachable and functional → healthy
+          newStatus = hasBasicMetrics ? 'healthy' : 'disconnected';
+        } else if (agentSeenRecently) {
+          // Agent is alive (heartbeat ok) but metrics haven't arrived yet → connecting
+          newStatus = 'connecting';
         }
 
         // Atualiza o status apenas se mudou
@@ -87,8 +95,8 @@ serve(async (req) => {
           } else {
             console.log(`Cluster ${cluster.name} atualizado: ${cluster.status} → ${newStatus}`);
 
-            // Notificação quando cluster fica sem conexão
-            if (newStatus === 'disconnected' && !['disconnected', 'connecting', 'pending_agent'].includes(cluster.status)) {
+            // Notificação quando cluster fica sem conexão (não notifica se estava em estado de transição)
+            if (newStatus === 'disconnected' && !['disconnected', 'connecting', 'pending_agent', 'warning'].includes(cluster.status)) {
               await supabaseClient
                 .from('notifications')
                 .insert({
@@ -101,19 +109,6 @@ serve(async (req) => {
                 });
             }
 
-            // Notificação quando dados estão incompletos
-            if (newStatus === 'warning' && cluster.status === 'healthy') {
-              await supabaseClient
-                .from('notifications')
-                .insert({
-                  user_id: cluster.user_id,
-                  title: 'Dados Incompletos do Cluster',
-                  message: `O cluster "${cluster.name}" está enviando métricas básicas, mas faltam detalhes de pods ou eventos. Verifique a configuração do agent.`,
-                  type: 'info',
-                  related_entity_type: 'cluster',
-                  related_entity_id: cluster.id,
-                });
-            }
           }
         }
 

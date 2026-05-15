@@ -94,18 +94,35 @@ serve(async (req) => {
       return a1 !== a2 ? a1 - a2 : b1 !== b2 ? b1 - b2 : c1 - c2;
     };
 
-    const updateStillNeeded = latestVersionData && agent_version !== 'unknown' &&
-      compareVersions(agent_version, latestVersionData.version) < 0;
+    const startupVersionCmp = latestVersionData && agent_version !== 'unknown'
+      ? compareVersions(agent_version, latestVersionData.version)
+      : 0;
+    const updateStillNeeded = startupVersionCmp < 0;
+    const agentAlreadyCurrent = latestVersionData && agent_version !== 'unknown' && startupVersionCmp >= 0;
 
     await supabase
       .from('clusters')
       .update({
         agent_version: agent_version !== 'unknown' ? agent_version : undefined,
         agent_last_seen_at: new Date().toISOString(),
-        agent_update_available: updateStillNeeded || false,
+        agent_update_available: updateStillNeeded,
         agent_update_message: updateStillNeeded ? undefined : null,
       })
       .eq('id', cluster_id);
+
+    // Cancel stale self_update commands if agent is already on latest version
+    if (agentAlreadyCurrent) {
+      const { data: cancelled } = await supabase
+        .from('agent_commands')
+        .delete()
+        .eq('cluster_id', cluster_id)
+        .in('command_type', ['self_update', 'agent_update'])
+        .in('status', ['pending', 'sent'])
+        .select('id');
+      if (cancelled && cancelled.length > 0) {
+        console.log(`✅ Startup: cancelled ${cancelled.length} stale self_update commands — agent at ${agent_version}`);
+      }
+    }
 
     console.log(
       `Version sync on startup: cluster=${cluster_id} version=${agent_version} ` +

@@ -28,6 +28,35 @@ import { useSubscription } from "@/contexts/SubscriptionContext";
 import { toast } from "sonner";
 import { useAuditLog } from "@/hooks/useAuditLog";
 
+// Resolve the effective cluster status to avoid getting stuck in transitional states.
+//
+// Priority order:
+// 1. last_sync recente (≤10 min) → agent enviou métricas com sucesso → healthy
+//    (last_sync só é atualizado pelo agent-receive-metrics quando processa métricas)
+// 2. status stale (pending_agent / disconnected) + heartbeat recente (≤5 min) → connecting
+// 3. status do banco como está
+function resolveClusterStatus(cluster: any): string {
+  const tenMinsAgo = Date.now() - 10 * 60 * 1000;
+  const fiveMinsAgo = Date.now() - 5 * 60 * 1000;
+
+  // Se houve sync de métricas recente, o cluster está saudável independente do status no banco
+  if (cluster.last_sync && new Date(cluster.last_sync).getTime() > tenMinsAgo) {
+    if (['connecting', 'pending_agent', 'disconnected', 'warning'].includes(cluster.status)) {
+      return 'healthy';
+    }
+  }
+
+  // Se o status está travado mas o heartbeat é recente, mostrar como conectando
+  const staleStatuses = ['pending_agent', 'disconnected'];
+  if (staleStatuses.includes(cluster.status) && cluster.agent_last_seen_at) {
+    if (new Date(cluster.agent_last_seen_at).getTime() > fiveMinsAgo) {
+      return 'connecting';
+    }
+  }
+
+  return cluster.status;
+}
+
 const Clusters = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -89,10 +118,13 @@ const Clusters = () => {
           const oldCluster = payload.old as any;
           const newCluster = payload.new as any;
           const previousStatus = previousStatuses[newCluster.id] || oldCluster?.status;
-          
+
+          // Apply same client-side status resolution to realtime updates
+          const resolvedCluster = { ...newCluster, _resolvedStatus: resolveClusterStatus(newCluster) };
+
           setClusters((current) =>
             current.map((cluster) =>
-              cluster.id === newCluster.id ? { ...cluster, ...newCluster } : cluster
+              cluster.id === newCluster.id ? { ...cluster, ...resolvedCluster } : cluster
             )
           );
           
@@ -127,7 +159,7 @@ const Clusters = () => {
 
   const fetchClusters = async () => {
     if (!user) return;
-    
+
     const { data, error } = await supabase
       .from("clusters")
       .select("*")
@@ -139,7 +171,42 @@ const Clusters = () => {
         console.error('Error loading clusters');
       }
     } else {
-      setClusters(data || []);
+      const clusters = data || [];
+      setClusters(clusters);
+
+      const tenMinsAgo = Date.now() - 10 * 60 * 1000;
+      const fiveMinsAgo = Date.now() - 5 * 60 * 1000;
+
+      // Corrigir status no DB quando desatualizado:
+      // • last_sync recente + status travado → healthy (métricas chegaram, cron não atualizou)
+      // • heartbeat recente + status stale → connecting
+      const toFixHealthy = clusters.filter(c =>
+        ['connecting', 'pending_agent', 'disconnected', 'warning'].includes(c.status) &&
+        c.last_sync &&
+        new Date(c.last_sync).getTime() > tenMinsAgo
+      );
+      const toFixConnecting = clusters.filter(c =>
+        ['pending_agent', 'disconnected'].includes(c.status) &&
+        !toFixHealthy.find(x => x.id === c.id) &&
+        c.agent_last_seen_at &&
+        new Date(c.agent_last_seen_at).getTime() > fiveMinsAgo
+      );
+
+      for (const c of toFixHealthy) {
+        await supabase.from("clusters").update({ status: 'healthy' }).eq("id", c.id);
+      }
+      for (const c of toFixConnecting) {
+        await supabase.from("clusters").update({ status: 'connecting' }).eq("id", c.id);
+      }
+
+      const toFix = [...toFixHealthy, ...toFixConnecting];
+      if (toFix.length > 0) {
+        const { data: fresh } = await supabase
+          .from("clusters")
+          .select("*")
+          .order("created_at", { ascending: false });
+        if (fresh) setClusters(fresh);
+      }
     }
     setLoading(false);
   };
@@ -672,7 +739,7 @@ const Clusters = () => {
                   <ClusterCard
                     id={cluster.id}
                     name={cluster.name}
-                    status={cluster.status as any}
+                    status={resolveClusterStatus(cluster)}
                     nodes={cluster.nodes}
                     pods={cluster.pods}
                     cpuUsage={Number(cluster.cpu_usage)}
