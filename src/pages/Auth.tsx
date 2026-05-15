@@ -266,6 +266,11 @@ const Auth = () => {
 
   return (
     <div className="min-h-screen relative bg-background flex items-center justify-center p-4 overflow-hidden">
+      <SEO
+        title="Entrar no Kodo — Acesso à plataforma"
+        description="Faça login ou crie sua conta no Kodo para gerenciar clusters Kubernetes com IA, auto-healing e observabilidade."
+        path="/auth"
+      />
       {/* Animated Background Grid */}
       <div className="absolute inset-0 bg-grid-pattern opacity-[0.03]" />
       <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5" />
