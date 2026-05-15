@@ -49,66 +49,66 @@ serve(async (req) => {
           continue;
         }
 
-        // Determine cluster status based on metrics
-        let newStatus = 'offline';
+        // Determina o status do cluster com base nas métricas recentes
+        let newStatus = 'disconnected'; // status válido para "sem métricas"
         let hasBasicMetrics = false;
         let hasEssentialMetrics = false;
 
         if (recentMetrics && recentMetrics.length > 0) {
           const metricTypes = new Set(recentMetrics.map(m => m.metric_type));
-          
-          // Check for basic metrics (cpu, memory, pods)
+
+          // Métricas básicas: cpu, memory, pods
           hasBasicMetrics = ['cpu', 'memory', 'pods'].some(type => metricTypes.has(type));
-          
-          // Check for essential metrics (pod_details, events)
+
+          // Métricas essenciais: pod_details e events
           hasEssentialMetrics = ['pod_details', 'events'].every(type => metricTypes.has(type));
-          
+
           if (hasBasicMetrics && hasEssentialMetrics) {
             newStatus = 'healthy';
           } else if (hasBasicMetrics) {
-            newStatus = 'warning'; // Has basic metrics but missing pod_details or events
+            newStatus = 'warning'; // tem básicas mas faltam pod_details ou events
           } else {
-            newStatus = 'offline';
+            newStatus = 'disconnected';
           }
         }
 
-        // Update cluster status if changed
+        // Atualiza o status apenas se mudou
         if (newStatus !== cluster.status) {
           const { error: updateError } = await supabaseClient
             .from('clusters')
-            .update({ 
+            .update({
               status: newStatus,
               last_sync: new Date().toISOString()
             })
             .eq('id', cluster.id);
 
           if (updateError) {
-            console.error(`Error updating status for cluster ${cluster.name}:`, updateError);
+            console.error(`Erro ao atualizar status do cluster ${cluster.name}:`, updateError);
           } else {
-            console.log(`Updated cluster ${cluster.name} status: ${cluster.status} -> ${newStatus}`);
-            
-            // Create notification if cluster went offline
-            if (newStatus === 'offline' && cluster.status !== 'offline') {
+            console.log(`Cluster ${cluster.name} atualizado: ${cluster.status} → ${newStatus}`);
+
+            // Notificação quando cluster fica sem conexão
+            if (newStatus === 'disconnected' && !['disconnected', 'connecting', 'pending_agent'].includes(cluster.status)) {
               await supabaseClient
                 .from('notifications')
                 .insert({
                   user_id: cluster.user_id,
-                  title: 'Cluster Offline',
-                  message: `Cluster "${cluster.name}" hasn't sent metrics in the last 5 minutes and is now offline.`,
+                  title: 'Cluster Desconectado',
+                  message: `O cluster "${cluster.name}" não enviou métricas nos últimos 5 minutos e está desconectado.`,
                   type: 'warning',
                   related_entity_type: 'cluster',
                   related_entity_id: cluster.id,
                 });
             }
-            
-            // Create notification if cluster has incomplete data
-            if (newStatus === 'warning' && cluster.status !== 'warning') {
+
+            // Notificação quando dados estão incompletos
+            if (newStatus === 'warning' && cluster.status === 'healthy') {
               await supabaseClient
                 .from('notifications')
                 .insert({
                   user_id: cluster.user_id,
-                  title: 'Incomplete Cluster Data',
-                  message: `Cluster "${cluster.name}" is sending basic metrics but missing pod details or events. Please check agent configuration.`,
+                  title: 'Dados Incompletos do Cluster',
+                  message: `O cluster "${cluster.name}" está enviando métricas básicas, mas faltam detalhes de pods ou eventos. Verifique a configuração do agent.`,
                   type: 'info',
                   related_entity_type: 'cluster',
                   related_entity_id: cluster.id,

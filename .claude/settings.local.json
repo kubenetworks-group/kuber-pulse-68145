@@ -40,7 +40,11 @@
       "WebFetch(domain:www.ibm.com)",
       "WebFetch(domain:spacelift.io)",
       "Bash(docker buildx:*)",
-      "Bash(npx vite:*)"
+      "Bash(npx vite:*)",
+      "Bash(node --input-type=module)",
+      "Bash(npx swc:*)",
+      "Bash(node -e ':*)",
+      "Bash(node:*)"
     ]
   }
 }

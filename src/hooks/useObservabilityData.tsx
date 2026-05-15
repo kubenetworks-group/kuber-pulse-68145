@@ -49,6 +49,7 @@ export const useObservabilityData = () => {
   const [services, setServices] = useState<ServiceData[]>([]);
   const [ingresses, setIngresses] = useState<IngressData[]>([]);
   const [namespaceUsage, setNamespaceUsage] = useState<NamespaceUsage[]>([]);
+  const [hasResourceData, setHasResourceData] = useState(false);
   const [agents, setAgents] = useState<AgentStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastSync, setLastSync] = useState<string | null>(null);
@@ -84,6 +85,8 @@ export const useObservabilityData = () => {
           latestByType[m.metric_type] = m;
         }
       }
+
+      console.log("[observability] metric types available:", Object.keys(latestByType));
 
       // Parse pods data
       const podsMetric = latestByType["pod_details"] || latestByType["pods"] || latestByType["pod_status"];
@@ -125,79 +128,222 @@ export const useObservabilityData = () => {
       }
 
       // Parse services data
+      // Primary: "services" or "service_list" metric — has full detail
+      // Fallback: "namespace_resources" — has service names per namespace
       const svcMetric = latestByType["services"] || latestByType["service_list"];
+      const svcList: ServiceData[] = [];
+
+      const parsePorts = (s: any): string => {
+        if (Array.isArray(s.ports)) {
+          return s.ports
+            .map((p: any) => {
+              const proto = (p.protocol || "TCP").toLowerCase();
+              return p.node_port
+                ? `${p.port}:${p.node_port}/${proto}`
+                : `${p.port}/${proto}`;
+            })
+            .join(", ");
+        }
+        return typeof s.ports === "string" ? s.ports : "";
+      };
+
       if (svcMetric) {
         const data = svcMetric.metric_data as any;
-        const svcList: ServiceData[] = [];
+        const rawList: any[] = data?.services || data?.items || [];
+        for (const s of rawList) {
+          const lbIPs = s.lb_ingress && s.lb_ingress.length > 0 ? s.lb_ingress : s.external_ips || [];
+          svcList.push({
+            name: s.name || "unknown",
+            namespace: s.namespace || "default",
+            type: s.type || s.service_type || "ClusterIP",
+            clusterIP: s.cluster_ip || s.clusterIP || "None",
+            externalIP: lbIPs.length > 0 ? lbIPs[0] : (s.external_ip || s.externalIP || null),
+            ports: parsePorts(s),
+          });
+        }
+      } else {
+        // Fallback: extract from namespace_resources (has service names per NS)
+        const nsResMetric = latestByType["namespace_resources"];
+        if (nsResMetric) {
+          const data = nsResMetric.metric_data as any;
+          console.log("[observability] namespace_resources sample (first ns):", data?.namespaces?.[0]);
+          const systemNS = new Set(["kube-system", "kube-public", "kube-node-lease"]);
 
-        if (data?.services && Array.isArray(data.services)) {
-          for (const s of data.services) {
-            svcList.push({
-              name: s.name || "unknown",
-              namespace: s.namespace || "default",
-              type: s.type || s.service_type || "ClusterIP",
-              clusterIP: s.cluster_ip || s.clusterIP || "None",
-              externalIP: s.external_ip || s.externalIP || null,
-              ports: s.ports || (s.port_list ? s.port_list.join(", ") : ""),
-            });
+          // Format A: { namespaces: [{ name, service_list, services, ... }] }
+          if (data?.namespaces && Array.isArray(data.namespaces)) {
+            for (const ns of data.namespaces as any[]) {
+              const nsName: string = ns.name || ns.namespace || "unknown";
+              if (systemNS.has(nsName)) continue;
+
+              // Full service objects
+              const fullSvcs: any[] = ns.services || [];
+              for (const s of fullSvcs) {
+                const lbIPs = s.lb_ingress?.length > 0 ? s.lb_ingress : s.external_ips || [];
+                svcList.push({
+                  name: s.name || "unknown",
+                  namespace: nsName,
+                  type: s.type || s.service_type || "ClusterIP",
+                  clusterIP: s.cluster_ip || s.clusterIP || "—",
+                  externalIP: lbIPs.length > 0 ? lbIPs[0] : (s.external_ip || null),
+                  ports: parsePorts(s),
+                });
+              }
+
+              // Name-only list
+              if (fullSvcs.length === 0) {
+                const nameList: string[] = ns.service_list || ns.service_names || [];
+                for (const svcName of nameList) {
+                  svcList.push({
+                    name: svcName,
+                    namespace: nsName,
+                    type: "ClusterIP",
+                    clusterIP: "—",
+                    externalIP: null,
+                    ports: "",
+                  });
+                }
+              }
+            }
           }
         }
-        setServices(svcList);
       }
+      console.log("[observability] services parsed:", svcList.length, svcList.slice(0, 2));
+      setServices(svcList);
 
       // Parse ingress data
       const ingMetric = latestByType["ingresses"] || latestByType["ingress_list"];
+      const ingList: IngressData[] = [];
+
       if (ingMetric) {
         const data = ingMetric.metric_data as any;
-        const ingList: IngressData[] = [];
-
-        if (data?.ingresses && Array.isArray(data.ingresses)) {
-          for (const ing of data.ingresses) {
-            ingList.push({
-              name: ing.name || "unknown",
-              namespace: ing.namespace || "default",
-              hosts: ing.hosts || [],
-              tls: ing.tls || false,
-              rules: ing.rules || [],
-              className: ing.class_name || ing.ingressClassName || null,
-            });
+        const rawList: any[] = data?.ingresses || data?.items || [];
+        for (const ing of rawList) {
+          // Derive hosts from rules if not present as top-level field
+          let hosts: string[] = ing.hosts || [];
+          if (hosts.length === 0 && Array.isArray(ing.rules)) {
+            hosts = ing.rules.map((r: any) => r.host).filter(Boolean);
+          }
+          ingList.push({
+            name: ing.name || "unknown",
+            namespace: ing.namespace || "default",
+            hosts,
+            tls: !!(ing.tls || (Array.isArray(ing.tls_hosts) && ing.tls_hosts.length > 0)),
+            rules: ing.rules || [],
+            className: ing.class_name || ing.ingressClassName || ing.ingress_class || null,
+          });
+        }
+      } else {
+        // Fallback: extract from namespace_resources
+        const nsResMetric = latestByType["namespace_resources"];
+        if (nsResMetric) {
+          const data = nsResMetric.metric_data as any;
+          console.log("[observability] ingress fallback - namespace_resources ns[0]:", data?.namespaces?.[0]);
+          const systemNS = new Set(["kube-system", "kube-public", "kube-node-lease"]);
+          if (data?.namespaces && Array.isArray(data.namespaces)) {
+            for (const ns of data.namespaces as any[]) {
+              const nsName: string = ns.name || ns.namespace || "unknown";
+              if (systemNS.has(nsName)) continue;
+              const ingresses: any[] = ns.ingresses || [];
+              for (const ing of ingresses) {
+                const hosts: string[] = ing.hosts || (Array.isArray(ing.rules) ? ing.rules.map((r: any) => r.host).filter(Boolean) : []);
+                ingList.push({
+                  name: ing.name || "unknown",
+                  namespace: nsName,
+                  hosts,
+                  tls: !!(ing.tls),
+                  rules: ing.rules || [],
+                  className: ing.class_name || ing.ingressClassName || null,
+                });
+              }
+            }
           }
         }
-        setIngresses(ingList);
       }
+      console.log("[observability] ingresses parsed:", ingList.length, ingList.slice(0, 2));
+      setIngresses(ingList);
 
-      // Parse namespace usage
-      const nsMetric = latestByType["namespace_usage"] || latestByType["resource_usage"];
-      if (nsMetric) {
-        const data = nsMetric.metric_data as any;
-        const nsList: NamespaceUsage[] = [];
+      // Parse namespace CPU/memory usage — derived from pod_details containers
+      // (agent does not send a dedicated namespace_usage metric; we aggregate here)
+      {
+        const podsMetricForNs = latestByType["pod_details"] || latestByType["pods"];
+        const nsMap: Record<string, { cpuMilli: number; memBytes: number; podCount: number }> = {};
 
-        if (data?.namespaces && Array.isArray(data.namespaces)) {
-          for (const ns of data.namespaces) {
-            nsList.push({
-              namespace: ns.namespace || ns.name || "unknown",
-              cpuPercent: ns.cpu_percent || ns.cpuPercent || 0,
-              memoryPercent: ns.memory_percent || ns.memoryPercent || 0,
-              podCount: ns.pod_count || ns.podCount || 0,
-            });
+        if (podsMetricForNs) {
+          const data = podsMetricForNs.metric_data as any;
+          const podArr: any[] = data?.pods ?? [];
+          const systemNS = new Set(["kube-system", "kube-public", "kube-node-lease"]);
+
+          for (const pod of podArr) {
+            const ns: string = pod.namespace || pod.Namespace || "default";
+            if (systemNS.has(ns)) continue;
+            if (!nsMap[ns]) nsMap[ns] = { cpuMilli: 0, memBytes: 0, podCount: 0 };
+            nsMap[ns].podCount++;
+
+            const containers: any[] = pod.containers || pod.Containers || [];
+            for (const c of containers) {
+              const res = c.resources || c.Resources;
+              const limits = res?.limits || res?.Limits;
+              const requests = res?.requests || res?.Requests;
+              // Prefer requests, fallback to limits
+              const src = requests || limits;
+              if (src) {
+                nsMap[ns].cpuMilli  += Number(src.cpu  ?? 0);
+                nsMap[ns].memBytes  += Number(src.memory ?? 0);
+              }
+            }
           }
         }
-        setNamespaceUsage(nsList);
-      } else if (pods.length > 0) {
-        // Derive from pods if no namespace_usage metric
-        const nsMap: Record<string, { count: number }> = {};
-        for (const pod of pods) {
-          if (!nsMap[pod.namespace]) nsMap[pod.namespace] = { count: 0 };
-          nsMap[pod.namespace].count++;
+
+        const nsEntries = Object.entries(nsMap);
+        const totalCPU = nsEntries.reduce((s, [, v]) => s + v.cpuMilli, 0);
+        const totalMem = nsEntries.reduce((s, [, v]) => s + v.memBytes, 0);
+        const totalPodsFallback = nsEntries.reduce((s, [, v]) => s + v.podCount, 0) || 1;
+
+        if (nsEntries.length > 0) {
+          // If containers have no requests/limits set, use pod count as proxy
+          const useCPUProxy  = totalCPU === 0;
+          const useMemProxy  = totalMem === 0;
+          setHasResourceData(!useCPUProxy || !useMemProxy);
+
+          setNamespaceUsage(
+            nsEntries
+              .sort((a, b) => b[1].podCount - a[1].podCount)
+              .map(([ns, v]) => ({
+                namespace: ns,
+                cpuPercent: useCPUProxy
+                  ? Math.round((v.podCount / totalPodsFallback) * 100)
+                  : Math.round((v.cpuMilli / (totalCPU || 1)) * 100),
+                memoryPercent: useMemProxy
+                  ? Math.round((v.podCount / totalPodsFallback) * 100)
+                  : Math.round((v.memBytes / (totalMem || 1)) * 100),
+                podCount: v.podCount,
+              }))
+          );
+        } else {
+          // Fallback: use namespace_resources pod counts as proxy
+          const nsResMetric = latestByType["namespace_resources"];
+          if (nsResMetric) {
+            const data = nsResMetric.metric_data as any;
+            const nsList: NamespaceUsage[] = [];
+            if (data?.namespaces && Array.isArray(data.namespaces)) {
+              const systemNS = new Set(["kube-system", "kube-public", "kube-node-lease"]);
+              const filtered = (data.namespaces as any[]).filter(
+                (n) => !systemNS.has(n.name || n.namespace) && (n.pods || 0) > 0
+              );
+              const totalPods = filtered.reduce((s, n) => s + (n.pods || 0), 0) || 1;
+              for (const ns of filtered) {
+                const pct = Math.round(((ns.pods || 0) / totalPods) * 100);
+                nsList.push({
+                  namespace: ns.name || ns.namespace || "unknown",
+                  cpuPercent: pct,
+                  memoryPercent: pct,
+                  podCount: ns.pods || 0,
+                });
+              }
+            }
+            setNamespaceUsage(nsList);
+          }
         }
-        setNamespaceUsage(
-          Object.entries(nsMap).map(([ns, d]) => ({
-            namespace: ns,
-            cpuPercent: Math.round(Math.random() * 60 + 10),
-            memoryPercent: Math.round(Math.random() * 60 + 15),
-            podCount: d.count,
-          }))
-        );
       }
 
       // Detect monitoring agents
@@ -287,6 +433,7 @@ export const useObservabilityData = () => {
     services,
     ingresses,
     namespaceUsage,
+    hasResourceData,
     agents,
     loading,
     lastSync,

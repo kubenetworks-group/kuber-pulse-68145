@@ -440,218 +440,254 @@ const Clusters = () => {
 
   return (
     <DashboardLayout>
-      <div className="p-4 sm:p-6 lg:p-8">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 sm:mb-8 gap-4">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Clusters</h1>
-            <p className="text-muted-foreground mt-1 text-sm sm:text-base">Manage your infrastructure clusters</p>
-          </div>
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button 
-                className="gap-2" 
-                disabled={isReadOnly}
-                onClick={(e) => {
-                  if (!canCreateCluster(clusters.length)) {
-                    e.preventDefault();
-                    setLimitModalOpen(true);
-                  }
-                }}
-              >
-                <Plus className="w-4 h-4" />
-                Connect Cluster
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="bg-card">
-              <DialogHeader>
-                <DialogTitle>Connect New Cluster</DialogTitle>
-                <DialogDescription>
-                  Configure your cluster connection settings
-                </DialogDescription>
-              </DialogHeader>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Cluster Name</Label>
-                  <Input
-                    id="name"
-                    required
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="prod-us-east-1"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="environment">Environment</Label>
-                  <Select
-                    value={formData.environment}
-                    onValueChange={(value) => setFormData({ ...formData, environment: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="production">Production</SelectItem>
-                      <SelectItem value="staging">Staging</SelectItem>
-                      <SelectItem value="development">Development</SelectItem>
-                      <SelectItem value="on-premises">On-Premises</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="provider">Cloud Provider</Label>
-                  <Select
-                    value={formData.provider}
-                    onValueChange={(value) => setFormData({ ...formData, provider: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="aws">AWS</SelectItem>
-                      <SelectItem value="gcp">Google Cloud</SelectItem>
-                      <SelectItem value="azure">Microsoft Azure</SelectItem>
-                      <SelectItem value="digitalocean">DigitalOcean</SelectItem>
-                      <SelectItem value="magalu">Magalu Cloud</SelectItem>
-                      <SelectItem value="on-premises">On-Premises</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="cluster_type">Cluster Type</Label>
-                <Select
-                  value={formData.cluster_type}
-                  onValueChange={(value) => {
-                    const localTypes = ['microk8s', 'k3s', 'minikube', 'docker'];
-                    const isLocal = localTypes.includes(value);
-                    setFormData({ 
-                      ...formData, 
-                      cluster_type: value,
-                      is_local: isLocal,
-                      connection_type: isLocal ? 'local-direct' : 'cloud'
-                    });
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10 lg:py-12">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 sm:mb-12 gap-4">
+            <div>
+              <h1 className="text-3xl sm:text-4xl font-bold text-foreground tracking-tight">Clusters</h1>
+              <p className="text-muted-foreground mt-2 text-sm sm:text-base">Manage and monitor your infrastructure</p>
+            </div>
+            <Dialog open={open} onOpenChange={setOpen}>
+              <DialogTrigger asChild>
+                <Button
+                  size="lg"
+                  className="gap-2 font-semibold"
+                  disabled={isReadOnly}
+                  onClick={(e) => {
+                    if (!canCreateCluster(clusters.length)) {
+                      e.preventDefault();
+                      setLimitModalOpen(true);
+                    }
                   }}
                 >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="kubernetes">Kubernetes (Cloud)</SelectItem>
-                      <SelectItem value="microk8s">MicroK8s (Local)</SelectItem>
-                      <SelectItem value="k3s">K3s (Local)</SelectItem>
-                      <SelectItem value="minikube">Minikube (Local)</SelectItem>
-                      <SelectItem value="docker">Docker Desktop</SelectItem>
-                    </SelectContent>
-                  </Select>
-                 </div>
-
-                 {formData.is_local && (
-                   <div className="p-4 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                     <p className="text-sm text-blue-700 dark:text-blue-300">
-                       ℹ️ <strong>Cluster Local:</strong> Clusters locais não podem ser acessados diretamente pela cloud. 
-                       Após criar o cluster, você precisará baixar e instalar o agente dentro do cluster para que ele possa enviar métricas.
-                     </p>
-                   </div>
-                 )}
-
-                 {(formData.cluster_type === "kubernetes" || formData.cluster_type === "microk8s" || formData.cluster_type === "k3s" || formData.cluster_type === "minikube") ? (
-                  <div className="space-y-2">
-                    <Label htmlFor="config_file">Kubernetes Config File (YAML)</Label>
-                    <Input
-                      id="config_file"
-                      type="file"
-                      accept=".yml,.yaml"
-                      onChange={handleFileUpload}
-                      required
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Upload your kubeconfig.yml file
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <Label htmlFor="api_endpoint">Docker Endpoint</Label>
-                    <Input
-                      id="api_endpoint"
-                      required
-                      value={formData.api_endpoint}
-                      onChange={(e) => setFormData({ ...formData, api_endpoint: e.target.value })}
-                      placeholder="unix:///var/run/docker.sock or tcp://host:2375"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Specify where your Docker cluster is located
-                    </p>
-                  </div>
-                )}
-                <div className="space-y-2">
-                  <Label htmlFor="region">Region (Optional)</Label>
-                  <Input
-                    id="region"
-                    value={formData.region}
-                    onChange={(e) => setFormData({ ...formData, region: e.target.value })}
-                    placeholder="us-east-1"
-                  />
-                </div>
-                
-                <div className="flex items-center space-x-2 p-4 border border-muted rounded-md bg-muted/20">
-                  <input
-                    type="checkbox"
-                    id="skip-ssl"
-                    className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
-                    checked={formData.skip_ssl_verify}
-                    onChange={(e) => setFormData({ ...formData, skip_ssl_verify: e.target.checked })}
-                  />
-                  <Label htmlFor="skip-ssl" className="text-sm font-medium cursor-pointer">
-                    Ignorar verificação SSL (para certificados auto-assinados)
-                  </Label>
-                </div>
-                
-                <Button type="submit" className="w-full">
+                  <Plus className="w-5 h-5" />
                   Connect Cluster
                 </Button>
-              </form>
-            </DialogContent>
-          </Dialog>
-        </div>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl bg-card border-2 border-slate-200 dark:border-slate-700">
+                <DialogHeader>
+                  <DialogTitle className="text-2xl">Connect New Cluster</DialogTitle>
+                  <DialogDescription className="text-base mt-2">
+                    Configure your cluster connection with the required settings below
+                  </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleSubmit} className="space-y-6 max-h-[70vh] overflow-y-auto pr-4">
+                  {/* Cluster Identification */}
+                  <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
+                    <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-4">Cluster Details</h3>
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="name" className="font-semibold">Cluster Name *</Label>
+                        <Input
+                          id="name"
+                          required
+                          value={formData.name}
+                          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                          placeholder="e.g. prod-us-east-1"
+                          className="h-10"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="environment" className="font-semibold">Environment *</Label>
+                          <Select
+                            value={formData.environment}
+                            onValueChange={(value) => setFormData({ ...formData, environment: value })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="production">Production</SelectItem>
+                              <SelectItem value="staging">Staging</SelectItem>
+                              <SelectItem value="development">Development</SelectItem>
+                              <SelectItem value="on-premises">On-Premises</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="provider" className="font-semibold">Cloud Provider *</Label>
+                          <Select
+                            value={formData.provider}
+                            onValueChange={(value) => setFormData({ ...formData, provider: value })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="aws">AWS</SelectItem>
+                              <SelectItem value="gcp">Google Cloud</SelectItem>
+                              <SelectItem value="azure">Microsoft Azure</SelectItem>
+                              <SelectItem value="digitalocean">DigitalOcean</SelectItem>
+                              <SelectItem value="magalu">Magalu Cloud</SelectItem>
+                              <SelectItem value="on-premises">On-Premises</SelectItem>
+                              <SelectItem value="other">Other</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
 
-        {loading ? (
-          <div className="text-center py-12">
-            <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-            <p className="text-muted-foreground">Loading clusters...</p>
+                  {/* Cluster Type & Configuration */}
+                  <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
+                    <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-4">Configuration</h3>
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="cluster_type" className="font-semibold">Cluster Type *</Label>
+                        <Select
+                          value={formData.cluster_type}
+                          onValueChange={(value) => {
+                            const localTypes = ['microk8s', 'k3s', 'minikube', 'docker'];
+                            const isLocal = localTypes.includes(value);
+                            setFormData({
+                              ...formData,
+                              cluster_type: value,
+                              is_local: isLocal,
+                              connection_type: isLocal ? 'local-direct' : 'cloud'
+                            });
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="kubernetes">Kubernetes (Cloud)</SelectItem>
+                            <SelectItem value="microk8s">MicroK8s (Local)</SelectItem>
+                            <SelectItem value="k3s">K3s (Local)</SelectItem>
+                            <SelectItem value="minikube">Minikube (Local)</SelectItem>
+                            <SelectItem value="docker">Docker Desktop</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {formData.is_local && (
+                        <div className="p-4 bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 rounded-lg">
+                          <p className="text-sm text-orange-700 dark:text-orange-300">
+                            <strong>ℹ️ Local Cluster:</strong> Local clusters cannot be accessed directly from the cloud. After creating the cluster, download and install the agent in the cluster so it can send metrics.
+                          </p>
+                        </div>
+                      )}
+
+                      {(formData.cluster_type === "kubernetes" || formData.cluster_type === "microk8s" || formData.cluster_type === "k3s" || formData.cluster_type === "minikube") ? (
+                        <div className="space-y-2">
+                          <Label htmlFor="config_file" className="font-semibold">Kubernetes Config File (YAML) *</Label>
+                          <Input
+                            id="config_file"
+                            type="file"
+                            accept=".yml,.yaml"
+                            onChange={handleFileUpload}
+                            required
+                            className="h-10"
+                          />
+                          <p className="text-xs text-muted-foreground">Upload your kubeconfig.yml file for cluster access</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <Label htmlFor="api_endpoint" className="font-semibold">Docker Endpoint *</Label>
+                          <Input
+                            id="api_endpoint"
+                            required
+                            value={formData.api_endpoint}
+                            onChange={(e) => setFormData({ ...formData, api_endpoint: e.target.value })}
+                            placeholder="unix:///var/run/docker.sock or tcp://host:2375"
+                            className="h-10"
+                          />
+                          <p className="text-xs text-muted-foreground">Specify your Docker daemon endpoint</p>
+                        </div>
+                      )}
+
+                      <div className="space-y-2">
+                        <Label htmlFor="region" className="font-semibold">Region (Optional)</Label>
+                        <Input
+                          id="region"
+                          value={formData.region}
+                          onChange={(e) => setFormData({ ...formData, region: e.target.value })}
+                          placeholder="e.g. us-east-1"
+                          className="h-10"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Security */}
+                  <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
+                    <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-4">Security</h3>
+                    <label className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors">
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 rounded accent-primary"
+                        checked={formData.skip_ssl_verify}
+                        onChange={(e) => setFormData({ ...formData, skip_ssl_verify: e.target.checked })}
+                      />
+                      <div>
+                        <p className="font-medium text-sm">Skip SSL Verification</p>
+                        <p className="text-xs text-muted-foreground">Only for self-signed certificates</p>
+                      </div>
+                    </label>
+                  </div>
+
+                  <Button type="submit" className="w-full h-10 font-semibold text-base">
+                    Connect Cluster
+                  </Button>
+                </form>
+              </DialogContent>
+            </Dialog>
           </div>
-        ) : clusters.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-muted-foreground mb-4">No clusters connected yet</p>
-            <Button onClick={() => setOpen(true)} className="gap-2">
-              <Plus className="w-4 h-4" />
-              Connect Your First Cluster
-            </Button>
+
+          {/* Content Section */}
+          {loading ? (
+            <div className="flex items-center justify-center py-20">
+              <div className="text-center">
+                <div className="w-16 h-16 border-3 border-slate-300 dark:border-slate-600 border-t-primary rounded-full animate-spin mx-auto mb-4" />
+                <p className="text-muted-foreground font-medium">Loading clusters...</p>
+              </div>
+            </div>
+          ) : clusters.length === 0 ? (
+          <div className="relative isolate">
+            <div className="absolute inset-0 -z-10 bg-gradient-to-br from-slate-100 to-slate-50 dark:from-slate-800 dark:to-slate-900 rounded-2xl" />
+            <div className="text-center py-20 px-4">
+              <Server className="w-16 h-16 mx-auto mb-4 text-slate-300 dark:text-slate-600" />
+              <p className="text-muted-foreground mb-6 text-lg font-medium">No clusters connected yet</p>
+              <p className="text-muted-foreground mb-8 max-w-md mx-auto">Connect your first cluster to start monitoring and managing your infrastructure.</p>
+              <Button onClick={() => setOpen(true)} className="gap-2 px-6" size="lg">
+                <Plus className="w-5 h-5" />
+                Connect Your First Cluster
+              </Button>
+            </div>
           </div>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-8">
             <ClusterDeletionProgress deletingClusters={deletingClusters} />
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
+
+            {/* Clusters Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {clusters.map((cluster) => (
-                <div key={cluster.id} className="relative group">
-                  <div onClick={() => setSelectedClusterId(cluster.id)} className="cursor-pointer">
-                    <ClusterCard
-                      id={cluster.id}
-                      name={cluster.name}
-                      status={cluster.status as any}
-                      nodes={cluster.nodes}
-                      pods={cluster.pods}
-                      cpuUsage={Number(cluster.cpu_usage)}
-                      memoryUsage={Number(cluster.memory_usage)}
-                      environment={`${cluster.provider.toUpperCase()} - ${cluster.environment}`}
-                      is_local={cluster.is_local}
-                      onRefresh={() => handleRefreshConnection(cluster)}
-                    />
-                  </div>
-                  <div className="absolute top-2 right-2 flex gap-1 sm:gap-2 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                <div
+                  key={cluster.id}
+                  className="group relative cursor-pointer"
+                  onClick={() => setSelectedClusterId(cluster.id)}
+                >
+                  <ClusterCard
+                    id={cluster.id}
+                    name={cluster.name}
+                    status={cluster.status as any}
+                    nodes={cluster.nodes}
+                    pods={cluster.pods}
+                    cpuUsage={Number(cluster.cpu_usage)}
+                    memoryUsage={Number(cluster.memory_usage)}
+                    environment={`${cluster.provider.toUpperCase()} - ${cluster.environment}`}
+                    is_local={cluster.is_local}
+                    onRefresh={() => handleRefreshConnection(cluster)}
+                  />
+
+                  {/* Action buttons */}
+                  <div className="absolute top-4 right-4 flex gap-2 opacity-0 sm:opacity-0 group-hover:opacity-100 transition-opacity z-10">
                     <Button
                       variant="secondary"
                       size="icon"
-                      className="h-8 w-8 sm:h-9 sm:w-9"
+                      className="h-9 w-9 backdrop-blur-md bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-700 border border-white/20 dark:border-slate-700/50"
                       disabled={refreshingCluster === cluster.id || cluster.status === 'connecting'}
                       onClick={(e) => {
                         e.stopPropagation();
@@ -659,24 +695,24 @@ const Clusters = () => {
                       }}
                       title="Refresh connection"
                     >
-                      <RefreshCw className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${refreshingCluster === cluster.id || cluster.status === 'connecting' ? 'animate-spin' : ''}`} />
+                      <RefreshCw className={`w-4 h-4 ${refreshingCluster === cluster.id || cluster.status === 'connecting' ? 'animate-spin' : ''}`} />
                     </Button>
                     <Button
                       variant="secondary"
                       size="icon"
-                      className="h-8 w-8 sm:h-9 sm:w-9"
+                      className="h-9 w-9 backdrop-blur-md bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-700 border border-white/20 dark:border-slate-700/50"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleEditCluster(cluster);
                       }}
                       title="Edit configuration"
                     >
-                      <Edit className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                      <Edit className="w-4 h-4" />
                     </Button>
                     <Button
-                      variant="destructive"
+                      variant="secondary"
                       size="icon"
-                      className="h-8 w-8 sm:h-9 sm:w-9"
+                      className="h-9 w-9 backdrop-blur-md bg-red-50/80 dark:bg-red-950/80 hover:bg-red-100 dark:hover:bg-red-900 text-red-600 dark:text-red-400 border border-red-200/50 dark:border-red-800/50"
                       onClick={(e) => {
                         e.stopPropagation();
                         setClusterToDelete(cluster.id);
@@ -686,143 +722,168 @@ const Clusters = () => {
                       }}
                       title="Delete cluster"
                     >
-                      <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                      <Trash2 className="w-4 h-4" />
                     </Button>
                   </div>
                 </div>
               ))}
             </div>
-            
+
+            {/* Cluster Logs */}
             {selectedClusterId && (
-              <ClusterLogs clusterId={selectedClusterId} />
+              <div className="mt-8 pt-8 border-t border-slate-200 dark:border-slate-800">
+                <ClusterLogs clusterId={selectedClusterId} />
+              </div>
             )}
           </div>
         )}
 
         <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-          <DialogContent className="bg-card">
+          <DialogContent className="max-w-2xl bg-card border-2 border-slate-200 dark:border-slate-700">
             <DialogHeader>
-              <DialogTitle>Edit Cluster Configuration</DialogTitle>
-              <DialogDescription>
+              <DialogTitle className="text-2xl">Edit Cluster Configuration</DialogTitle>
+              <DialogDescription className="text-base mt-2">
                 Update your cluster connection settings
               </DialogDescription>
             </DialogHeader>
-            <form onSubmit={handleUpdateCluster} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-name">Cluster Name</Label>
-                <Input
-                  id="edit-name"
-                  required
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="prod-us-east-1"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-environment">Environment</Label>
-                <Select
-                  value={formData.environment}
-                  onValueChange={(value) => setFormData({ ...formData, environment: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="production">Production</SelectItem>
-                    <SelectItem value="staging">Staging</SelectItem>
-                    <SelectItem value="development">Development</SelectItem>
-                    <SelectItem value="on-premises">On-Premises</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-provider">Cloud Provider</Label>
-                <Select
-                  value={formData.provider}
-                  onValueChange={(value) => setFormData({ ...formData, provider: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="aws">AWS</SelectItem>
-                    <SelectItem value="gcp">Google Cloud</SelectItem>
-                    <SelectItem value="azure">Microsoft Azure</SelectItem>
-                    <SelectItem value="digitalocean">DigitalOcean</SelectItem>
-                    <SelectItem value="magalu">Magalu Cloud</SelectItem>
-                    <SelectItem value="on-premises">On-Premises</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-cluster_type">Cluster Type</Label>
-                <Select
-                  value={formData.cluster_type}
-                  onValueChange={(value) => setFormData({ ...formData, cluster_type: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="kubernetes">Kubernetes</SelectItem>
-                    <SelectItem value="docker">Docker</SelectItem>
-                    <SelectItem value="docker-swarm">Docker Swarm</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {formData.cluster_type === "kubernetes" ? (
-                <div className="space-y-2">
-                  <Label htmlFor="edit-config_file">Kubernetes Config File (YAML)</Label>
-                  <Input
-                    id="edit-config_file"
-                    type="file"
-                    accept=".yml,.yaml"
-                    onChange={handleFileUpload}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Upload new kubeconfig.yml file (leave empty to keep current)
-                  </p>
+            <form onSubmit={handleUpdateCluster} className="space-y-6 max-h-[70vh] overflow-y-auto pr-4">
+              {/* Cluster Details */}
+              <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-4">Cluster Details</h3>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-name" className="font-semibold">Cluster Name *</Label>
+                    <Input
+                      id="edit-name"
+                      required
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      placeholder="e.g. prod-us-east-1"
+                      className="h-10"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-environment" className="font-semibold">Environment *</Label>
+                      <Select
+                        value={formData.environment}
+                        onValueChange={(value) => setFormData({ ...formData, environment: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="production">Production</SelectItem>
+                          <SelectItem value="staging">Staging</SelectItem>
+                          <SelectItem value="development">Development</SelectItem>
+                          <SelectItem value="on-premises">On-Premises</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-provider" className="font-semibold">Cloud Provider *</Label>
+                      <Select
+                        value={formData.provider}
+                        onValueChange={(value) => setFormData({ ...formData, provider: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="aws">AWS</SelectItem>
+                          <SelectItem value="gcp">Google Cloud</SelectItem>
+                          <SelectItem value="azure">Microsoft Azure</SelectItem>
+                          <SelectItem value="digitalocean">DigitalOcean</SelectItem>
+                          <SelectItem value="magalu">Magalu Cloud</SelectItem>
+                          <SelectItem value="on-premises">On-Premises</SelectItem>
+                          <SelectItem value="other">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  <Label htmlFor="edit-api_endpoint">Docker Endpoint</Label>
-                  <Input
-                    id="edit-api_endpoint"
-                    required
-                    value={formData.api_endpoint}
-                    onChange={(e) => setFormData({ ...formData, api_endpoint: e.target.value })}
-                    placeholder="unix:///var/run/docker.sock or tcp://host:2375"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Specify where your Docker cluster is located
-                  </p>
+              </div>
+
+              {/* Configuration */}
+              <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-4">Configuration</h3>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-cluster_type" className="font-semibold">Cluster Type *</Label>
+                    <Select
+                      value={formData.cluster_type}
+                      onValueChange={(value) => setFormData({ ...formData, cluster_type: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="kubernetes">Kubernetes</SelectItem>
+                        <SelectItem value="docker">Docker</SelectItem>
+                        <SelectItem value="docker-swarm">Docker Swarm</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {formData.cluster_type === "kubernetes" ? (
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-config_file" className="font-semibold">Kubernetes Config File (YAML)</Label>
+                      <Input
+                        id="edit-config_file"
+                        type="file"
+                        accept=".yml,.yaml"
+                        onChange={handleFileUpload}
+                        className="h-10"
+                      />
+                      <p className="text-xs text-muted-foreground">Upload new kubeconfig.yml file (optional)</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-api_endpoint" className="font-semibold">Docker Endpoint *</Label>
+                      <Input
+                        id="edit-api_endpoint"
+                        required
+                        value={formData.api_endpoint}
+                        onChange={(e) => setFormData({ ...formData, api_endpoint: e.target.value })}
+                        placeholder="unix:///var/run/docker.sock or tcp://host:2375"
+                        className="h-10"
+                      />
+                      <p className="text-xs text-muted-foreground">Specify your Docker daemon endpoint</p>
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-region" className="font-semibold">Region (Optional)</Label>
+                    <Input
+                      id="edit-region"
+                      value={formData.region}
+                      onChange={(e) => setFormData({ ...formData, region: e.target.value })}
+                      placeholder="e.g. us-east-1"
+                      className="h-10"
+                    />
+                  </div>
                 </div>
-              )}
-              <div className="space-y-2">
-                <Label htmlFor="edit-region">Region (Optional)</Label>
-                <Input
-                  id="edit-region"
-                  value={formData.region}
-                  onChange={(e) => setFormData({ ...formData, region: e.target.value })}
-                  placeholder="us-east-1"
-                />
               </div>
-              
-              <div className="flex items-center space-x-2 p-4 border border-muted rounded-md bg-muted/20">
-                <input
-                  type="checkbox"
-                  id="edit-skip-ssl"
-                  className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
-                  checked={formData.skip_ssl_verify}
-                  onChange={(e) => setFormData({ ...formData, skip_ssl_verify: e.target.checked })}
-                />
-                <Label htmlFor="edit-skip-ssl" className="text-sm font-medium cursor-pointer">
-                  Ignorar verificação SSL (para certificados auto-assinados)
-                </Label>
+
+              {/* Security */}
+              <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-4">Security</h3>
+                <label className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors">
+                  <input
+                    type="checkbox"
+                    id="edit-skip-ssl"
+                    className="w-4 h-4 rounded accent-primary"
+                    checked={formData.skip_ssl_verify}
+                    onChange={(e) => setFormData({ ...formData, skip_ssl_verify: e.target.checked })}
+                  />
+                  <div>
+                    <p className="font-medium text-sm">Skip SSL Verification</p>
+                    <p className="text-xs text-muted-foreground">Only for self-signed certificates</p>
+                  </div>
+                </label>
               </div>
-              
-              <Button type="submit" className="w-full">
+
+              <Button type="submit" className="w-full h-10 font-semibold text-base">
                 Update Cluster
               </Button>
             </form>
@@ -837,57 +898,58 @@ const Clusters = () => {
             }
           }
         }}>
-          <AlertDialogContent>
+          <AlertDialogContent className="border-2 border-red-200 dark:border-red-800">
             <AlertDialogHeader>
-              <AlertDialogTitle className="text-destructive">
-                ⚠️ Confirmar Exclusão Permanente
+              <AlertDialogTitle className="text-2xl text-red-600 dark:text-red-400 flex items-center gap-2">
+                ⚠️ Permanent Deletion
               </AlertDialogTitle>
               <AlertDialogDescription asChild>
-                <div className="space-y-3">
-                  <p>Esta ação é <strong>irreversível</strong>. Todos os dados do cluster serão excluídos permanentemente:</p>
-                  <ul className="list-disc ml-4 text-sm space-y-1">
-                    <li>Métricas e histórico de monitoramento</li>
-                    <li>Eventos e logs do cluster</li>
-                    <li>Configurações e chaves de API</li>
-                    <li>Incidentes e anomalias detectadas</li>
-                    <li>Cálculos de custos e economias</li>
+                <div className="space-y-4">
+                  <p className="text-base">This action is <strong>permanent and irreversible</strong>. The following will be permanently deleted:</p>
+                  <ul className="list-disc ml-6 text-sm space-y-2 text-muted-foreground">
+                    <li>All monitoring metrics and historical data</li>
+                    <li>Cluster events and activity logs</li>
+                    <li>Configuration settings and API keys</li>
+                    <li>Detected incidents and anomalies</li>
+                    <li>Cost calculations and savings</li>
                   </ul>
-                  <div className="pt-2">
-                    <p className="font-medium">Para confirmar, digite o nome do cluster:</p>
-                    <p className="text-sm font-mono bg-muted px-2 py-1 rounded mt-1">
+                  <div className="p-4 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg mt-4">
+                    <p className="font-semibold text-sm text-red-900 dark:text-red-100 mb-2">To confirm, type the cluster name:</p>
+                    <p className="text-sm font-mono bg-red-100 dark:bg-red-900/40 px-3 py-2 rounded text-red-700 dark:text-red-300">
                       {clusterToDeleteName}
                     </p>
                   </div>
                 </div>
               </AlertDialogDescription>
             </AlertDialogHeader>
-            
+
             <Input
-              placeholder="Digite o nome do cluster"
+              placeholder="Type cluster name to confirm"
               value={deleteConfirmName}
               onChange={(e) => setDeleteConfirmName(e.target.value)}
               disabled={isDeleting}
-              className="mt-2"
+              className="h-10 mt-4"
             />
-            
-            <AlertDialogFooter>
-              <AlertDialogCancel disabled={isDeleting}>
-                Cancelar
+
+            <AlertDialogFooter className="gap-2">
+              <AlertDialogCancel disabled={isDeleting} className="h-10">
+                Cancel
               </AlertDialogCancel>
               <Button
                 variant="destructive"
                 onClick={handleDeleteCluster}
                 disabled={deleteConfirmName !== clusterToDeleteName || isDeleting}
+                className="h-10"
               >
                 {isDeleting ? (
                   <>
                     <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                    Excluindo...
+                    Deleting...
                   </>
                 ) : (
                   <>
                     <Trash2 className="w-4 h-4 mr-2" />
-                    Excluir Cluster
+                    Delete Cluster
                   </>
                 )}
               </Button>
@@ -903,37 +965,37 @@ const Clusters = () => {
 
         {/* Success Dialog - Redirect to Agents */}
         <Dialog open={successDialogOpen} onOpenChange={setSuccessDialogOpen}>
-          <DialogContent className="bg-card sm:max-w-md">
+          <DialogContent className="bg-card border-2 border-emerald-200 dark:border-emerald-800 sm:max-w-md">
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Bot className="w-5 h-5 text-primary" />
-                Cluster Cadastrado com Sucesso!
+              <DialogTitle className="text-2xl flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+                <Bot className="w-6 h-6" />
+                Cluster Created!
               </DialogTitle>
-              <DialogDescription className="pt-4 space-y-3">
+              <DialogDescription className="pt-4 space-y-4 text-base">
                 <p>
-                  O cluster <strong className="text-foreground">{createdCluster?.name}</strong> foi criado.
+                  <strong className="text-foreground text-lg">{createdCluster?.name}</strong> has been created successfully.
                 </p>
-                <p>
-                  Para que o Kodo possa monitorar seu cluster, você precisa criar um <strong className="text-foreground">Agent</strong> e instalá-lo no seu cluster Kubernetes.
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  O Agent é responsável por coletar métricas e enviar para o Kodo em tempo real.
-                </p>
+                <div className="bg-slate-50 dark:bg-slate-900/30 p-4 rounded-lg border border-slate-200 dark:border-slate-700">
+                  <p className="font-semibold mb-2 text-foreground">Next Step: Install Agent</p>
+                  <p className="text-sm text-muted-foreground">
+                    To enable Kodo to monitor your cluster, you need to create and install an <strong>Agent</strong> in your Kubernetes cluster. The agent collects metrics and sends them to Kodo in real-time.
+                  </p>
+                </div>
               </DialogDescription>
             </DialogHeader>
             <DialogFooter className="flex-col sm:flex-row gap-2 mt-4">
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={() => setSuccessDialogOpen(false)}
-                className="w-full sm:w-auto"
+                className="w-full sm:w-auto h-10"
               >
-                Fazer depois
+                Do it later
               </Button>
-              <Button 
+              <Button
                 onClick={handleGoToAgents}
-                className="w-full sm:w-auto gap-2"
+                className="w-full sm:w-auto gap-2 h-10 font-semibold"
               >
-                Criar Agent
+                Create Agent
                 <ArrowRight className="w-4 h-4" />
               </Button>
             </DialogFooter>
@@ -947,6 +1009,7 @@ const Clusters = () => {
           clusterId={analysisCluster?.id || null}
           clusterName={analysisCluster?.name || ""}
         />
+      </div>
       </div>
     </DashboardLayout>
   );

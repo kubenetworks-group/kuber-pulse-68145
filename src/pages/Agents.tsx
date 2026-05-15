@@ -1,29 +1,44 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { DashboardLayout } from "@/components/DashboardLayout";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCluster } from "@/contexts/ClusterContext";
 import { toast } from "sonner";
-import { Terminal, Copy, Trash2, Plus, Download, Activity, AlertTriangle } from "lucide-react";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
+  Terminal, Copy, Trash2, Plus, Download, CheckCircle,
+  AlertTriangle, Clock, Wifi, WifiOff, RefreshCw, ArrowUpCircle,
+} from "lucide-react";
+import {
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
+
+// ─── Design tokens ────────────────────────────────────────────────────────────
+
+const C = {
+  accent:  "#00E5A0",
+  accentD: "rgba(0,229,160,0.12)",
+  accentB: "rgba(0,229,160,0.25)",
+  warn:    "#F5A623",
+  warnD:   "rgba(245,166,35,0.12)",
+  warnB:   "rgba(245,166,35,0.25)",
+  danger:  "#FF4D4D",
+  dangerD: "rgba(255,77,77,0.12)",
+  dangerB: "rgba(255,77,77,0.25)",
+  muted:   "#8892A4",
+} as const;
+
+const MONO = "'JetBrains Mono','Geist Mono',monospace";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface AgentKey {
   id: string;
   name: string;
-  api_key_prefix: string; // Only the prefix is stored/displayed, never the full key
+  api_key_prefix: string;
   cluster_id: string;
   last_seen: string | null;
   is_active: boolean;
@@ -33,134 +48,205 @@ interface AgentKey {
     name: string;
     agent_version: string | null;
     agent_update_available: boolean | null;
+    agent_last_seen_at: string | null;
   };
 }
+
+// ─── Status helpers ───────────────────────────────────────────────────────────
+
+function getAgentStatus(agent: AgentKey): {
+  label: string; color: string; dim: string; border: string; pulse?: boolean
+} {
+  if (!agent.is_active) {
+    return { label: "Inativo", color: C.muted, dim: "rgba(136,146,164,0.10)", border: "rgba(136,146,164,0.25)" };
+  }
+
+  // Prefer cluster-level last_seen (updated by agent heartbeat)
+  const lastSeen = agent.clusters?.agent_last_seen_at ?? agent.last_seen;
+  if (!lastSeen) {
+    return { label: "Aguardando", color: C.warn, dim: C.warnD, border: C.warnB };
+  }
+
+  const minsAgo = (Date.now() - new Date(lastSeen).getTime()) / 60_000;
+
+  if (minsAgo < 5) {
+    if (agent.clusters?.agent_update_available) {
+      return { label: "Desatualizado", color: C.warn, dim: C.warnD, border: C.warnB };
+    }
+    return { label: "Online", color: C.accent, dim: C.accentD, border: C.accentB, pulse: true };
+  }
+  if (minsAgo < 60) {
+    return { label: `${Math.floor(minsAgo)}min atrás`, color: C.warn, dim: C.warnD, border: C.warnB };
+  }
+  return { label: "Offline", color: C.danger, dim: C.dangerD, border: C.dangerB };
+}
+
+function formatVersion(v: string | null | undefined): string {
+  if (!v) return "";
+  return v.startsWith("v") ? v : `v${v}`;
+}
+
+function formatRelative(iso: string | null): string {
+  if (!iso) return "—";
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60_000);
+  if (m < 1) return "agora mesmo";
+  if (m < 60) return `há ${m}min`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `há ${h}h`;
+  return new Date(iso).toLocaleString("pt-BR");
+}
+
+// ─── StatusBadge ─────────────────────────────────────────────────────────────
+
+function StatusBadge({ agent }: { agent: AgentKey }) {
+  const s = getAgentStatus(agent);
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium"
+      style={{ background: s.dim, color: s.color, border: `1px solid ${s.border}` }}
+    >
+      {s.pulse
+        ? <span className="relative flex w-1.5 h-1.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: s.color }} />
+            <span className="relative inline-flex rounded-full w-1.5 h-1.5" style={{ background: s.color }} />
+          </span>
+        : <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: s.color }} />
+      }
+      {s.label}
+    </span>
+  );
+}
+
+// ─── Agents ───────────────────────────────────────────────────────────────────
 
 const Agents = () => {
   const { user } = useAuth();
   const { clusters } = useCluster();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [agentKeys, setAgentKeys] = useState<AgentKey[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
-  const [newAgentName, setNewAgentName] = useState("");
-  const [selectedClusterId, setSelectedClusterId] = useState("");
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [showApiKey, setShowApiKey] = useState<string | null>(null);
-  const [lastCreatedClusterId, setLastCreatedClusterId] = useState<string | null>(null);
-  const [latestAgentVersion, setLatestAgentVersion] = useState<string | null>(null);
 
-  // Handle cluster_id from URL (coming from Clusters page after creating a cluster)
+  const [agentKeys, setAgentKeys]               = useState<AgentKey[]>([]);
+  const [loading, setLoading]                   = useState(true);
+  const [refreshing, setRefreshing]             = useState(false);
+  const [creating, setCreating]                 = useState(false);
+  const [newAgentName, setNewAgentName]         = useState("");
+  const [selectedClusterId, setSelectedClusterId] = useState("");
+  const [dialogOpen, setDialogOpen]             = useState(false);
+  const [showApiKey, setShowApiKey]             = useState<string | null>(null);
+  const [lastCreatedClusterId, setLastCreatedClusterId] = useState<string | null>(null);
+  const [latestAgentVersion, setLatestAgentVersion]     = useState<string | null>(null);
+  const [copiedId, setCopiedId]                 = useState<string | null>(null);
+
+  // Open dialog if coming from Clusters page
   useEffect(() => {
-    const clusterIdFromUrl = searchParams.get('cluster_id');
+    const clusterIdFromUrl = searchParams.get("cluster_id");
     if (clusterIdFromUrl && clusters.length > 0) {
-      const clusterExists = clusters.find(c => c.id === clusterIdFromUrl);
-      if (clusterExists) {
+      const exists = clusters.find(c => c.id === clusterIdFromUrl);
+      if (exists) {
         setSelectedClusterId(clusterIdFromUrl);
         setDialogOpen(true);
-        // Clear the URL param
         setSearchParams({});
       }
     }
   }, [searchParams, clusters, setSearchParams]);
 
   useEffect(() => {
-    if (user) {
-      fetchAgentKeys();
-      fetchLatestAgentVersion();
-    }
+    if (!user) return;
+    fetchAgentKeys();
+    fetchLatestVersion();
+
+    // Realtime: re-fetch whenever agent_version or agent_update_available changes in clusters
+    const channel = supabase
+      .channel("agents-page-realtime")
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "clusters" },
+        () => fetchAgentKeys(true)
+      )
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "agent_api_keys" },
+        () => fetchAgentKeys(true)
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, [user]);
 
-  const fetchLatestAgentVersion = async () => {
+  const fetchLatestVersion = async () => {
     const { data } = await supabase
-      .from('agent_versions')
-      .select('version')
-      .eq('is_latest', true)
+      .from("agent_versions")
+      .select("version")
+      .eq("is_latest", true)
       .single();
     if (data?.version) setLatestAgentVersion(data.version);
   };
 
-  const fetchAgentKeys = async () => {
+  const fetchAgentKeys = async (silent = false) => {
+    if (silent) setRefreshing(true);
+    else setLoading(true);
     try {
       const { data, error } = await supabase
-        .from('agent_api_keys')
-        .select('id, name, cluster_id, api_key_prefix, is_active, last_seen, created_at, updated_at, clusters(name, agent_version, agent_update_available)')
-        .order('created_at', { ascending: false });
+        .from("agent_api_keys")
+        .select(`
+          id, name, cluster_id, api_key_prefix, is_active, last_seen, created_at, updated_at,
+          clusters(name, agent_version, agent_update_available, agent_last_seen_at)
+        `)
+        .order("created_at", { ascending: false });
 
       if (error) throw error;
-      setAgentKeys(data || []);
-    } catch (error) {
-      console.error('Error fetching agent keys:', error);
-      toast.error('Erro ao carregar API keys');
+      setAgentKeys((data as any) || []);
+    } catch (err) {
+      console.error("Error fetching agent keys:", err);
+      toast.error("Erro ao carregar agentes");
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
   const createAgentKey = async () => {
-    if (!newAgentName.trim()) {
-      toast.error('Digite um nome para o agente');
-      return;
-    }
-
-    if (!selectedClusterId || selectedClusterId === "") {
-      toast.error('Selecione um cluster');
-      return;
-    }
+    if (!newAgentName.trim()) { toast.error("Digite um nome para o agente"); return; }
+    if (!selectedClusterId)   { toast.error("Selecione um cluster"); return; }
 
     setCreating(true);
     try {
-      const { data, error } = await supabase.functions.invoke('agent-generate-key', {
-        body: {
-          cluster_id: selectedClusterId,
-          name: newAgentName,
-        },
+      const { data, error } = await supabase.functions.invoke("agent-generate-key", {
+        body: { cluster_id: selectedClusterId, name: newAgentName },
       });
-
       if (error) throw error;
 
-      toast.success('API key criada com sucesso!');
+      toast.success("API key criada com sucesso!");
       setShowApiKey(data.api_key.api_key);
       setLastCreatedClusterId(selectedClusterId);
       setDialogOpen(false);
       setNewAgentName("");
       setSelectedClusterId("");
       fetchAgentKeys();
-    } catch (error) {
-      console.error('Error creating agent key:', error);
-      toast.error('Erro ao criar API key');
+    } catch (err) {
+      console.error("Error creating agent key:", err);
+      toast.error("Erro ao criar API key");
     } finally {
       setCreating(false);
     }
   };
 
   const deleteAgentKey = async (id: string) => {
-    if (!confirm('Tem certeza que deseja deletar esta API key? O agente parará de funcionar.')) {
-      return;
-    }
-
+    if (!confirm("Tem certeza que deseja deletar esta API key? O agente parará de funcionar.")) return;
     try {
-      const { error } = await supabase
-        .from('agent_api_keys')
-        .delete()
-        .eq('id', id);
-
+      const { error } = await supabase.from("agent_api_keys").delete().eq("id", id);
       if (error) throw error;
-
-      toast.success('API key deletada');
+      toast.success("API key deletada");
       fetchAgentKeys();
-    } catch (error) {
-      console.error('Error deleting agent key:', error);
-      toast.error('Erro ao deletar API key');
+    } catch (err) {
+      toast.error("Erro ao deletar API key");
     }
   };
 
-  const copyToClipboard = (text: string) => {
+  const copy = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
-    toast.success('Copiado para área de transferência');
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+    toast.success("Copiado!");
   };
 
-  const downloadDeploymentYaml = (apiKey: string, clusterId: string) => {
+  const downloadYaml = (apiKey: string, clusterId: string) => {
     const yaml = `apiVersion: v1
 kind: Namespace
 metadata:
@@ -178,26 +264,26 @@ metadata:
   name: kodo-agent
 rules:
 - apiGroups: [""]
-  resources: ["nodes", "pods", "events", "namespaces", "persistentvolumeclaims", "persistentvolumes", "secrets", "resourcequotas", "limitranges", "services", "configmaps", "endpoints"]
-  verbs: ["get", "list", "watch"]
+  resources: ["nodes","pods","events","namespaces","persistentvolumeclaims","persistentvolumes","secrets","resourcequotas","limitranges","services","configmaps","endpoints"]
+  verbs: ["get","list","watch"]
 - apiGroups: [""]
   resources: ["pods"]
   verbs: ["delete"]
 - apiGroups: ["apps"]
-  resources: ["deployments", "daemonsets", "replicasets", "statefulsets"]
-  verbs: ["get", "list", "watch", "update", "patch"]
+  resources: ["deployments","daemonsets","replicasets","statefulsets"]
+  verbs: ["get","list","watch","update","patch"]
 - apiGroups: ["metrics.k8s.io"]
-  resources: ["nodes", "pods"]
-  verbs: ["get", "list", "watch"]
+  resources: ["nodes","pods"]
+  verbs: ["get","list","watch"]
 - apiGroups: ["rbac.authorization.k8s.io"]
-  resources: ["roles", "rolebindings", "clusterroles", "clusterrolebindings"]
-  verbs: ["get", "list", "watch"]
+  resources: ["roles","rolebindings","clusterroles","clusterrolebindings"]
+  verbs: ["get","list","watch"]
 - apiGroups: ["networking.k8s.io"]
-  resources: ["networkpolicies", "ingresses", "ingressclasses"]
-  verbs: ["get", "list", "watch"]
+  resources: ["networkpolicies","ingresses","ingressclasses"]
+  verbs: ["get","list","watch"]
 - apiGroups: ["coordination.k8s.io"]
   resources: ["leases"]
-  verbs: ["get", "list", "watch"]
+  verbs: ["get","list","watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -266,269 +352,327 @@ spec:
             memory: "128Mi"
             cpu: "200m"`;
 
-    const blob = new Blob([yaml], { type: 'text/yaml' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `kodo-agent-${clusterId}.yaml`;
+    const blob = new Blob([yaml], { type: "text/yaml" });
+    const url  = URL.createObjectURL(blob);
+    const a    = Object.assign(document.createElement("a"), { href: url, download: `kodo-agent-${clusterId}.yaml` });
     a.click();
     URL.revokeObjectURL(url);
-    toast.success('YAML baixado com sucesso');
+    toast.success("YAML baixado com sucesso");
   };
 
-  const getStatusColor = (lastSeen: string | null, isActive: boolean, updateAvailable: boolean | null) => {
-    if (!isActive) return 'bg-muted text-muted-foreground';
-    if (!lastSeen) return 'bg-warning text-warning-foreground';
-    
-    const minutesAgo = (new Date().getTime() - new Date(lastSeen).getTime()) / 1000 / 60;
-    if (minutesAgo < 5) {
-      // Online but check for updates
-      if (updateAvailable) return 'bg-warning text-warning-foreground';
-      return 'bg-success text-success-foreground';
-    }
-    if (minutesAgo < 60) return 'bg-warning text-warning-foreground';
-    return 'bg-destructive text-destructive-foreground';
-  };
-
-  const getStatusText = (lastSeen: string | null, isActive: boolean, updateAvailable: boolean | null, agentVersion: string | null) => {
-    if (!isActive) return 'Inativo';
-    if (!lastSeen) return 'Aguardando';
-    
-    const minutesAgo = Math.floor((new Date().getTime() - new Date(lastSeen).getTime()) / 1000 / 60);
-    if (minutesAgo < 5) {
-      if (updateAvailable) return 'Desatualizado';
-      return 'Online';
-    }
-    if (minutesAgo < 60) return `${minutesAgo}min atrás`;
-    return 'Offline';
-  };
+  // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
     <DashboardLayout>
-      <div className="p-4 sm:p-6 lg:p-8 space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
+      <div className="flex flex-col gap-6 p-4 sm:p-6 lg:p-8">
+
+        {/* ── Header ── */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-              Agentes CloudOps
+            <h1
+              className="text-foreground font-semibold leading-tight"
+              style={{ fontFamily: MONO, fontSize: 20 }}
+            >
+              Agentes
             </h1>
-            <p className="text-muted-foreground mt-1 text-sm sm:text-base">
+            <p className="text-xs text-muted-foreground mt-1">
               Gerencie agentes de monitoramento instalados nos seus clusters
             </p>
           </div>
-          
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button size="lg" className="gap-2">
-                <Plus className="w-5 h-5" />
-                Nova API Key
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Gerar Nova API Key</DialogTitle>
-                <DialogDescription>
-                  Crie uma API key para instalar o agente no seu cluster
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 pt-4">
-                <div>
-                  <Label htmlFor="agent-name">Nome do Agente *</Label>
-                  <Input
-                    id="agent-name"
-                    placeholder="Ex: Production Agent"
-                    value={newAgentName}
-                    onChange={(e) => setNewAgentName(e.target.value)}
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="cluster">Cluster *</Label>
-                  <select
-                    id="cluster"
-                    className="w-full px-3 py-2 rounded-md border bg-background"
-                    value={selectedClusterId}
-                    onChange={(e) => setSelectedClusterId(e.target.value)}
-                    required
-                  >
-                    <option value="">Selecione um cluster</option>
-                    {clusters.map((cluster) => (
-                      <option key={cluster.id} value={cluster.id}>
-                        {cluster.name}
-                      </option>
-                    ))}
-                  </select>
-                  {clusters.length === 0 && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      ⚠️ Você precisa conectar um cluster primeiro
-                    </p>
-                  )}
-                </div>
-                <Button 
-                  onClick={createAgentKey} 
-                  disabled={creating || !newAgentName.trim() || !selectedClusterId}
-                  className="w-full"
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => fetchAgentKeys(true)}
+              disabled={refreshing}
+              className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs bg-muted border border-border text-muted-foreground hover:text-foreground transition-colors cursor-pointer outline-none disabled:opacity-50"
+            >
+              <RefreshCw className={cn("w-3.5 h-3.5", refreshing && "animate-spin")} />
+              Atualizar
+            </button>
+
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <DialogTrigger asChild>
+                <button
+                  className="flex items-center gap-1.5 h-8 px-3.5 rounded-lg text-xs font-semibold transition-all hover:-translate-y-px cursor-pointer outline-none border-none"
+                  style={{ background: C.accent, color: "#000", boxShadow: "0 2px 10px rgba(0,229,160,0.2)" }}
                 >
-                  {creating ? 'Gerando...' : 'Gerar API Key'}
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+                  <Plus className="w-3.5 h-3.5" />
+                  Nova API Key
+                </button>
+              </DialogTrigger>
+
+              <DialogContent className="w-[min(95vw,420px)] max-w-none p-0 gap-0 border border-border bg-card rounded-xl">
+                <DialogHeader className="px-5 pt-5 pb-4 border-b border-border">
+                  <DialogTitle className="text-sm font-semibold">Gerar Nova API Key</DialogTitle>
+                  <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                    Crie uma API key para instalar o agente no seu cluster
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="flex flex-col gap-4 p-5">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium">Nome do Agente</Label>
+                    <Input
+                      placeholder="Ex: production-agent"
+                      value={newAgentName}
+                      onChange={e => setNewAgentName(e.target.value)}
+                      className="h-8 text-xs"
+                      style={{ fontFamily: MONO }}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs font-medium">Cluster</Label>
+                    <select
+                      className="h-8 w-full px-2.5 rounded-lg border border-border bg-muted text-xs text-foreground outline-none cursor-pointer"
+                      value={selectedClusterId}
+                      onChange={e => setSelectedClusterId(e.target.value)}
+                    >
+                      <option value="">Selecione um cluster</option>
+                      {clusters.map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                    {clusters.length === 0 && (
+                      <p className="text-[11px] text-muted-foreground">Conecte um cluster primeiro</p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-border bg-muted/30">
+                  <button
+                    onClick={() => setDialogOpen(false)}
+                    className="h-8 px-3.5 rounded-lg text-xs bg-muted border border-border text-muted-foreground hover:text-foreground transition-colors cursor-pointer outline-none"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={createAgentKey}
+                    disabled={creating || !newAgentName.trim() || !selectedClusterId}
+                    className="h-8 px-3.5 rounded-lg text-xs font-semibold transition-all hover:-translate-y-px disabled:opacity-60 cursor-pointer outline-none border-none"
+                    style={{ background: C.accent, color: "#000" }}
+                  >
+                    {creating ? "Gerando…" : "Gerar API Key"}
+                  </button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
 
-        {/* Show newly created API key */}
+        {/* ── New API key reveal ── */}
         {showApiKey && (
-          <Card className="border-success bg-success/5">
-            <CardHeader>
-              <CardTitle className="text-success">✅ API Key Criada!</CardTitle>
-              <CardDescription>
-                Copie esta chave e baixe o YAML agora. A chave não será mostrada novamente.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center gap-2 p-3 bg-background rounded-lg font-mono text-sm break-all">
-                <code className="flex-1">{showApiKey}</code>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => copyToClipboard(showApiKey)}
+          <div
+            className="rounded-xl overflow-hidden"
+            style={{ border: `1px solid ${C.accentB}`, background: C.accentD }}
+          >
+            <div className="flex items-center gap-2 px-5 py-3 border-b" style={{ borderColor: C.accentB }}>
+              <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" style={{ color: C.accent }} />
+              <span className="text-sm font-semibold" style={{ color: C.accent }}>API Key Criada</span>
+              <span className="text-xs text-muted-foreground ml-1">— copie agora, não será exibida novamente</span>
+            </div>
+            <div className="p-5 flex flex-col gap-3">
+              <div className="flex items-center gap-2">
+                <code
+                  className="flex-1 px-3 py-2 rounded-lg bg-card border border-border text-xs overflow-x-auto"
+                  style={{ fontFamily: MONO }}
                 >
-                  <Copy className="w-4 h-4" />
-                </Button>
+                  {showApiKey}
+                </code>
+                <button
+                  onClick={() => copy(showApiKey, "newkey")}
+                  className="flex items-center justify-center w-8 h-8 rounded-lg bg-muted border border-border hover:bg-accent transition-colors cursor-pointer outline-none flex-shrink-0"
+                >
+                  {copiedId === "newkey"
+                    ? <CheckCircle className="w-3.5 h-3.5" style={{ color: C.accent }} />
+                    : <Copy className="w-3.5 h-3.5 text-muted-foreground" />
+                  }
+                </button>
               </div>
-              
               <div className="flex flex-col sm:flex-row gap-2">
-                <Button
-                  variant="default"
-                  className="flex-1 gap-2"
-                  onClick={() => {
-                    if (lastCreatedClusterId) {
-                      downloadDeploymentYaml(showApiKey, lastCreatedClusterId);
-                    } else {
-                      toast.error('Cluster não encontrado');
-                    }
-                  }}
+                <button
+                  onClick={() => lastCreatedClusterId && downloadYaml(showApiKey, lastCreatedClusterId)}
+                  className="flex items-center justify-center gap-1.5 h-8 px-4 rounded-lg text-xs font-semibold transition-all hover:-translate-y-px cursor-pointer outline-none border-none"
+                  style={{ background: C.accent, color: "#000" }}
                 >
-                  <Download className="w-4 h-4" />
+                  <Download className="w-3.5 h-3.5" />
                   Baixar YAML de Deploy
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setShowApiKey(null);
-                    setLastCreatedClusterId(null);
-                  }}
+                </button>
+                <button
+                  onClick={() => { setShowApiKey(null); setLastCreatedClusterId(null); }}
+                  className="flex items-center justify-center h-8 px-4 rounded-lg text-xs bg-muted border border-border text-muted-foreground hover:text-foreground transition-colors cursor-pointer outline-none"
                 >
-                  Entendi, fechar
-                </Button>
+                  Fechar
+                </button>
               </div>
-              
-              <p className="text-xs text-muted-foreground">
-                ⚠️ Salve a API key em um local seguro. Por segurança, ela não será exibida novamente.
-              </p>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         )}
 
-        {/* Agent Keys List */}
+        {/* ── Agent list ── */}
         {loading ? (
-          <div className="text-center py-12">Carregando...</div>
+          <div className="flex flex-col gap-3">
+            {[1, 2].map(i => (
+              <div key={i} className="h-40 rounded-xl bg-muted/40 border border-border animate-pulse" />
+            ))}
+          </div>
         ) : agentKeys.length === 0 ? (
-          <Card className="border-dashed">
-            <CardContent className="flex flex-col items-center justify-center py-16">
-              <Terminal className="h-16 w-16 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold mb-2">Nenhum agente configurado</h3>
-              <p className="text-muted-foreground text-center max-w-md mb-4">
+          <div className="flex flex-col items-center justify-center gap-4 py-20 bg-card border border-border rounded-xl">
+            <div className="p-4 rounded-xl bg-muted border border-border">
+              <Terminal className="w-6 h-6 text-muted-foreground" />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-medium text-foreground">Nenhum agente configurado</p>
+              <p className="text-xs text-muted-foreground mt-1 max-w-xs">
                 Crie uma API key e instale o agente no seu cluster para começar a monitorar
               </p>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         ) : (
-          <div className="grid gap-4">
-            {agentKeys.map((agent) => {
-              const updateAvailable = agent.clusters?.agent_update_available;
-              const agentVersion = agent.clusters?.agent_version;
-              
+          <div className="flex flex-col gap-4">
+            {agentKeys.map(agent => {
+              const version     = formatVersion(agent.clusters?.agent_version);
+              const lastSeen    = agent.clusters?.agent_last_seen_at ?? agent.last_seen;
+              const updateAvail = agent.clusters?.agent_update_available;
+              const status      = getAgentStatus(agent);
+              const isOnline    = status.label === "Online";
+              const kubectlCmd  = `kubectl set image deployment/kodo-agent agent=ghcr.io/kubenetworks-group/kodo-agent:${latestAgentVersion ?? "latest"} -n kodo`;
+              const cmdId       = `cmd-${agent.id}`;
+
               return (
-                <Card key={agent.id} className="hover:shadow-md transition-all">
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <CardTitle>{agent.name}</CardTitle>
-                          <Badge className={getStatusColor(agent.last_seen, agent.is_active, updateAvailable)}>
-                            {updateAvailable ? <AlertTriangle className="w-3 h-3 mr-1" /> : <Activity className="w-3 h-3 mr-1" />}
-                            {getStatusText(agent.last_seen, agent.is_active, updateAvailable, agentVersion)}
-                          </Badge>
-                          {agentVersion && (
-                            <Badge variant="outline" className="text-xs">
-                              v{agentVersion}
-                            </Badge>
-                          )}
-                        </div>
-                        <CardDescription>
-                          Cluster: {agent.clusters.name}
-                        </CardDescription>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => deleteAgentKey(agent.id)}
-                        className="text-destructive"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      {/* Update available warning */}
-                      {updateAvailable && (
-                        <div className="p-3 bg-warning/10 border border-warning/30 rounded-lg">
-                          <div className="flex items-start gap-2">
-                            <AlertTriangle className="w-4 h-4 text-warning mt-0.5 flex-shrink-0" />
-                            <div>
-                              <p className="text-sm font-medium text-warning">Atualização disponível</p>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                Uma nova versão do agente está disponível. Execute o comando abaixo para atualizar:
-                              </p>
-                              <div className="mt-2 p-2 bg-background rounded text-xs font-mono break-all">
-                                {`kubectl set image deployment/kodo-agent agent=ghcr.io/kubenetworks-group/kodo-agent:${latestAgentVersion ?? 'latest'} -n kodo`}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      <div>
-                        <Label className="text-xs text-muted-foreground">API Key (prefix)</Label>
-                        <div className="flex items-center gap-2 mt-1">
-                          <code className="flex-1 px-3 py-2 bg-muted rounded text-sm font-mono text-muted-foreground">
-                            {agent.api_key_prefix || 'kp_***...'}
-                          </code>
-                          <span className="text-xs text-muted-foreground italic">
-                            Chave mostrada apenas na criação
+                <div
+                  key={agent.id}
+                  className="bg-card border border-border rounded-xl overflow-hidden"
+                  style={{ borderLeftWidth: 3, borderLeftColor: status.color }}
+                >
+                  {/* ── Card header ── */}
+                  <div className="flex items-start justify-between gap-4 px-5 py-4">
+                    <div className="flex flex-col gap-1.5 min-w-0">
+                      {/* Name + badges */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className="text-sm font-semibold text-foreground"
+                          style={{ fontFamily: MONO }}
+                        >
+                          {agent.name}
+                        </span>
+                        <StatusBadge agent={agent} />
+                        {version && (
+                          <span
+                            className="text-[10px] px-1.5 py-0.5 rounded bg-muted border border-border text-muted-foreground"
+                            style={{ fontFamily: MONO }}
+                          >
+                            {version}
                           </span>
-                        </div>
+                        )}
+                        {updateAvail && latestAgentVersion && (
+                          <span
+                            className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded"
+                            style={{ background: C.accentD, color: C.accent, border: `1px solid ${C.accentB}` }}
+                          >
+                            <ArrowUpCircle className="w-2.5 h-2.5" />
+                            {formatVersion(latestAgentVersion)} disponível
+                          </span>
+                        )}
                       </div>
 
-                      <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded text-xs text-amber-600 dark:text-amber-400">
-                        ⚠️ Para baixar o YAML de deploy, crie uma nova API key. A chave só é exibida no momento da criação por segurança.
-                      </div>
-
-                      <div className="text-xs text-muted-foreground">
-                        Criado em {new Date(agent.created_at).toLocaleDateString('pt-BR')}
-                        {agent.last_seen && (
-                          <> · Última conexão: {new Date(agent.last_seen).toLocaleString('pt-BR')}</>
+                      {/* Cluster + timestamps */}
+                      <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+                        <span>Cluster: <span className="text-foreground">{agent.clusters?.name ?? "—"}</span></span>
+                        <span className="flex items-center gap-1">
+                          <Clock className="w-2.5 h-2.5" />
+                          Criado {new Date(agent.created_at).toLocaleDateString("pt-BR")}
+                        </span>
+                        {lastSeen && (
+                          <span className="flex items-center gap-1">
+                            {isOnline
+                              ? <Wifi className="w-2.5 h-2.5" style={{ color: C.accent }} />
+                              : <WifiOff className="w-2.5 h-2.5" />
+                            }
+                            Última conexão: {formatRelative(lastSeen)}
+                          </span>
                         )}
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
+
+                    {/* Delete */}
+                    <button
+                      onClick={() => deleteAgentKey(agent.id)}
+                      className="flex items-center justify-center w-7 h-7 rounded-lg hover:bg-muted transition-colors cursor-pointer outline-none border-none bg-transparent flex-shrink-0"
+                      title="Remover agente"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
+                    </button>
+                  </div>
+
+                  {/* ── Update banner ── */}
+                  {updateAvail && (
+                    <div
+                      className="mx-5 mb-4 rounded-lg overflow-hidden"
+                      style={{ border: `1px solid ${C.accentB}`, background: C.accentD }}
+                    >
+                      <div className="flex items-center gap-2 px-4 py-2.5 border-b" style={{ borderColor: C.accentB }}>
+                        <ArrowUpCircle className="w-3.5 h-3.5 flex-shrink-0" style={{ color: C.accent }} />
+                        <span className="text-xs font-semibold" style={{ color: C.accent }}>
+                          Atualização disponível — {formatVersion(latestAgentVersion)}
+                        </span>
+                      </div>
+                      <div className="px-4 py-3 flex flex-col gap-2">
+                        <p className="text-[11px] text-muted-foreground">
+                          Execute para atualizar o agente no cluster:
+                        </p>
+                        <div className="relative">
+                          <code
+                            className="block text-[11px] bg-card border border-border rounded-md px-3 py-2 pr-9 overflow-x-auto"
+                            style={{ fontFamily: MONO }}
+                          >
+                            {kubectlCmd}
+                          </code>
+                          <button
+                            onClick={() => copy(kubectlCmd, cmdId)}
+                            className="absolute top-1.5 right-1.5 flex items-center justify-center w-6 h-6 rounded bg-muted border border-border hover:bg-accent transition-colors cursor-pointer outline-none border-none"
+                          >
+                            {copiedId === cmdId
+                              ? <CheckCircle className="w-3 h-3" style={{ color: C.accent }} />
+                              : <Copy className="w-3 h-3 text-muted-foreground" />
+                            }
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── API Key section ── */}
+                  <div className="flex flex-col gap-3 px-5 pb-4">
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                        API Key (prefix)
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <code
+                          className="flex-1 px-3 py-2 bg-muted border border-border rounded-lg text-xs text-muted-foreground overflow-x-auto"
+                          style={{ fontFamily: MONO }}
+                        >
+                          {agent.api_key_prefix || "kp_***..."}
+                        </code>
+                        <span className="text-[10px] text-muted-foreground whitespace-nowrap flex-shrink-0">
+                          Chave mostrada apenas na criação
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* YAML download hint */}
+                    <div
+                      className="flex items-start gap-2 rounded-lg px-3 py-2.5 text-[11px]"
+                      style={{ background: C.warnD, border: `1px solid ${C.warnB}`, color: C.warn }}
+                    >
+                      <AlertTriangle className="w-3 h-3 flex-shrink-0 mt-0.5" style={{ color: C.warn }} />
+                      Para baixar o YAML de deploy, crie uma nova API key. A chave completa é exibida apenas no momento da criação.
+                    </div>
+                  </div>
+                </div>
               );
             })}
           </div>
         )}
+
       </div>
     </DashboardLayout>
   );

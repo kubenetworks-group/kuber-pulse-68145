@@ -19,7 +19,7 @@ import { Activity, Bell, Terminal, BarChart3 } from "lucide-react";
 
 const Observability = () => {
   const { clusters } = useCluster();
-  const { pods, services, ingresses, namespaceUsage, agents, loading, lastSync, refetch } =
+  const { pods, services, ingresses, namespaceUsage, hasResourceData, agents, loading, lastSync, refetch } =
     useObservabilityData();
 
   return (
@@ -51,7 +51,7 @@ const Observability = () => {
             </TabsList>
 
             <TabsContent value="overview" className="space-y-5">
-              <ResourceUsageCharts namespaceUsage={namespaceUsage} loading={loading} />
+              <ResourceUsageCharts namespaceUsage={namespaceUsage} loading={loading} hasResourceData={hasResourceData} />
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                 <PodsOverviewChart pods={pods} loading={loading} />
                 <ServicesOverview services={services} loading={loading} />

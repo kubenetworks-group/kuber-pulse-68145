@@ -12,6 +12,7 @@ interface NamespaceUsage {
 interface ResourceUsageChartsProps {
   namespaceUsage: NamespaceUsage[];
   loading: boolean;
+  hasResourceData?: boolean;
 }
 
 const getBarColor = (value: number) => {
@@ -20,7 +21,12 @@ const getBarColor = (value: number) => {
   return "hsl(142, 76%, 36%)";
 };
 
-export const ResourceUsageCharts = ({ namespaceUsage, loading }: ResourceUsageChartsProps) => {
+export const ResourceUsageCharts = ({ namespaceUsage, loading, hasResourceData = true }: ResourceUsageChartsProps) => {
+  const cpuLabel = hasResourceData ? "CPU por Namespace" : "Pods por Namespace (sem requests definidos)";
+  const memLabel = hasResourceData ? "Memória por Namespace" : "Pods por Namespace (distribuição)";
+  const cpuTooltip = hasResourceData ? "CPU (share de requests)" : "Pods (%)";
+  const memTooltip = hasResourceData ? "Memória (share de requests)" : "Pods (%)";
+
   if (loading) {
     return (
       <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
@@ -38,7 +44,7 @@ export const ResourceUsageCharts = ({ namespaceUsage, loading }: ResourceUsageCh
         <CardHeader className="pb-2">
           <CardTitle className="text-base font-semibold flex items-center gap-2">
             <Cpu className="w-4 h-4 text-orange-400" />
-            CPU por Namespace
+            {cpuLabel}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -65,7 +71,7 @@ export const ResourceUsageCharts = ({ namespaceUsage, loading }: ResourceUsageCh
                       borderRadius: "8px",
                       fontSize: "12px",
                     }}
-                    formatter={(value: number) => [`${value}%`, "CPU"]}
+                    formatter={(value: number) => [`${value}%`, cpuTooltip]}
                   />
                   <Bar dataKey="cpuPercent" radius={[0, 4, 4, 0]}>
                     {namespaceUsage.slice(0, 8).map((entry, i) => (
@@ -84,7 +90,7 @@ export const ResourceUsageCharts = ({ namespaceUsage, loading }: ResourceUsageCh
         <CardHeader className="pb-2">
           <CardTitle className="text-base font-semibold flex items-center gap-2">
             <MemoryStick className="w-4 h-4 text-violet-400" />
-            Memória por Namespace
+            {memLabel}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -111,7 +117,7 @@ export const ResourceUsageCharts = ({ namespaceUsage, loading }: ResourceUsageCh
                       borderRadius: "8px",
                       fontSize: "12px",
                     }}
-                    formatter={(value: number) => [`${value}%`, "Memória"]}
+                    formatter={(value: number) => [`${value}%`, memTooltip]}
                   />
                   <Bar dataKey="memoryPercent" radius={[0, 4, 4, 0]}>
                     {namespaceUsage.slice(0, 8).map((entry, i) => (

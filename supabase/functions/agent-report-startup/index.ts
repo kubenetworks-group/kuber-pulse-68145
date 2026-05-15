@@ -78,6 +78,40 @@ serve(async (req) => {
 
     console.log(`Agent startup reported: cluster=${cluster_id} pod=${pod_name} restart_count=${restart_count} reason=${restart_reason}`);
 
+    // ── Always sync version + update flag, regardless of restart count ──────
+    // Fetch latest version to compare
+    const { data: latestVersionData } = await supabase
+      .from('agent_versions')
+      .select('version')
+      .eq('is_latest', true)
+      .single();
+
+    const compareVersions = (v1: string, v2: string): number => {
+      if (!v1 || !v2 || v1 === 'unknown' || v2 === 'unknown') return 0;
+      const norm = (v: string) => v.replace(/^v/, '').split('.').map(Number);
+      const [a1, b1, c1] = norm(v1);
+      const [a2, b2, c2] = norm(v2);
+      return a1 !== a2 ? a1 - a2 : b1 !== b2 ? b1 - b2 : c1 - c2;
+    };
+
+    const updateStillNeeded = latestVersionData && agent_version !== 'unknown' &&
+      compareVersions(agent_version, latestVersionData.version) < 0;
+
+    await supabase
+      .from('clusters')
+      .update({
+        agent_version: agent_version !== 'unknown' ? agent_version : undefined,
+        agent_last_seen_at: new Date().toISOString(),
+        agent_update_available: updateStillNeeded || false,
+        agent_update_message: updateStillNeeded ? undefined : null,
+      })
+      .eq('id', cluster_id);
+
+    console.log(
+      `Version sync on startup: cluster=${cluster_id} version=${agent_version} ` +
+      `latest=${latestVersionData?.version} update_needed=${updateStillNeeded}`
+    );
+
     // First start — not a restart, just log silently and return
     if (restart_count === 0) {
       console.log(`First start for cluster ${cluster_id}, no restart event to log`);
@@ -182,12 +216,7 @@ serve(async (req) => {
           },
         })
         .eq('id', recentUpdateLog.id);
-
-      // Clear the update_available flag on the cluster
-      await supabase
-        .from('clusters')
-        .update({ agent_update_available: false, agent_update_message: null })
-        .eq('id', cluster_id);
+      // Note: agent_update_available was already updated above based on actual version comparison
     }
 
     console.log(`Restart event logged for cluster ${cluster_id}: ${triggeredBy} — ${triggerReason}`);

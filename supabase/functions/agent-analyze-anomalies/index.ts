@@ -183,13 +183,35 @@ serve(async (req) => {
     const securityRaw = getLatestMetric('security') as any;
     const previousLogsRaw = getLatestMetric('pod_previous_logs') as any;
 
+    // Normalize restart count — agent may send total_restarts, RestartCount, or restarts
+    const getRestartCount = (pod: any): number =>
+      pod.total_restarts ?? pod.RestartCount ?? pod.restarts ?? 0;
+
+    // Normalize pod phase/status
+    const getPodPhase = (pod: any): string =>
+      pod.phase || pod.Phase || pod.status || pod.Status || '';
+
+    const getPodReady = (pod: any): number =>
+      pod.ready ?? pod.ready_containers ?? pod.ReadyContainers ?? 0;
+
+    const getPodTotal = (pod: any): number =>
+      pod.total_containers ?? pod.TotalContainers ?? pod.containers?.length ?? 1;
+
     // Filter pods with issues (include pods with any restarts — even if running now)
-    const problematicPods = podDetailsRaw?.pods?.filter((pod: any) =>
-      pod.restarts > 0 ||
-      pod.status !== 'Running' ||
-      pod.phase !== 'Running' ||
-      pod.ready !== pod.total_containers
-    )?.slice(0, 50) || [];
+    const problematicPods = podDetailsRaw?.pods?.filter((pod: any) => {
+      const restarts = getRestartCount(pod);
+      const phase    = getPodPhase(pod);
+      const ready    = getPodReady(pod);
+      const total    = getPodTotal(pod);
+      return restarts > 0 || phase !== 'Running' || ready < total;
+    })?.map((pod: any) => ({
+      // Normalize fields so Gemini always sees consistent keys
+      ...pod,
+      restarts:         getRestartCount(pod),
+      phase:            getPodPhase(pod),
+      ready_containers: getPodReady(pod),
+      total_containers: getPodTotal(pod),
+    }))?.slice(0, 50) || [];
 
     // All events (warnings + errors) from cluster
     const recentEvents = eventsRaw?.events?.filter((event: any) =>
@@ -202,8 +224,12 @@ serve(async (req) => {
       const snapshots = historical.map(h => ({
         collected_at: h.collected_at,
         pods_with_restarts: (h.metric_data?.pods || [])
+          .map((p: any) => {
+            const r = p.total_restarts ?? p.RestartCount ?? p.restarts ?? 0;
+            return { name: p.name || p.Name, namespace: p.namespace || p.Namespace, restarts: r,
+                     status: p.phase || p.Phase || p.status || p.Status };
+          })
           .filter((p: any) => p.restarts > 0)
-          .map((p: any) => ({ name: p.name, namespace: p.namespace, restarts: p.restarts, status: p.status }))
       }));
       // Find pods that had restarts in historical data but may be ok now
       const historicalPodMap = new Map<string, number>();
@@ -241,6 +267,7 @@ serve(async (req) => {
       nodes: nodesRaw ? 'present' : 'missing',
       pvcs: pvcsRaw ? 'present' : 'missing',
       problematic_pods_count: problematicPods.length,
+      problematic_pods_names: problematicPods.map((p: any) => `${p.namespace}/${p.name} (restarts=${p.restarts})`),
       warning_events_count: recentEvents.length,
       pods_with_previous_logs: podsWithPreviousLogs.length,
       recent_actions_count: recentActions?.length || 0,

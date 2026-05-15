@@ -249,7 +249,7 @@ serve(async (req) => {
       console.log(`Validating metric type '${metric.type}' (size: ${metricSize} bytes)`);
 
       // Type-specific validation
-      const isLargeMetricType = ['pod_details', 'events', 'nodes', 'pvcs', 'security_threats', 'security'].includes(metric.type);
+      const isLargeMetricType = ['pod_details', 'events', 'nodes', 'pvcs', 'security_threats', 'security', 'services', 'ingresses', 'namespace_resources'].includes(metric.type);
       const maxSize = isLargeMetricType ? 500000 : 10000; // 500KB for large types, 10KB for basic
       
       if (metricSize > maxSize) {
@@ -328,37 +328,50 @@ serve(async (req) => {
       });
     }
 
-    // Update cluster stats based on metrics
-    const cpuMetric = metrics.find(m => m.type === 'cpu');
+    // Update cluster stats and status based on received metrics
+    const cpuMetric    = metrics.find(m => m.type === 'cpu');
     const memoryMetric = metrics.find(m => m.type === 'memory');
-    const podsMetric = metrics.find(m => m.type === 'pods');
-    
-    if (cpuMetric || memoryMetric || podsMetric) {
-      const updateData: any = {
-        last_sync: new Date().toISOString()
-      };
-      
-      const cpuData = cpuMetric?.data as any;
-      const memoryData = memoryMetric?.data as any;
-      const podsData = podsMetric?.data as any;
-      
-      if (cpuData?.usage_percent) updateData.cpu_usage = cpuData.usage_percent;
-      if (memoryData?.usage_percent) updateData.memory_usage = memoryData.usage_percent;
-      if (podsData?.running) updateData.pods = podsData.running;
-      
-      // Update nodes count
-      const nodesMetric = metrics.find(m => m.type === 'nodes');
-      if (nodesMetric) {
-        const nodesData = nodesMetric.data as any;
-        if (nodesData?.count !== undefined) {
-          updateData.nodes = nodesData.count;
-        }
-      }
-      
-      await supabaseClient
-        .from('clusters')
-        .update(updateData)
-        .eq('id', cluster_id);
+    const podsMetric   = metrics.find(m => m.type === 'pods');
+    const nodesMetric  = metrics.find(m => m.type === 'nodes');
+
+    const metricTypes      = new Set(metrics.map(m => m.type));
+    const hasBasicMetrics  = ['cpu', 'memory', 'pods'].some(t => metricTypes.has(t));
+    const hasEssentials    = ['pod_details', 'events'].every(t => metricTypes.has(t));
+
+    // Determine cluster health status from this batch
+    let clusterStatus: string;
+    if (hasBasicMetrics && hasEssentials) {
+      clusterStatus = 'healthy';
+    } else if (hasBasicMetrics) {
+      clusterStatus = 'warning'; // métricas básicas recebidas, mas faltam pod_details ou events
+    } else {
+      clusterStatus = 'warning'; // alguma métrica chegou, mas não as básicas esperadas
+    }
+
+    const updateData: any = {
+      last_sync: new Date().toISOString(),
+      status: clusterStatus,
+    };
+
+    const cpuData    = cpuMetric?.data    as any;
+    const memoryData = memoryMetric?.data as any;
+    const podsData   = podsMetric?.data   as any;
+    const nodesData  = nodesMetric?.data  as any;
+
+    if (cpuData?.usage_percent    !== undefined) updateData.cpu_usage    = cpuData.usage_percent;
+    if (memoryData?.usage_percent !== undefined) updateData.memory_usage = memoryData.usage_percent;
+    if (podsData?.running         !== undefined) updateData.pods         = podsData.running;
+    if (nodesData?.count          !== undefined) updateData.nodes        = nodesData.count;
+
+    const { error: statsError } = await supabaseClient
+      .from('clusters')
+      .update(updateData)
+      .eq('id', cluster_id);
+
+    if (statsError) {
+      console.error('Erro ao atualizar stats do cluster:', statsError);
+    } else {
+      console.log(`Cluster ${cluster_id} atualizado → status=${clusterStatus}`);
     }
 
     // Process PVCs
