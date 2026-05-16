@@ -1,7 +1,6 @@
 import { Sidebar } from "./Sidebar";
 import { NotificationBell } from "./NotificationBell";
 import { ClusterSelector } from "./ClusterSelector";
-import { Footer } from "./Footer";
 import { DocsAssistantChat } from "./DocsAssistantChat";
 import { TrialBanner } from "./TrialBanner";
 import { AgentUpdateButton } from "./AgentUpdateButton";
@@ -126,7 +125,6 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
         <div className="flex-1 p-3 sm:p-4 lg:p-6">
           {children}
         </div>
-        <Footer />
       </div>
       
       {/* Global Docs Assistant */}

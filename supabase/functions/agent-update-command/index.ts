@@ -155,10 +155,12 @@ serve(async (req) => {
     }
 
     // Update command status
-    const updateData: any = {
-      status,
-      completed_at: new Date().toISOString(),
-    };
+    const updateData: any = { status };
+
+    // Only stamp completed_at for terminal statuses
+    if (status === 'completed' || status === 'failed') {
+      updateData.completed_at = new Date().toISOString();
+    }
 
     if (result) {
       updateData.result = result;
@@ -234,6 +236,47 @@ serve(async (req) => {
             })
             .eq('id', snapshotId);
           console.log(`❌ Snapshot ${snapshotId} marked as failed: ${errorMsg}`);
+        }
+      }
+    }
+
+    // ── Migration finalization ─────────────────────────────────────────────────
+    // When apply_manifests or validate_migration completes/fails, update cluster_migrations.
+    if (currentCommand.command_type === 'apply_manifests' || currentCommand.command_type === 'validate_migration') {
+      const params = currentCommand.command_params as any;
+      const migrationId = params?.migration_id;
+      if (migrationId) {
+        const r = result as any;
+        if (currentCommand.command_type === 'apply_manifests') {
+          if (status === 'completed') {
+            await supabaseClient.from('cluster_migrations').update({
+              status: 'completed',
+              progress_percent: 100,
+              current_step: 'Manifests aplicados com sucesso',
+              completed_at: new Date().toISOString(),
+            }).eq('id', migrationId);
+          } else if (status === 'failed') {
+            await supabaseClient.from('cluster_migrations').update({
+              status: 'failed',
+              error_message: r?.error || 'Agent failed to apply manifests',
+              completed_at: new Date().toISOString(),
+            }).eq('id', migrationId);
+          }
+        } else if (currentCommand.command_type === 'validate_migration') {
+          if (status === 'completed') {
+            await supabaseClient.from('cluster_migrations').update({
+              status: 'completed',
+              progress_percent: 100,
+              current_step: 'Validação concluída',
+              completed_at: new Date().toISOString(),
+            }).eq('id', migrationId);
+          } else if (status === 'failed') {
+            await supabaseClient.from('cluster_migrations').update({
+              status: 'failed',
+              error_message: r?.error || 'Agent failed to validate migration',
+              completed_at: new Date().toISOString(),
+            }).eq('id', migrationId);
+          }
         }
       }
     }

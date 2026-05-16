@@ -302,49 +302,84 @@ const Settings = () => {
 
   return (
     <DashboardLayout>
-      <div className="p-4 sm:p-6 lg:p-8">
-        <div className="mb-6 sm:mb-8">
-          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Configurações</h1>
-          <p className="text-muted-foreground mt-1 text-sm sm:text-base">Gerencie sua conta e preferências</p>
+      {/* ── Page header ── */}
+      <div className="border-b bg-gradient-to-r from-slate-50/80 to-white dark:from-slate-900/80 dark:to-slate-800">
+        <div className="max-w-6xl mx-auto px-6 py-7 flex items-center gap-4">
+          <div className="p-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
+            <User className="w-5 h-5 text-slate-500 dark:text-slate-400" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">Configurações</h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Gerencie sua conta e preferências</p>
+          </div>
         </div>
+      </div>
 
-        <Tabs defaultValue="profile" className="max-w-4xl">
-          <TabsList className="mb-6">
-            <TabsTrigger value="profile" className="gap-2">
-              <User className="w-4 h-4" />
-              Perfil
-            </TabsTrigger>
-            <TabsTrigger value="security" className="gap-2">
-              <Shield className="w-4 h-4" />
-              Segurança
-            </TabsTrigger>
-            <TabsTrigger value="whatsapp" className="gap-2">
-              <MessageSquare className="w-4 h-4" />
-              WhatsApp
-              {currentPlan === 'pro' && (
-                <Badge variant="secondary" className="ml-1 text-xs">PRO</Badge>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="upgrade" className="gap-2">
-              <Crown className="w-4 h-4" />
-              Planos
-            </TabsTrigger>
-            <TabsTrigger value="privacy" className="gap-2">
-              <Lock className="w-4 h-4" />
-              Privacidade
-            </TabsTrigger>
-            {isAdmin && (
-              <TabsTrigger value="data" className="gap-2">
-                <Database className="w-4 h-4" />
-                Dados
-              </TabsTrigger>
-            )}
-          </TabsList>
+      <div className="max-w-6xl mx-auto px-6 py-8">
+        <Tabs defaultValue="profile" className="flex flex-col lg:flex-row gap-8">
+
+          {/* ── Sidebar ── */}
+          <div className="lg:w-56 shrink-0 space-y-3">
+
+            {/* Profile summary */}
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 shadow-sm text-center">
+              <div className="flex flex-col items-center gap-2.5">
+                <div className="w-14 h-14 rounded-full bg-slate-100 dark:bg-slate-700 border-2 border-slate-200 dark:border-slate-600 overflow-hidden flex items-center justify-center">
+                  {profile.avatar_url
+                    ? <img src={profile.avatar_url} alt="avatar" className="w-full h-full object-cover" />
+                    : <User className="w-6 h-6 text-slate-400" />}
+                </div>
+                <div className="min-w-0 w-full">
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">
+                    {profile.full_name || profile.username || 'Usuário'}
+                  </p>
+                  <p className="text-xs text-slate-400 truncate">{user?.email}</p>
+                </div>
+                <Badge variant="secondary" className="capitalize text-xs">
+                  {currentPlan}{isTrialActive ? ' · Trial' : ''}
+                </Badge>
+              </div>
+            </div>
+
+            {/* Nav tabs */}
+            <TabsList className="flex flex-col w-full h-auto bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-1.5 gap-0.5">
+              {([
+                { value: 'profile',  icon: User,          label: 'Perfil',      badge: null },
+                { value: 'security', icon: Shield,         label: 'Segurança',   badge: null },
+                { value: 'whatsapp', icon: MessageSquare,  label: 'WhatsApp',    badge: currentPlan === 'pro' ? 'PRO' : null },
+                { value: 'upgrade',  icon: Crown,          label: 'Planos',      badge: null },
+                { value: 'privacy',  icon: Lock,           label: 'Privacidade', badge: null },
+                ...(isAdmin ? [{ value: 'data', icon: Database, label: 'Dados', badge: null }] : []),
+              ] as { value: string; icon: React.ElementType; label: string; badge: string | null }[]).map(({ value, icon: Icon, label, badge }) => (
+                <TabsTrigger
+                  key={value}
+                  value={value}
+                  className="w-full justify-start gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium
+                    text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white
+                    data-[state=active]:text-slate-900 dark:data-[state=active]:text-white
+                    data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800
+                    data-[state=active]:shadow-sm transition-all duration-150"
+                >
+                  <Icon className="w-4 h-4 shrink-0" />
+                  <span className="flex-1 text-left">{label}</span>
+                  {badge && <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">{badge}</Badge>}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </div>
+
+          {/* ── Content ── */}
+          <div className="flex-1 min-w-0">
 
           {/* Profile Tab */}
-          <TabsContent value="profile" className="space-y-6">
-            <Card className="p-6 bg-card border-border">
-              <h3 className="text-lg font-semibold text-card-foreground mb-6">Foto de Perfil</h3>
+          <TabsContent value="profile" className="space-y-5 mt-0">
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm">
+              <div className="flex items-center gap-3 mb-5">
+                <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800">
+                  <User className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                </div>
+                <h3 className="font-semibold text-slate-900 dark:text-white">Foto de Perfil</h3>
+              </div>
               {user && (
                 <AvatarUpload
                   userId={user.id}
@@ -353,528 +388,311 @@ const Settings = () => {
                   onAvatarChange={(url) => setProfile({ ...profile, avatar_url: url })}
                 />
               )}
-            </Card>
+            </div>
 
-            <Card className="p-6 bg-card border-border">
-              <h3 className="text-lg font-semibold text-card-foreground mb-4">Informações do Perfil</h3>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={user?.email || ""}
-                    disabled
-                    className="bg-muted"
-                  />
-                  <p className="text-xs text-muted-foreground">O email não pode ser alterado</p>
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm">
+              <div className="flex items-center gap-3 mb-5">
+                <div className="p-2 rounded-xl bg-violet-50 dark:bg-violet-900/30 border border-violet-100 dark:border-violet-800">
+                  <User className="w-4 h-4 text-violet-600 dark:text-violet-400" />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="full_name">Nome Completo</Label>
-                  <Input
-                    id="full_name"
-                    value={profile.full_name}
-                    disabled
-                    className="bg-muted"
-                  />
-                  <p className="text-xs text-muted-foreground">O nome completo não pode ser alterado</p>
+                <h3 className="font-semibold text-slate-900 dark:text-white">Informações do Perfil</h3>
+              </div>
+              <form onSubmit={handleSubmit} className="space-y-5">
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Email</Label>
+                  <Input type="email" value={user?.email || ""} disabled className="bg-slate-50 dark:bg-slate-900 text-slate-400 border-slate-200 dark:border-slate-700" />
+                  <p className="text-xs text-slate-400 flex items-center gap-1"><Lock className="w-3 h-3" />O email não pode ser alterado</p>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="username">Username</Label>
-                  <Input
-                    id="username"
-                    value={profile.username}
-                    onChange={(e) => {
-                      setProfile({ ...profile, username: e.target.value });
-                      validateUsername(e.target.value);
-                    }}
-                    placeholder="meu_username"
-                    className={usernameError ? "border-destructive" : ""}
-                  />
-                  {usernameError && (
-                    <p className="text-xs text-destructive">{usernameError}</p>
-                  )}
-                  <p className="text-xs text-muted-foreground">Seu identificador único na plataforma</p>
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Nome Completo</Label>
+                  <Input value={profile.full_name} disabled className="bg-slate-50 dark:bg-slate-900 text-slate-400 border-slate-200 dark:border-slate-700" />
+                  <p className="text-xs text-slate-400 flex items-center gap-1"><Lock className="w-3 h-3" />O nome completo não pode ser alterado</p>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="company">Empresa</Label>
-                  <Input
-                    id="company"
-                    value={profile.company}
-                    onChange={(e) => setProfile({ ...profile, company: e.target.value })}
-                    placeholder="Minha Empresa Ltda."
-                  />
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Username</Label>
+                  <Input value={profile.username} onChange={(e) => { setProfile({ ...profile, username: e.target.value }); validateUsername(e.target.value); }}
+                    placeholder="meu_username" className={usernameError ? "border-destructive" : "border-slate-200 dark:border-slate-700"} />
+                  {usernameError ? <p className="text-xs text-destructive">{usernameError}</p>
+                    : <p className="text-xs text-slate-400">Seu identificador único na plataforma</p>}
                 </div>
-                <Button type="submit" disabled={loading || !!usernameError}>
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Empresa</Label>
+                  <Input value={profile.company} onChange={(e) => setProfile({ ...profile, company: e.target.value })}
+                    placeholder="Minha Empresa Ltda." className="border-slate-200 dark:border-slate-700" />
+                </div>
+                <Button type="submit" disabled={loading || !!usernameError} className="gap-2">
+                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                   {loading ? "Salvando..." : "Salvar Alterações"}
                 </Button>
               </form>
-            </Card>
+            </div>
 
-            <Card className="p-6 bg-card border-border">
-              <h3 className="text-lg font-semibold text-card-foreground mb-4">Informações da Conta</h3>
-              <div className="space-y-4 text-sm">
-                <div className="flex justify-between py-2 border-b border-border">
-                  <span className="text-muted-foreground">ID do Usuário</span>
-                  <span className="text-card-foreground font-mono text-xs">{user?.id}</span>
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm">
+              <div className="flex items-center gap-3 mb-5">
+                <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
+                  <Info className="w-4 h-4 text-slate-500" />
                 </div>
-                <div className="flex justify-between py-2 border-b border-border">
-                  <span className="text-muted-foreground">Conta Criada</span>
-                  <span className="text-card-foreground">
-                    {user?.created_at ? new Date(user.created_at).toLocaleDateString('pt-BR') : "N/A"}
-                  </span>
+                <h3 className="font-semibold text-slate-900 dark:text-white">Informações da Conta</h3>
+              </div>
+              <div className="divide-y divide-slate-100 dark:divide-slate-700">
+                <div className="flex items-center justify-between py-3">
+                  <span className="text-sm text-slate-500">ID do Usuário</span>
+                  <span className="font-mono text-xs text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-900 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 max-w-[220px] truncate">{user?.id}</span>
+                </div>
+                <div className="flex items-center justify-between py-3">
+                  <span className="text-sm text-slate-500">Conta Criada</span>
+                  <span className="text-sm text-slate-700 dark:text-slate-300">{user?.created_at ? new Date(user.created_at).toLocaleDateString('pt-BR') : "N/A"}</span>
                 </div>
               </div>
-            </Card>
+            </div>
           </TabsContent>
 
           {/* Security Tab */}
-          <TabsContent value="security" className="space-y-6">
+          <TabsContent value="security" className="space-y-5 mt-0">
             <MFASetup />
-            
-            <Card className="p-6 bg-card border-border">
-              <h3 className="text-lg font-semibold text-card-foreground mb-4">Sessões Ativas</h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                Gerencie suas sessões ativas em diferentes dispositivos.
-              </p>
-              <Button variant="outline" className="text-destructive border-destructive/50 hover:bg-destructive/10">
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 rounded-xl bg-red-50 dark:bg-red-900/30 border border-red-100 dark:border-red-800">
+                  <Shield className="w-4 h-4 text-red-600 dark:text-red-400" />
+                </div>
+                <h3 className="font-semibold text-slate-900 dark:text-white">Sessões Ativas</h3>
+              </div>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Gerencie suas sessões ativas em diferentes dispositivos.</p>
+              <Button variant="outline" className="gap-2 text-destructive border-destructive/40 hover:bg-destructive/5">
+                <XCircle className="w-4 h-4" />
                 Encerrar Todas as Outras Sessões
               </Button>
-            </Card>
+            </div>
           </TabsContent>
 
           {/* WhatsApp Tab */}
-          <TabsContent value="whatsapp" className="space-y-6">
+          <TabsContent value="whatsapp" className="space-y-5 mt-0">
             <WhatsAppConfig />
             <WhatsAppApprovals />
           </TabsContent>
 
-          {/* Upgrade Tab */}
-          <TabsContent value="upgrade" className="space-y-6">
-            {/* Current Plan Status */}
-            <Card className="p-6 bg-gradient-to-br from-amber-500/5 to-amber-500/10 border-amber-500/20">
+          {/* Plans Tab */}
+          <TabsContent value="upgrade" className="space-y-5 mt-0">
+            <div className="rounded-2xl border border-amber-200/60 dark:border-amber-800/40 bg-gradient-to-br from-amber-50/60 to-orange-50/30 dark:from-amber-900/20 dark:to-orange-900/10 p-6 shadow-sm">
               <div className="flex items-start gap-4">
-                <div className="p-3 rounded-lg bg-amber-500/20">
-                  <Crown className="h-6 w-6 text-amber-500" />
+                <div className="p-3 rounded-2xl bg-amber-100 dark:bg-amber-900/40 border border-amber-200 dark:border-amber-800">
+                  <Crown className="h-5 w-5 text-amber-600 dark:text-amber-400" />
                 </div>
                 <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2 flex-wrap">
-                    <h3 className="text-lg font-semibold">Seu Plano Contratado</h3>
-                    <Badge variant="secondary" className="capitalize">
-                      {subscription?.plan || 'free'}
-                    </Badge>
-                    {isTrialActive && (
-                      <Badge className="bg-amber-500/20 text-amber-600 border-amber-500/30">
-                        Trial Pro - {daysLeftInTrial} dias restantes
-                      </Badge>
-                    )}
-                    {isReadOnly && (
-                      <Badge variant="destructive">Somente leitura</Badge>
-                    )}
+                  <div className="flex items-center gap-2 flex-wrap mb-3">
+                    <h3 className="font-semibold text-slate-900 dark:text-white">Seu Plano</h3>
+                    <Badge variant="secondary" className="capitalize">{subscription?.plan || 'free'}</Badge>
+                    {isTrialActive && <Badge className="bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/40 dark:text-amber-400">Trial · {daysLeftInTrial}d</Badge>}
+                    {isReadOnly && <Badge variant="destructive">Somente leitura</Badge>}
                   </div>
-                  
-                  <div className="grid gap-4 sm:grid-cols-3 mt-4">
-                    <div className="flex items-center gap-3 p-3 rounded-lg bg-background/50">
-                      <Brain className="w-4 h-4 text-blue-500" />
-                      <div className="flex-1">
-                        <p className="text-xs text-muted-foreground">Análises de IA</p>
-                        <p className="font-medium text-sm">
-                          {subscription?.ai_analyses_used || 0} / {planLimits.aiAnalysesPerMonth === Infinity ? '∞' : planLimits.aiAnalysesPerMonth}
-                          {isTrialActive && <span className="text-xs text-muted-foreground ml-1">(trial)</span>}
-                        </p>
-                        {planLimits.aiAnalysesPerMonth !== Infinity && (
-                          <Progress value={aiUsagePercent} className="h-1 mt-1" />
-                        )}
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="flex items-center gap-3 p-3 rounded-xl bg-white/70 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700">
+                      <Brain className="w-4 h-4 text-blue-500 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-slate-400">Análises IA</p>
+                        <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{subscription?.ai_analyses_used || 0} / {planLimits.aiAnalysesPerMonth === Infinity ? '∞' : planLimits.aiAnalysesPerMonth}</p>
+                        {planLimits.aiAnalysesPerMonth !== Infinity && <Progress value={aiUsagePercent} className="h-1 mt-1" />}
                       </div>
                     </div>
-                    
-                    <div className="flex items-center gap-3 p-3 rounded-lg bg-background/50">
-                      <Server className="w-4 h-4 text-green-500" />
+                    <div className="flex items-center gap-3 p-3 rounded-xl bg-white/70 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700">
+                      <Server className="w-4 h-4 text-emerald-500 shrink-0" />
                       <div>
-                        <p className="text-xs text-muted-foreground">Limite de clusters</p>
-                        <p className="font-medium">
-                          {isTrialActive ? (
-                            <>
-                              Até {PLAN_LIMITS.pro.clusters}
-                              <span className="text-xs text-muted-foreground ml-1">(trial)</span>
-                            </>
-                          ) : (
-                            planLimits.clusters === Infinity ? 'Ilimitado' : `Até ${planLimits.clusters}`
-                          )}
-                        </p>
+                        <p className="text-xs text-slate-400">Clusters</p>
+                        <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{isTrialActive ? `Até ${PLAN_LIMITS.pro.clusters} (trial)` : planLimits.clusters === Infinity ? 'Ilimitado' : `Até ${planLimits.clusters}`}</p>
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-3 p-3 rounded-lg bg-background/50">
-                      <Clock className="w-4 h-4 text-purple-500" />
+                    <div className="flex items-center gap-3 p-3 rounded-xl bg-white/70 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700">
+                      <Clock className="w-4 h-4 text-violet-500 shrink-0" />
                       <div>
-                        <p className="text-xs text-muted-foreground">Histórico</p>
-                        <p className="font-medium">
-                          {planLimits.historyRetentionDays} dias
-                          {isTrialActive && <span className="text-xs text-muted-foreground ml-1">(trial)</span>}
-                        </p>
+                        <p className="text-xs text-slate-400">Histórico</p>
+                        <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{planLimits.historyRetentionDays} dias</p>
                       </div>
                     </div>
                   </div>
-
                   {isTrialActive && (
-                    <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 mt-4">
+                    <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200/50 dark:border-amber-800/40 mt-3">
                       <Info className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
-                      <p className="text-xs text-amber-700 dark:text-amber-400">
-                        Você está no período de teste com acesso aos recursos Pro. 
-                        Após o término, seu plano será <strong>{subscription?.plan || 'free'}</strong> com limite de{' '}
-                        <strong>{PLAN_LIMITS[subscription?.plan || 'free'].clusters} cluster</strong> e{' '}
-                        <strong>{PLAN_LIMITS[subscription?.plan || 'free'].aiAnalysesPerMonth} análises de IA/mês</strong>.
-                      </p>
+                      <p className="text-xs text-amber-700 dark:text-amber-400">Após o trial, seu plano será <strong>{subscription?.plan || 'free'}</strong> com <strong>{PLAN_LIMITS[subscription?.plan || 'free'].clusters} cluster</strong> e <strong>{PLAN_LIMITS[subscription?.plan || 'free'].aiAnalysesPerMonth} análises/mês</strong>.</p>
                     </div>
                   )}
                 </div>
               </div>
-            </Card>
+            </div>
 
-            {/* Plans Grid */}
-            <div className="grid gap-6 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2">
               {plans.map((plan) => (
-                <Card 
-                  key={plan.name}
-                  className={`p-6 relative ${plan.popular ? 'border-primary shadow-lg' : 'border-border'} ${plan.current ? 'bg-primary/5' : ''}`}
-                >
-                  {plan.popular && (
-                    <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary">
-                      Mais Popular
-                    </Badge>
-                  )}
-                  <div className="text-center mb-6">
-                    <h3 className="text-xl font-bold">{plan.name}</h3>
-                    <div className="mt-2">
-                      <span className="text-3xl font-bold">{plan.price}</span>
-                      <span className="text-muted-foreground">{plan.period}</span>
-                    </div>
+                <div key={plan.name} className={`relative rounded-2xl border p-6 shadow-sm ${plan.popular ? 'border-primary/40 bg-gradient-to-br from-primary/3 to-primary/8 dark:from-primary/10 dark:to-primary/5' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800'} ${plan.current ? 'ring-2 ring-primary/30' : ''}`}>
+                  {plan.popular && <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-xs font-semibold text-white bg-primary px-3 py-1 rounded-full">Mais Popular</span>}
+                  <div className="mb-5">
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">{plan.name}</h3>
+                    <div className="mt-1"><span className="text-2xl font-black text-slate-900 dark:text-white">{plan.price}</span><span className="text-slate-400 text-sm">{plan.period}</span></div>
                   </div>
-                  <ul className="space-y-3 mb-6">
-                    {plan.features.map((feature, i) => (
-                      <li key={i} className="flex items-center gap-2 text-sm">
-                        <Check className="w-4 h-4 text-green-500 flex-shrink-0" />
-                        {feature}
+                  <ul className="space-y-2 mb-5">
+                    {plan.features.map((f, i) => (
+                      <li key={i} className="flex items-center gap-2.5 text-sm text-slate-600 dark:text-slate-300">
+                        <div className="w-4 h-4 rounded-full bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center shrink-0">
+                          <Check className="w-2.5 h-2.5 text-emerald-600" />
+                        </div>{f}
                       </li>
                     ))}
                   </ul>
-                  <Button 
-                    className="w-full" 
-                    variant={plan.current ? "outline" : plan.popular ? "default" : "secondary"}
-                    disabled={plan.current}
-                  >
+                  <Button className="w-full" variant={plan.current ? "outline" : plan.popular ? "default" : "secondary"} disabled={plan.current}>
                     {plan.current ? "Plano Atual" : "Escolher Plano"}
                   </Button>
-                </Card>
+                </div>
               ))}
             </div>
 
-            {/* Cancel Plan Section */}
             {currentPlan === 'pro' && (
-              <Card className="p-6 border-destructive/30 bg-destructive/5">
+              <div className="rounded-2xl border border-red-200/60 dark:border-red-800/40 bg-red-50/40 dark:bg-red-900/10 p-6">
                 <div className="flex items-start gap-4">
-                  <div className="p-3 rounded-lg bg-destructive/20">
-                    <XCircle className="h-6 w-6 text-destructive" />
-                  </div>
+                  <div className="p-3 rounded-2xl bg-red-100 dark:bg-red-900/40 border border-red-200 dark:border-red-800"><XCircle className="h-5 w-5 text-red-600 dark:text-red-400" /></div>
                   <div className="flex-1">
-                    <h3 className="text-lg font-semibold mb-2">Cancelar Plano Pro</h3>
-                    <p className="text-muted-foreground mb-4">
-                      Ao cancelar, você perderá acesso aos recursos premium como análises ilimitadas, 
-                      auto-healing e suporte prioritário. Seu plano será revertido para o Free.
-                    </p>
+                    <h3 className="font-semibold text-slate-900 dark:text-white mb-1">Cancelar Plano Pro</h3>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Ao cancelar, você perderá acesso aos recursos premium. Plano será revertido para Free.</p>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button variant="destructive" className="gap-2">
-                          <XCircle className="w-4 h-4" />
-                          Cancelar Plano Pro
-                        </Button>
+                        <Button variant="destructive" className="gap-2"><XCircle className="w-4 h-4" />Cancelar Plano Pro</Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
                           <AlertDialogTitle>Tem certeza que deseja cancelar?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Esta ação irá reverter seu plano para o Free. Você perderá acesso a:
-                            <ul className="list-disc list-inside mt-2 space-y-1">
-                              <li>Análises de IA ilimitadas</li>
-                              <li>Até 10 clusters (será limitado a 1)</li>
-                              <li>Auto-healing automático</li>
-                              <li>90 dias de histórico (será 7 dias)</li>
-                              <li>Suporte prioritário</li>
-                            </ul>
-                          </AlertDialogDescription>
+                          <AlertDialogDescription>Esta ação irá reverter seu plano para o Free. Você perderá acesso a: análises ilimitadas, até 10 clusters, auto-healing, 90 dias de histórico e suporte prioritário.</AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel>Manter Plano Pro</AlertDialogCancel>
-                          <AlertDialogAction 
-                            onClick={handleCancelPlan}
-                            disabled={cancelLoading}
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                          >
-                            {cancelLoading ? (
-                              <>
-                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                Cancelando...
-                              </>
-                            ) : (
-                              "Sim, cancelar plano"
-                            )}
+                          <AlertDialogAction onClick={handleCancelPlan} disabled={cancelLoading} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                            {cancelLoading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Cancelando...</> : "Sim, cancelar plano"}
                           </AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
                   </div>
                 </div>
-              </Card>
+              </div>
             )}
           </TabsContent>
 
           {/* Privacy Tab */}
-          <TabsContent value="privacy" className="space-y-6">
-            {/* Consent status */}
-            <Card className="p-6 bg-card border-border">
-              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <FileText className="w-5 h-5 text-primary" />
-                Meus Consentimentos (LGPD)
-              </h3>
+          <TabsContent value="privacy" className="space-y-5 mt-0">
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm">
+              <div className="flex items-center gap-3 mb-5">
+                <div className="p-2 rounded-xl bg-green-50 dark:bg-green-900/30 border border-green-100 dark:border-green-800"><FileText className="w-4 h-4 text-green-600 dark:text-green-400" /></div>
+                <h3 className="font-semibold text-slate-900 dark:text-white">Meus Consentimentos (LGPD)</h3>
+              </div>
               {userConsent ? (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50">
-                      <Check className="w-4 h-4 text-green-500 shrink-0" />
-                      <div>
-                        <p className="text-sm font-medium">Termos de Uso</p>
-                        <p className="text-xs text-muted-foreground">
-                          Aceito em {new Date(userConsent.consent_date).toLocaleDateString("pt-BR")}
-                        </p>
+                    {[{ label: 'Termos de Uso', date: userConsent.consent_date }, { label: 'Política de Privacidade', date: userConsent.consent_date }].map(({ label, date }) => (
+                      <div key={label} className="flex items-center gap-3 p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800/50">
+                        <div className="w-7 h-7 rounded-full bg-emerald-100 dark:bg-emerald-900/40 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center shrink-0"><Check className="w-3.5 h-3.5 text-emerald-600" /></div>
+                        <div><p className="text-sm font-medium text-slate-800 dark:text-slate-200">{label}</p><p className="text-xs text-slate-400">Aceito em {new Date(date).toLocaleDateString("pt-BR")}</p></div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50">
-                      <Check className="w-4 h-4 text-green-500 shrink-0" />
-                      <div>
-                        <p className="text-sm font-medium">Política de Privacidade</p>
-                        <p className="text-xs text-muted-foreground">
-                          Aceita em {new Date(userConsent.consent_date).toLocaleDateString("pt-BR")}
-                        </p>
-                      </div>
-                    </div>
+                    ))}
                   </div>
-
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border/50">
-                    <div>
-                      <p className="text-sm font-medium">Comunicações de Marketing</p>
-                      <p className="text-xs text-muted-foreground">
-                        Receber novidades, atualizações e ofertas por e-mail
-                      </p>
-                    </div>
-                    <Switch
-                      checked={userConsent.marketing_consent}
-                      onCheckedChange={handleToggleMarketing}
-                      disabled={consentLoading}
-                    />
+                  <div className="flex items-center justify-between p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
+                    <div><p className="text-sm font-medium text-slate-800 dark:text-slate-200">Comunicações de Marketing</p><p className="text-xs text-slate-400">Receber novidades e ofertas por e-mail</p></div>
+                    <Switch checked={userConsent.marketing_consent} onCheckedChange={handleToggleMarketing} disabled={consentLoading} />
                   </div>
                 </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Nenhum registro de consentimento encontrado. Faça logout e cadastre-se novamente para registrar seus consentimentos.
-                </p>
-              )}
-
-              <div className="flex gap-3 mt-4 pt-4 border-t border-border/50">
-                <Button variant="outline" size="sm" asChild>
-                  <Link to="/terms" target="_blank" className="gap-2">
-                    <ExternalLink className="w-3 h-3" />
-                    Termos de Uso
-                  </Link>
-                </Button>
-                <Button variant="outline" size="sm" asChild>
-                  <Link to="/privacy" target="_blank" className="gap-2">
-                    <ExternalLink className="w-3 h-3" />
-                    Política de Privacidade
-                  </Link>
-                </Button>
+              ) : <p className="text-sm text-slate-400">Nenhum registro de consentimento encontrado.</p>}
+              <div className="flex gap-3 mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
+                <Button variant="outline" size="sm" asChild><Link to="/terms" target="_blank" className="gap-2"><ExternalLink className="w-3 h-3" />Termos de Uso</Link></Button>
+                <Button variant="outline" size="sm" asChild><Link to="/privacy" target="_blank" className="gap-2"><ExternalLink className="w-3 h-3" />Política de Privacidade</Link></Button>
               </div>
-            </Card>
+            </div>
 
-            {/* Data portability */}
-            <Card className="p-6 bg-card border-border">
-              <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
-                <Download className="w-5 h-5 text-primary" />
-                Exportar Meus Dados
-              </h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                De acordo com o Art. 18 da LGPD, você tem direito à portabilidade dos seus dados.
-                Baixe uma cópia de todos os seus dados cadastrados na plataforma em formato JSON.
-              </p>
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800"><Download className="w-4 h-4 text-blue-600 dark:text-blue-400" /></div>
+                <h3 className="font-semibold text-slate-900 dark:text-white">Exportar Meus Dados</h3>
+              </div>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">De acordo com o Art. 18 da LGPD, baixe uma cópia de todos os seus dados em formato JSON.</p>
               <Button onClick={handleExportData} disabled={exportLoading} variant="outline" className="gap-2">
-                {exportLoading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Download className="w-4 h-4" />
-                )}
+                {exportLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                 {exportLoading ? "Exportando..." : "Baixar meus dados"}
               </Button>
-            </Card>
+            </div>
 
-            {/* Delete account */}
-            <Card className="p-6 border-destructive/30 bg-destructive/5">
-              <h3 className="text-lg font-semibold mb-2 flex items-center gap-2 text-destructive">
-                <Trash2 className="w-5 h-5" />
-                Excluir Minha Conta
-              </h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                De acordo com o Art. 18 da LGPD, você tem direito à eliminação dos dados pessoais
-                tratados com seu consentimento. Esta ação é <strong>irreversível</strong> e removerá
-                permanentemente sua conta, clusters, configurações e histórico de dados.
-              </p>
+            <div className="rounded-2xl border border-red-200/60 dark:border-red-800/40 bg-red-50/40 dark:bg-red-900/10 p-6">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="p-2 rounded-xl bg-red-100 dark:bg-red-900/40 border border-red-200 dark:border-red-800"><Trash2 className="w-4 h-4 text-red-600 dark:text-red-400" /></div>
+                <h3 className="font-semibold text-red-700 dark:text-red-400">Excluir Minha Conta</h3>
+              </div>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Esta ação é <strong>irreversível</strong> e removerá permanentemente sua conta, clusters, configurações e histórico.</p>
               <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="destructive" className="gap-2">
-                    <Trash2 className="w-4 h-4" />
-                    Excluir minha conta
-                  </Button>
-                </AlertDialogTrigger>
+                <AlertDialogTrigger asChild><Button variant="destructive" className="gap-2"><Trash2 className="w-4 h-4" />Excluir minha conta</Button></AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
                     <AlertDialogTitle>Excluir conta permanentemente?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Esta ação é <strong>irreversível</strong>. Todos os seus dados serão eliminados,
-                      incluindo:
-                      <ul className="list-disc list-inside mt-2 space-y-1">
-                        <li>Perfil e configurações</li>
-                        <li>Clusters e métricas</li>
-                        <li>Histórico de incidentes</li>
-                        <li>Registros de custos</li>
-                        <li>Logs de auditoria</li>
-                      </ul>
-                    </AlertDialogDescription>
+                    <AlertDialogDescription>Esta ação é <strong>irreversível</strong>. Todos os dados serão eliminados: perfil, clusters, métricas, histórico de incidentes, registros de custos e logs de auditoria.</AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={handleDeleteAccount}
-                      disabled={deleteAccountLoading}
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                    >
-                      {deleteAccountLoading ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Excluindo...
-                        </>
-                      ) : (
-                        "Sim, excluir minha conta"
-                      )}
+                    <AlertDialogAction onClick={handleDeleteAccount} disabled={deleteAccountLoading} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                      {deleteAccountLoading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Excluindo...</> : "Sim, excluir minha conta"}
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
-            </Card>
+            </div>
           </TabsContent>
 
           {/* Data Tab */}
-          <TabsContent value="data" className="space-y-6">
-            {/* AI Usage Widget */}
-            <AIUsageWidget />
-
-            {/* Demo Data Card */}
-            <Card className="p-6 bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
-              <div className="flex items-start gap-4">
-                <div className="p-3 rounded-lg bg-primary/20">
-                  <Database className="h-6 w-6 text-primary" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold mb-2">Dados de Demonstração</h3>
-                  <p className="text-muted-foreground mb-4">
-                    Popule sua plataforma com dados realistas incluindo 8 clusters de múltiplos provedores,
-                    incidentes detectados por IA com ações de auto-healing.
-                  </p>
-                  <div className="flex gap-3">
-                    <Button 
-                      onClick={handleGenerateDemoData} 
-                      disabled={demoLoading || demoDeleteLoading}
-                      className="gap-2"
-                    >
-                      {demoLoading && <Loader2 className="h-4 w-4 animate-spin" />}
-                      {demoLoading ? 'Gerando...' : 'Gerar Dados Demo'}
-                    </Button>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button 
-                          variant="destructive"
-                          disabled={demoLoading || demoDeleteLoading}
-                          className="gap-2"
-                        >
-                          {demoDeleteLoading && <Loader2 className="h-4 w-4 animate-spin" />}
-                          {demoDeleteLoading ? 'Removendo...' : 'Remover Dados Demo'}
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Remover todos os dados demo?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Isso irá deletar todos os clusters, incidentes, custos e PVCs marcados como demo. 
-                            Seus dados reais serão mantidos intactos.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                          <AlertDialogAction onClick={handleDeleteDemoData}>
-                            Confirmar Remoção
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+          {isAdmin && (
+            <TabsContent value="data" className="space-y-5 mt-0">
+              <AIUsageWidget />
+              <div className="rounded-2xl border border-blue-200/50 dark:border-blue-800/40 bg-gradient-to-br from-blue-50/60 to-indigo-50/30 dark:from-blue-900/20 dark:to-indigo-900/10 p-6 shadow-sm">
+                <div className="flex items-start gap-4">
+                  <div className="p-3 rounded-2xl bg-blue-100 dark:bg-blue-900/40 border border-blue-200 dark:border-blue-800"><Database className="h-5 w-5 text-blue-600 dark:text-blue-400" /></div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-slate-900 dark:text-white mb-1">Dados de Demonstração</h3>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Popule com 8 clusters, incidentes IA e ações de auto-healing realistas.</p>
+                    <div className="flex gap-3">
+                      <Button onClick={handleGenerateDemoData} disabled={demoLoading || demoDeleteLoading} className="gap-2">
+                        {demoLoading && <Loader2 className="h-4 w-4 animate-spin" />}{demoLoading ? 'Gerando...' : 'Gerar Dados Demo'}
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="destructive" disabled={demoLoading || demoDeleteLoading} className="gap-2">
+                            {demoDeleteLoading && <Loader2 className="h-4 w-4 animate-spin" />}{demoDeleteLoading ? 'Removendo...' : 'Remover Dados Demo'}
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader><AlertDialogTitle>Remover todos os dados demo?</AlertDialogTitle><AlertDialogDescription>Isso irá deletar clusters, incidentes, custos e PVCs demo. Seus dados reais serão mantidos.</AlertDialogDescription></AlertDialogHeader>
+                          <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={handleDeleteDemoData}>Confirmar Remoção</AlertDialogAction></AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
                   </div>
                 </div>
               </div>
-            </Card>
-
-            {/* AI Savings Data Generator */}
-            <Card className="p-6 bg-gradient-to-br from-success/5 to-success/10 border-success/20">
-              <div className="flex items-start gap-4">
-                <div className="p-3 rounded-lg bg-success/20">
-                  <Sparkles className="h-6 w-6 text-success" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold mb-2">Gerar Dados de Economia IA</h3>
-                  <p className="text-muted-foreground mb-4">
-                    Popule o banco com dados realistas de economia gerada por IA baseados nos seus clusters existentes.
-                  </p>
-                  <Button 
-                    onClick={handleGenerateAISavings} 
-                    disabled={savingsLoading}
-                    className="gap-2 bg-success hover:bg-success/90"
-                  >
-                    {savingsLoading && <Loader2 className="h-4 w-4 animate-spin" />}
-                    {savingsLoading ? 'Gerando...' : 'Gerar Dados de Economia'}
-                  </Button>
+              <div className="rounded-2xl border border-emerald-200/50 dark:border-emerald-800/40 bg-gradient-to-br from-emerald-50/60 to-green-50/30 dark:from-emerald-900/20 dark:to-green-900/10 p-6 shadow-sm">
+                <div className="flex items-start gap-4">
+                  <div className="p-3 rounded-2xl bg-emerald-100 dark:bg-emerald-900/40 border border-emerald-200 dark:border-emerald-800"><Sparkles className="h-5 w-5 text-emerald-600 dark:text-emerald-400" /></div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-slate-900 dark:text-white mb-1">Gerar Dados de Economia IA</h3>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Dados realistas de economia gerada por IA baseados nos clusters existentes.</p>
+                    <Button onClick={handleGenerateAISavings} disabled={savingsLoading} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white">
+                      {savingsLoading && <Loader2 className="h-4 w-4 animate-spin" />}{savingsLoading ? 'Gerando...' : 'Gerar Dados de Economia'}
+                    </Button>
+                  </div>
                 </div>
               </div>
-            </Card>
-
-            {/* Welcome Tutorial Card */}
-            <Card className="p-6 bg-gradient-to-br from-accent/5 to-accent/10 border-accent/20">
-              <div className="flex items-start gap-4">
-                <div className="p-3 rounded-lg bg-accent/20">
-                  <GraduationCap className="h-6 w-6 text-accent" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold mb-2">Tutorial de Boas-Vindas</h3>
-                  <p className="text-muted-foreground mb-4">
-                    Reveja o tutorial interativo que mostra todas as funcionalidades do Kodo.
-                  </p>
-                  <Button 
-                    onClick={() => navigate('/welcome')} 
-                    variant="outline"
-                    className="gap-2"
-                  >
-                    <GraduationCap className="h-4 w-4" />
-                    Ver Tutorial
-                  </Button>
+              <div className="rounded-2xl border border-violet-200/50 dark:border-violet-800/40 bg-gradient-to-br from-violet-50/60 to-purple-50/30 dark:from-violet-900/20 dark:to-purple-900/10 p-6 shadow-sm">
+                <div className="flex items-start gap-4">
+                  <div className="p-3 rounded-2xl bg-violet-100 dark:bg-violet-900/40 border border-violet-200 dark:border-violet-800"><GraduationCap className="h-5 w-5 text-violet-600 dark:text-violet-400" /></div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-slate-900 dark:text-white mb-1">Tutorial de Boas-Vindas</h3>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Reveja o tutorial interativo com todas as funcionalidades do Kodo.</p>
+                    <Button onClick={() => navigate('/welcome')} variant="outline" className="gap-2"><GraduationCap className="h-4 w-4" />Ver Tutorial</Button>
+                  </div>
                 </div>
               </div>
-            </Card>
-          </TabsContent>
+            </TabsContent>
+          )}
+
+          </div>{/* /content */}
         </Tabs>
       </div>
     </DashboardLayout>

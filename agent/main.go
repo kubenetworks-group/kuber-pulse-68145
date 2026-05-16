@@ -2467,12 +2467,15 @@ func executeCommands(clientset *kubernetes.Clientset, config AgentConfig, comman
 			result, err = getPodLogs(clientset, cmd.CommandParams)
 		case "collect_cluster_snapshot":
 			log.Printf("   → Collecting cluster snapshot...")
+			markCommandExecuting(config, cmd.ID)
 			result, err = collectClusterSnapshot(clientset, config, cmd.CommandParams)
 		case "apply_manifests":
 			log.Printf("   → Applying transformed manifests...")
+			markCommandExecuting(config, cmd.ID)
 			result, err = applyManifests(clientset, cmd.CommandParams)
 		case "validate_migration":
 			log.Printf("   → Running migration validations...")
+			markCommandExecuting(config, cmd.ID)
 			result, err = validateMigration(clientset, cmd.CommandParams)
 		case "create_namespace":
 			log.Printf("   → Creating namespace...")
@@ -3272,6 +3275,33 @@ func createNetworkPolicy(clientset *kubernetes.Clientset, params map[string]inte
 }
 
 
+// markCommandExecuting notifies the server that this command is actively running.
+// This prevents the stale-command cleanup from re-queuing or deleting long-running operations.
+func markCommandExecuting(config AgentConfig, commandID string) {
+	payload := map[string]interface{}{
+		"command_id": commandID,
+		"status":     "executing",
+	}
+	body, _ := json.Marshal(payload)
+	url := fmt.Sprintf("%s/agent-update-command", config.APIEndpoint)
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
+	if err != nil {
+		log.Printf("⚠️  Failed to create executing request for %s: %v", commandID, err)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-agent-key", config.APIKey)
+	req.Header.Set("x-agent-version", AgentVersion)
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("⚠️  Failed to mark command executing: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+	log.Printf("📌 Command %s marked as executing", commandID)
+}
+
 func updateCommandStatus(config AgentConfig, commandID string, result map[string]interface{}, err error) {
 	status := "completed"
 	if err != nil {
@@ -3294,9 +3324,17 @@ func updateCommandStatus(config AgentConfig, commandID string, result map[string
 	req.Header.Set("x-agent-version", AgentVersion)
 
 	client := &http.Client{Timeout: 15 * time.Second}
-	resp, _ := client.Do(req)
-	if resp != nil {
-		defer resp.Body.Close()
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("⚠️  Failed to update command %s status: %v", commandID, err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		respBody, _ := ioutil.ReadAll(resp.Body)
+		log.Printf("⚠️  Command %s status update returned %d: %s", commandID, resp.StatusCode, string(respBody))
+		return
 	}
 
 	log.Printf("✅ Command %s status updated: %s", commandID, status)

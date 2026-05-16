@@ -44,7 +44,10 @@
       "Bash(node --input-type=module)",
       "Bash(npx swc:*)",
       "Bash(node -e ':*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(lsof -ti:5173)",
+      "Bash(npm run *)",
+      "Bash(curl -s http://localhost:5173)"
     ]
   }
 }

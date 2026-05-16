@@ -99,7 +99,7 @@ const Nav = () => {
         </div>
 
         <a
-          href="mailto:contato@kodo.io"
+          href="mailto:suporte@kubenetworks.com.br"
           className="hidden md:inline-flex text-[11px] px-4 py-2 rounded-full border border-white/20 text-white/70 hover:border-white/40 hover:text-white transition-all"
         >
           Falar com a equipe
@@ -123,7 +123,7 @@ const Nav = () => {
             </a>
           ))}
           <a
-            href="mailto:contato@kodo.io"
+            href="mailto:suporte@kubenetworks.com.br"
             className="mt-2 text-center text-sm py-2.5 rounded-full border border-white/20 text-white/70"
           >
             Falar com a equipe
@@ -1112,7 +1112,7 @@ const Contact = () => (
       </p>
       <div className="flex flex-col sm:flex-row gap-4 justify-center mb-20">
         <a
-          href="mailto:contato@kodo.io"
+          href="mailto:suporte@kubenetworks.com.br"
           className="px-8 py-4 rounded-full bg-white text-[#050810] text-sm font-semibold hover:bg-white/90 transition-all inline-flex items-center justify-center gap-2 group"
         >
           Falar com a equipe
