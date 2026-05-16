@@ -119,7 +119,7 @@ export async function createMigration(params: {
         status: "transforming",
         ai_analysis: aiAnalysis as never,
         compatibility_score: calculateScore(issues),
-        issues_found: issues.length,
+        issues_found: issues.filter(i => i.severity !== "info").length,
         progress_percent: 55,
         current_step: "Transformando manifests",
       })
@@ -220,6 +220,46 @@ export async function runMigrationValidation(migration: ClusterMigration, namesp
   });
 }
 
+// How long (ms) each in-progress status is allowed before being considered stalled
+const STALL_THRESHOLDS: Partial<Record<ClusterMigration["status"], number>> = {
+  analyzing:    15 * 60 * 1000,
+  transforming:  5 * 60 * 1000,
+  applying:     30 * 60 * 1000,
+  validating:   20 * 60 * 1000,
+};
+
+export function isMigrationStalled(migration: ClusterMigration): boolean {
+  const threshold = STALL_THRESHOLDS[migration.status];
+  if (!threshold) return false;
+  const lastUpdate = new Date(migration.updated_at).getTime();
+  return Date.now() - lastUpdate > threshold;
+}
+
+// Cancel a stalled or in-progress migration — marks it failed and kills pending agent commands
+export async function cancelMigration(migration: ClusterMigration): Promise<void> {
+  const IN_PROGRESS: ClusterMigration["status"][] = ["analyzing", "transforming", "applying", "validating", "pending"];
+  if (!IN_PROGRESS.includes(migration.status)) return;
+
+  await supabase
+    .from("cluster_migrations")
+    .update({
+      status: "failed",
+      error_message: "Migração cancelada pelo usuário.",
+      completed_at: new Date().toISOString(),
+      progress_percent: 0,
+      current_step: null,
+    })
+    .eq("id", migration.id);
+
+  // Cancel any pending/sent agent commands related to this migration
+  await supabase
+    .from("agent_commands")
+    .update({ status: "failed", completed_at: new Date().toISOString() } as never)
+    .eq("cluster_id", migration.target_cluster_id)
+    .in("status", ["pending", "sent", "executing"])
+    .contains("command_params", { migration_id: migration.id } as never);
+}
+
 // List all migrations for the current user
 export async function listMigrations(): Promise<ClusterMigration[]> {
   const { data, error } = await supabase
@@ -272,19 +312,28 @@ async function streamAIAnalysis(
 
     return {
       raw: aiText,
+      issues: issues.map(i => ({
+        severity: i.severity, kind: i.kind, resource: i.resource,
+        namespace: i.namespace, issue: i.issue, suggestion: i.suggestion, autoFixable: i.autoFixable,
+      })),
       issues_count: issues.length,
       critical: issues.filter((i) => i.severity === "critical").length,
       warnings: issues.filter((i) => i.severity === "warning").length,
+      info: issues.filter((i) => i.severity === "info").length,
       target_storage_class: targetStorageClass,
       generated_at: new Date().toISOString(),
     };
   } catch {
-    // AI analysis is best-effort — return structured summary even if it fails
     return {
       raw: buildFallbackAnalysis(issues, targetStorageClass),
+      issues: issues.map(i => ({
+        severity: i.severity, kind: i.kind, resource: i.resource,
+        namespace: i.namespace, issue: i.issue, suggestion: i.suggestion, autoFixable: i.autoFixable,
+      })),
       issues_count: issues.length,
       critical: issues.filter((i) => i.severity === "critical").length,
       warnings: issues.filter((i) => i.severity === "warning").length,
+      info: issues.filter((i) => i.severity === "info").length,
       target_storage_class: targetStorageClass,
       generated_at: new Date().toISOString(),
     };

@@ -264,12 +264,45 @@ serve(async (req) => {
           }
         } else if (currentCommand.command_type === 'validate_migration') {
           if (status === 'completed') {
+            const validationResults: any[] = r?.results || [];
+            const trafficReady: boolean = r?.traffic_ready ?? false;
+            const allPassed = (r?.failed ?? 0) === 0;
+
+            // Write individual validation records to migration_validations table
+            if (validationResults.length > 0) {
+              // Get migration user_id
+              const { data: migData } = await supabaseClient
+                .from('cluster_migrations')
+                .select('user_id')
+                .eq('id', migrationId)
+                .single();
+
+              const records = validationResults.map((vr: any) => ({
+                migration_id: migrationId,
+                user_id: migData?.user_id,
+                validation_type: vr.type || 'custom',
+                status: vr.status === 'passed' ? 'passed' : 'failed',
+                namespace: vr.namespace || null,
+                resource_name: vr.resource_name || null,
+                detail: vr.detail || null,
+                ran_at: new Date().toISOString(),
+              }));
+
+              await supabaseClient.from('migration_validations').insert(records);
+            }
+
             await supabaseClient.from('cluster_migrations').update({
               status: 'completed',
               progress_percent: 100,
-              current_step: 'Validação concluída',
+              current_step: allPassed
+                ? trafficReady
+                  ? 'Validação concluída — tráfego pronto para migração de IP'
+                  : 'Validação concluída com alertas'
+                : `Validação concluída — ${r?.failed} verificações falharam`,
               completed_at: new Date().toISOString(),
             }).eq('id', migrationId);
+
+            console.log(`✅ Validation ${migrationId}: ${r?.passed} passed, ${r?.failed} failed, traffic_ready=${trafficReady}`);
           } else if (status === 'failed') {
             await supabaseClient.from('cluster_migrations').update({
               status: 'failed',

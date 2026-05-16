@@ -33,6 +33,7 @@ const Migration = () => {
     createMigration,
     applyMigration,
     validateMigration,
+    cancelMigration,
   } = useClusterMigrations();
 
   const [selectedMigration, setSelectedMigration] = useState<ClusterMigration | null>(null);
@@ -140,6 +141,7 @@ const Migration = () => {
               onViewMigration={handleViewMigration}
               onApply={applyMigration}
               onValidate={(m) => validateMigration(m)}
+              onCancel={cancelMigration}
             />
           </TabsContent>
         </Tabs>

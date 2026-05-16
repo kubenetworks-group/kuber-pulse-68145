@@ -2444,10 +2444,19 @@ func executeCommands(clientset *kubernetes.Clientset, config AgentConfig, comman
 		log.Printf("⚡ Executing command: %s (ID: %s)", cmd.CommandType, cmd.ID)
 		log.Printf("   Params: %v", cmd.CommandParams)
 
-		var result map[string]interface{}
-		var err error
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("🔥 PANIC in command %s (%s): %v", cmd.ID, cmd.CommandType, r)
+					panicErr := fmt.Errorf("agent panic: %v", r)
+					updateCommandStatus(config, cmd.ID, nil, panicErr)
+				}
+			}()
 
-		switch cmd.CommandType {
+			var result map[string]interface{}
+			var err error
+
+			switch cmd.CommandType {
 		case "restart_pod", "delete_pod":
 			log.Printf("   → Deleting/restarting pod...")
 			result, err = deletePod(clientset, cmd.CommandParams)
@@ -2489,17 +2498,18 @@ func executeCommands(clientset *kubernetes.Clientset, config AgentConfig, comman
 			log.Printf("   → Creating network policy...")
 			result, err = createNetworkPolicy(clientset, cmd.CommandParams)
 		default:
-			err = fmt.Errorf("unknown command type: %s", cmd.CommandType)
-			log.Printf("   ❌ Unknown command type!")
-		}
+				err = fmt.Errorf("unknown command type: %s", cmd.CommandType)
+				log.Printf("   ❌ Unknown command type!")
+			}
 
-		if err != nil {
-			log.Printf("   ❌ Command failed: %v", err)
-		} else {
-			log.Printf("   ✅ Command succeeded: %v", result)
-		}
+			if err != nil {
+				log.Printf("   ❌ Command failed: %v", err)
+			} else {
+				log.Printf("   ✅ Command succeeded")
+			}
 
-		updateCommandStatus(config, cmd.ID, result, err)
+			updateCommandStatus(config, cmd.ID, result, err)
+		}()
 	}
 }
 
@@ -3309,6 +3319,33 @@ func updateCommandStatus(config AgentConfig, commandID string, result map[string
 	if err != nil {
 		status = "failed"
 		result = map[string]interface{}{"error": err.Error()}
+	}
+
+	// Edge function rejects payloads >200KB — trim large log arrays before sending
+	if result != nil {
+		if applyLog, ok := result["apply_log"].([]map[string]interface{}); ok && len(applyLog) > 100 {
+			// Keep only failures (most useful) and cap at 100 entries total
+			var failures []map[string]interface{}
+			for _, entry := range applyLog {
+				if entry["status"] == "failed" {
+					failures = append(failures, entry)
+				}
+			}
+			if len(failures) > 100 {
+				failures = failures[:100]
+			}
+			result["apply_log"] = failures
+			result["apply_log_truncated"] = true
+		}
+		// Final safety check: if result JSON still exceeds 150KB, strip the log entirely
+		if b, _ := json.Marshal(result); len(b) > 150000 {
+			result = map[string]interface{}{
+				"migration_id":  result["migration_id"],
+				"applied":       result["applied"],
+				"failed":        result["failed"],
+				"log_truncated": true,
+			}
+		}
 	}
 
 	payload := map[string]interface{}{
@@ -4639,6 +4676,37 @@ func applyManifests(clientset *kubernetes.Clientset, params map[string]interface
 				}
 			}
 
+			// Check if PVC already exists and handle Lost state
+			existing, getErr := clientset.CoreV1().PersistentVolumeClaims(pvc.Namespace).Get(ctx, pvc.Name, metav1.GetOptions{})
+			if getErr == nil {
+				if existing.Status.Phase == corev1.ClaimLost {
+					log.Printf("🔄 PVC %s/%s is Lost — cleaning up orphaned PV and recreating", pvc.Namespace, pvc.Name)
+					// Delete the orphaned PV first (if any)
+					if existing.Spec.VolumeName != "" {
+						pvDelErr := clientset.CoreV1().PersistentVolumes().Delete(ctx, existing.Spec.VolumeName, metav1.DeleteOptions{})
+						if pvDelErr != nil {
+							log.Printf("⚠️  Could not delete orphaned PV %s: %v", existing.Spec.VolumeName, pvDelErr)
+						} else {
+							log.Printf("🗑️  Deleted orphaned PV %s", existing.Spec.VolumeName)
+						}
+					}
+					// Delete the Lost PVC
+					propagation := metav1.DeletePropagationForeground
+					_ = clientset.CoreV1().PersistentVolumeClaims(pvc.Namespace).Delete(ctx, pvc.Name, metav1.DeleteOptions{PropagationPolicy: &propagation})
+					// Wait for deletion to complete (up to 15s)
+					for i := 0; i < 15; i++ {
+						time.Sleep(1 * time.Second)
+						_, checkErr := clientset.CoreV1().PersistentVolumeClaims(pvc.Namespace).Get(ctx, pvc.Name, metav1.GetOptions{})
+						if checkErr != nil {
+							break // PVC deleted
+						}
+					}
+				} else {
+					// PVC exists and is healthy (Pending/Bound) — skip
+					logResult("PVC", pvc.Name, pvc.Namespace, fmt.Errorf("already exists"))
+					continue
+				}
+			}
 			_, err := clientset.CoreV1().PersistentVolumeClaims(pvc.Namespace).Create(ctx, &pvc, metav1.CreateOptions{})
 			logResult("PVC", pvc.Name, pvc.Namespace, err)
 		}
@@ -4806,7 +4874,9 @@ func applyManifests(clientset *kubernetes.Clientset, params map[string]interface
 // VALIDATE MIGRATION
 // ---------------------------------------------
 
-// validateMigration runs post-migration health checks
+// validateMigration runs post-migration health checks.
+// Checks: pod health, PVC binding, deployment readiness, service endpoints,
+// and the full Ingress → Service → Pod chain for external traffic readiness.
 // Params: migration_id, namespaces ([]string, optional)
 func validateMigration(clientset *kubernetes.Clientset, params map[string]interface{}) (map[string]interface{}, error) {
 	migrationID, _ := params["migration_id"].(string)
@@ -4814,7 +4884,6 @@ func validateMigration(clientset *kubernetes.Clientset, params map[string]interf
 		return nil, fmt.Errorf("validate_migration requires migration_id")
 	}
 
-	// Parse optional namespace filter
 	targetNamespaces := []string{}
 	if nsParam, ok := params["namespaces"].([]interface{}); ok {
 		for _, ns := range nsParam {
@@ -4824,7 +4893,7 @@ func validateMigration(clientset *kubernetes.Clientset, params map[string]interf
 		}
 	}
 	if len(targetNamespaces) == 0 {
-		targetNamespaces = []string{""} // empty = all namespaces
+		targetNamespaces = []string{""}
 	}
 
 	ctx := context.Background()
@@ -4832,97 +4901,257 @@ func validateMigration(clientset *kubernetes.Clientset, params map[string]interf
 	passed := 0
 	failed := 0
 
+	isSystem := func(ns string) bool {
+		return strings.HasPrefix(ns, "kube-") || ns == "kube-system" || ns == "kube-public" || ns == "kube-node-lease"
+	}
+
 	for _, ns := range targetNamespaces {
-		// Pod health check
+		// ── Pod health ───────────────────────────────────────────────────
 		pods, err := clientset.CoreV1().Pods(ns).List(ctx, metav1.ListOptions{})
 		if err == nil {
 			for _, pod := range pods.Items {
-				if strings.HasPrefix(pod.Namespace, "kube-") {
+				if isSystem(pod.Namespace) {
 					continue
 				}
-				status := "passed"
-				detail := ""
 				phase := string(pod.Status.Phase)
-				if phase != "Running" && phase != "Succeeded" {
-					status = "failed"
+				ok := phase == "Running" || phase == "Succeeded"
+				detail := fmt.Sprintf("Phase: %s", phase)
+				if !ok {
+					// Add container-level reason for better diagnosis
+					for _, cs := range pod.Status.ContainerStatuses {
+						if cs.State.Waiting != nil {
+							detail += fmt.Sprintf(" | %s: %s", cs.Name, cs.State.Waiting.Reason)
+						} else if cs.State.Terminated != nil && cs.State.Terminated.ExitCode != 0 {
+							detail += fmt.Sprintf(" | %s: exited %d", cs.Name, cs.State.Terminated.ExitCode)
+						}
+					}
 					failed++
-					detail = fmt.Sprintf("Pod phase: %s", phase)
 				} else {
 					passed++
+				}
+				statusStr := "passed"
+				if !ok {
+					statusStr = "failed"
 				}
 				results = append(results, map[string]interface{}{
 					"type":          "pod_health",
 					"namespace":     pod.Namespace,
 					"resource_name": pod.Name,
-					"status":        status,
-					"detail":        fmt.Sprintf("Phase: %s. %s", phase, detail),
+					"status":        statusStr,
+					"detail":        detail,
 				})
 			}
 		}
 
-		// PVC binding check
+		// ── Deployment readiness ──────────────────────────────────────────
+		depls, err := clientset.AppsV1().Deployments(ns).List(ctx, metav1.ListOptions{})
+		if err == nil {
+			for _, d := range depls.Items {
+				if isSystem(d.Namespace) {
+					continue
+				}
+				desired := int32(1)
+				if d.Spec.Replicas != nil {
+					desired = *d.Spec.Replicas
+				}
+				ready := d.Status.ReadyReplicas
+				ok := ready >= desired
+				detail := fmt.Sprintf("%d/%d réplicas prontas", ready, desired)
+				if !ok {
+					failed++
+				} else {
+					passed++
+				}
+				statusStr := "passed"
+				if !ok {
+					statusStr = "failed"
+				}
+				results = append(results, map[string]interface{}{
+					"type":          "deployment_ready",
+					"namespace":     d.Namespace,
+					"resource_name": d.Name,
+					"status":        statusStr,
+					"detail":        detail,
+				})
+			}
+		}
+
+		// ── PVC binding ───────────────────────────────────────────────────
 		pvcs, err := clientset.CoreV1().PersistentVolumeClaims(ns).List(ctx, metav1.ListOptions{})
 		if err == nil {
 			for _, pvc := range pvcs.Items {
-				if strings.HasPrefix(pvc.Namespace, "kube-") {
+				if isSystem(pvc.Namespace) {
 					continue
 				}
-				status := "passed"
-				detail := fmt.Sprintf("Phase: %s", string(pvc.Status.Phase))
-				if pvc.Status.Phase != "Bound" {
-					status = "failed"
+				phase := string(pvc.Status.Phase)
+				ok := phase == "Bound"
+				detail := fmt.Sprintf("StorageClass: %s | Phase: %s", func() string {
+					if pvc.Spec.StorageClassName != nil {
+						return *pvc.Spec.StorageClassName
+					}
+					return "default"
+				}(), phase)
+				if !ok {
+					detail += " — aguardando provisionamento"
 					failed++
-					detail = fmt.Sprintf("PVC not bound. Phase: %s", string(pvc.Status.Phase))
 				} else {
 					passed++
+				}
+				statusStr := "passed"
+				if !ok {
+					statusStr = "failed"
 				}
 				results = append(results, map[string]interface{}{
 					"type":          "pvc_binding",
 					"namespace":     pvc.Namespace,
 					"resource_name": pvc.Name,
-					"status":        status,
+					"status":        statusStr,
 					"detail":        detail,
 				})
 			}
 		}
 
-		// Service connectivity check (ensure endpoints exist for non-headless services)
+		// ── Service endpoints ─────────────────────────────────────────────
 		svcs, err := clientset.CoreV1().Services(ns).List(ctx, metav1.ListOptions{})
 		if err == nil {
 			for _, svc := range svcs.Items {
-				if strings.HasPrefix(svc.Namespace, "kube-") {
+				if isSystem(svc.Namespace) || svc.Name == "kubernetes" {
 					continue
 				}
 				if svc.Spec.Type == "ExternalName" || svc.Spec.ClusterIP == "None" {
 					continue
 				}
-				endpoints, err := clientset.CoreV1().Endpoints(svc.Namespace).Get(ctx, svc.Name, metav1.GetOptions{})
-				status := "passed"
-				detail := "Endpoints found"
-				if err != nil || len(endpoints.Subsets) == 0 {
-					status = "failed"
+				endpoints, epErr := clientset.CoreV1().Endpoints(svc.Namespace).Get(ctx, svc.Name, metav1.GetOptions{})
+				epCount := 0
+				if epErr == nil {
+					for _, subset := range endpoints.Subsets {
+						epCount += len(subset.Addresses)
+					}
+				}
+				ok := epCount > 0
+				svcType := string(svc.Spec.Type)
+				detail := fmt.Sprintf("Tipo: %s | %d endpoint(s) prontos", svcType, epCount)
+				if !ok {
+					detail += " — sem pods respondendo"
 					failed++
-					detail = "No endpoints found — service may have no ready pods"
 				} else {
 					passed++
 				}
+				statusStr := "passed"
+				if !ok {
+					statusStr = "failed"
+				}
 				results = append(results, map[string]interface{}{
-					"type":          "service_connectivity",
-					"namespace":     svc.Namespace,
-					"resource_name": svc.Name,
-					"status":        status,
-					"detail":        detail,
+					"type":           "service_connectivity",
+					"namespace":      svc.Namespace,
+					"resource_name":  svc.Name,
+					"service_type":   svcType,
+					"endpoint_count": epCount,
+					"status":         statusStr,
+					"detail":         detail,
 				})
+			}
+		}
+
+		// ── Ingress → Service → Pod chain ────────────────────────────────
+		ingresses, err := clientset.NetworkingV1().Ingresses(ns).List(ctx, metav1.ListOptions{})
+		if err == nil {
+			for _, ing := range ingresses.Items {
+				if isSystem(ing.Namespace) {
+					continue
+				}
+				// Default backend
+				if ing.Spec.DefaultBackend != nil && ing.Spec.DefaultBackend.Service != nil {
+					svcName := ing.Spec.DefaultBackend.Service.Name
+					endpoints, epErr := clientset.CoreV1().Endpoints(ing.Namespace).Get(ctx, svcName, metav1.GetOptions{})
+					epCount := 0
+					if epErr == nil {
+						for _, subset := range endpoints.Subsets {
+							epCount += len(subset.Addresses)
+						}
+					}
+					ok := epCount > 0
+					statusStr := "passed"
+					detail := fmt.Sprintf("Default backend → %s: %d endpoint(s)", svcName, epCount)
+					if !ok {
+						statusStr = "failed"
+						failed++
+					} else {
+						passed++
+					}
+					results = append(results, map[string]interface{}{
+						"type":            "ingress_routing",
+						"namespace":       ing.Namespace,
+						"resource_name":   ing.Name,
+						"backend_service": svcName,
+						"host":            "*",
+						"path":            "/",
+						"status":          statusStr,
+						"detail":          detail,
+					})
+				}
+				// Rule-based backends
+				for _, rule := range ing.Spec.Rules {
+					if rule.HTTP == nil {
+						continue
+					}
+					for _, path := range rule.HTTP.Paths {
+						if path.Backend.Service == nil {
+							continue
+						}
+						svcName := path.Backend.Service.Name
+						endpoints, epErr := clientset.CoreV1().Endpoints(ing.Namespace).Get(ctx, svcName, metav1.GetOptions{})
+						epCount := 0
+						if epErr == nil {
+							for _, subset := range endpoints.Subsets {
+								epCount += len(subset.Addresses)
+							}
+						}
+						ok := epCount > 0
+						statusStr := "passed"
+						detail := fmt.Sprintf("%s%s → %s: %d endpoint(s)", rule.Host, path.Path, svcName, epCount)
+						if !ok {
+							statusStr = "failed"
+							detail += " (sem pods prontos)"
+							failed++
+						} else {
+							passed++
+						}
+						results = append(results, map[string]interface{}{
+							"type":            "ingress_routing",
+							"namespace":       ing.Namespace,
+							"resource_name":   ing.Name,
+							"backend_service": svcName,
+							"host":            rule.Host,
+							"path":            path.Path,
+							"endpoint_count":  epCount,
+							"status":          statusStr,
+							"detail":          detail,
+						})
+					}
+				}
 			}
 		}
 	}
 
-	log.Printf("✅ Migration %s validation complete: %d passed, %d failed", migrationID, passed, failed)
+	// Traffic readiness: all ingress routes and services are healthy
+	trafficReady := true
+	for _, r := range results {
+		t, _ := r["type"].(string)
+		s, _ := r["status"].(string)
+		if (t == "ingress_routing" || t == "service_connectivity") && s == "failed" {
+			trafficReady = false
+			break
+		}
+	}
+
+	log.Printf("✅ Migration %s validation complete: %d passed, %d failed | traffic_ready=%v", migrationID, passed, failed, trafficReady)
 
 	return map[string]interface{}{
-		"migration_id": migrationID,
-		"passed":       passed,
-		"failed":       failed,
-		"results":      results,
+		"migration_id":  migrationID,
+		"passed":        passed,
+		"failed":        failed,
+		"traffic_ready": trafficReady,
+		"results":       results,
 	}, nil
 }

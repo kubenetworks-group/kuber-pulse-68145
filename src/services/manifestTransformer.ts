@@ -27,7 +27,10 @@ export interface CompatibilityIssue {
   autoFixable: boolean;
 }
 
-// Known StorageClass provider mappings
+// Cloud-provider-specific StorageClasses that MUST be remapped when moving to a
+// different cloud/provider. Classes NOT in this map are treated as potentially
+// portable (e.g. microk8s-hostpath, longhorn, rook-ceph-block) and are left
+// unchanged so the agent can validate against what the target cluster actually has.
 const STORAGE_CLASS_MAP: Record<string, string> = {
   // Azure
   "managed-premium": "standard",
@@ -41,15 +44,22 @@ const STORAGE_CLASS_MAP: Record<string, string> = {
   "gp2": "standard",
   "gp3": "standard",
   "io1": "standard",
+  "io2": "standard",
   "ebs-sc": "standard",
+  "efs-sc": "standard",
   // GCP
   "standard-rwo": "standard",
   "premium-rwo": "standard",
+  "pd-standard": "standard",
+  "pd-ssd": "standard",
   // Oracle
   "oci": "standard",
   "oci-bv": "standard",
-  // Default
+  // Default literal
   "default": "standard",
+  // NOTE: microk8s-hostpath, longhorn, rook-ceph-block, cinder, local-path, etc.
+  // are intentionally NOT listed here — they may exist with the same name on the
+  // target cluster and the agent will handle any actual mismatch at apply time.
 };
 
 // Cloud-provider specific annotations to strip
@@ -95,8 +105,18 @@ export function analyzeCompatibility(
         kind: "PersistentVolumeClaim",
         resource: name,
         namespace: ns,
-        issue: `StorageClass "${sc}" is provider-specific and unavailable on the target cluster`,
-        suggestion: `Replace with "${targetStorageClass}"`,
+        issue: `StorageClass "${sc}" é específica de provedor de nuvem e pode não existir no cluster destino`,
+        suggestion: `Será substituída por "${targetStorageClass}" — o agente validará no momento de aplicar`,
+        autoFixable: true,
+      });
+    } else if (sc && sc !== targetStorageClass && !(sc in STORAGE_CLASS_MAP)) {
+      issues.push({
+        severity: "info",
+        kind: "PersistentVolumeClaim",
+        resource: name,
+        namespace: ns,
+        issue: `StorageClass "${sc}" não é uma classe de provedor conhecida — será mantida`,
+        suggestion: `O agente verificará se "${sc}" existe no cluster destino e usará o default caso contrário`,
         autoFixable: true,
       });
     }
@@ -193,12 +213,15 @@ export function transformManifests(
     const name = meta?.["name"] as string;
     const ns = meta?.["namespace"] as string;
 
-    // StorageClass remap
+    // StorageClass remap — only remap known provider-specific classes.
+    // Custom/unknown classes (e.g. microk8s-hostpath, longhorn, rook-ceph) are kept
+    // as-is so they survive to the agent, which will validate against what actually
+    // exists on the target cluster at apply time.
     const sc = spec?.["storageClassName"] as string;
-    if (sc && sc !== targetStorageClass) {
+    if (sc && sc !== targetStorageClass && sc in STORAGE_CLASS_MAP) {
       issuesFound++;
       spec["storageClassName"] = targetStorageClass;
-      log.push({ resource: name, kind: "PVC", namespace: ns, change: `storageClassName: "${sc}" → "${targetStorageClass}"`, reason: "Provider-specific StorageClass unavailable on target" });
+      log.push({ resource: name, kind: "PVC", namespace: ns, change: `storageClassName: "${sc}" → "${targetStorageClass}"`, reason: "Provider-specific StorageClass remapped for target cluster" });
       issuesFixed++;
     }
 

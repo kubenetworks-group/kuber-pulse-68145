@@ -178,6 +178,20 @@ serve(async (req) => {
       console.log(`Cluster ${cluster_id}: status bumped ${currentCluster?.status} → connecting (agent heartbeat)`);
     }
 
+    // Reset executing commands stuck >45 min — agent likely crashed mid-execution.
+    // These are immune to the normal sent/pending cleanup, so we handle them separately.
+    const executingThreshold = new Date(Date.now() - 45 * 60 * 1000).toISOString();
+    const { data: resetExecuting } = await supabaseClient
+      .from('agent_commands')
+      .update({ status: 'pending', executed_at: null })
+      .eq('cluster_id', cluster_id)
+      .eq('status', 'executing')
+      .lt('updated_at', executingThreshold)
+      .select('id, command_type');
+    if (resetExecuting && resetExecuting.length > 0) {
+      console.log(`♻️  Reset ${resetExecuting.length} stale executing commands: ${resetExecuting.map((c: any) => c.command_type).join(', ')}`);
+    }
+
     // Delete commands stuck >10 min (sent or pending) — unresolvable, clean up
     // to avoid blocking the queue without needing an external broker (RabbitMQ etc).
     const deleteThreshold = new Date(Date.now() - 10 * 60 * 1000).toISOString();

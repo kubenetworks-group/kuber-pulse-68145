@@ -88,7 +88,7 @@ spec:
       serviceAccountName: kodo-agent
       containers:
       - name: agent
-        image: ghcr.io/kubenetworks-group/kodo-agent:v0.1.73
+        image: ghcr.io/kubenetworks-group/kodo-agent:v0.1.75
         imagePullPolicy: Always
         envFrom:
         - configMapRef:

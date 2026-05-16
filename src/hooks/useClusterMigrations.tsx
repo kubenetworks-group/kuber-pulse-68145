@@ -6,6 +6,7 @@ import {
   createMigration,
   applyMigration,
   runMigrationValidation,
+  cancelMigration,
   type ClusterMigration,
 } from "@/services/migrationAnalysisService";
 
@@ -140,6 +141,22 @@ export function useClusterMigrations() {
     }
   }, []);
 
+  const handleCancelMigration = useCallback(async (migration: ClusterMigration) => {
+    try {
+      await cancelMigration(migration);
+      toast({
+        title: "Migração encerrada",
+        description: `"${migration.name}" foi marcada como falha e os comandos pendentes foram cancelados.`,
+      });
+    } catch (err) {
+      toast({
+        title: "Erro ao cancelar migração",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
+    }
+  }, []);
+
   return {
     migrations,
     loading,
@@ -148,6 +165,7 @@ export function useClusterMigrations() {
     createMigration: handleCreateMigration,
     applyMigration: handleApplyMigration,
     validateMigration: handleValidateMigration,
+    cancelMigration: handleCancelMigration,
     refetch: fetchMigrations,
   };
 }
