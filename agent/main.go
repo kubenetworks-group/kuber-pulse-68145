@@ -3090,9 +3090,19 @@ func updateDeploymentImage(clientset *kubernetes.Clientset, params map[string]in
 }
 
 func updateDeploymentResources(clientset *kubernetes.Clientset, params map[string]interface{}) (map[string]interface{}, error) {
-	deploymentName := params["deployment_name"].(string)
-	namespace := params["namespace"].(string)
-	containerName := params["container_name"].(string)
+	deploymentName, _ := params["deployment_name"].(string)
+	namespace, _ := params["namespace"].(string)
+	containerName, _ := params["container_name"].(string)
+
+	if namespace == "" {
+		namespace = "default"
+	}
+	if deploymentName == "" {
+		return nil, fmt.Errorf("deployment_name is required (got nil/empty); apply_to_all_pods is not supported")
+	}
+
+	// If container_name is empty, target all containers in the deployment.
+	applyToAll := containerName == ""
 
 	deployment, err := clientset.AppsV1().Deployments(namespace).Get(
 		context.Background(),
