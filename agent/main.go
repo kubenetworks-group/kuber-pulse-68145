@@ -2480,6 +2480,9 @@ func executeCommands(clientset *kubernetes.Clientset, config AgentConfig, comman
 		case "delete_namespace":
 			log.Printf("   → Deleting namespace...")
 			result, err = deleteNamespace(clientset, cmd.CommandParams)
+		case "create_network_policy":
+			log.Printf("   → Creating network policy...")
+			result, err = createNetworkPolicy(clientset, cmd.CommandParams)
 		default:
 			err = fmt.Errorf("unknown command type: %s", cmd.CommandType)
 			log.Printf("   ❌ Unknown command type!")
