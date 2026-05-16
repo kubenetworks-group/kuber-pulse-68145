@@ -58,7 +58,11 @@ export async function createMigration(params: {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
 
-  const { sourceClusterId, targetClusterId, snapshotId, name, description, targetStorageClass = "standard", onProgress } = params;
+  const { sourceClusterId, targetClusterId, snapshotId, name, description, onProgress } = params;
+  // "auto" means the agent will detect at apply time; still run analysis with a neutral hint
+  const targetStorageClass = (!params.targetStorageClass || params.targetStorageClass === "auto")
+    ? "standard"
+    : params.targetStorageClass;
 
   // 1. Create migration record
   onProgress?.("Criando registro de migração...", 5);

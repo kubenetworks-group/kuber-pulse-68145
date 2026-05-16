@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -11,12 +11,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AIAnalysisProgress } from "./AIAnalysisProgress";
 import { CompatibilityReport } from "./CompatibilityReport";
 import { ManifestDiffViewer } from "./ManifestDiffViewer";
 import { type ClusterSnapshot } from "@/services/snapshotService";
 import { type ClusterMigration } from "@/services/migrationAnalysisService";
-import { ArrowRight, ArrowLeft, Wand2 } from "lucide-react";
+import { ArrowRight, ArrowLeft, Wand2, Info, Loader2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface MigrationWizardProps {
   clusters: Array<{ id: string; name: string; provider?: string }>;
@@ -34,7 +36,7 @@ interface MigrationWizardProps {
   onApply: (migration: ClusterMigration) => Promise<void>;
 }
 
-const STORAGE_CLASSES = [
+const FALLBACK_STORAGE_CLASSES = [
   { value: "standard", label: "standard (genérico)" },
   { value: "gp2", label: "gp2 (AWS EBS)" },
   { value: "gp3", label: "gp3 (AWS EBS v3)" },
@@ -44,6 +46,21 @@ const STORAGE_CLASSES = [
   { value: "cinder", label: "cinder (OpenStack/Magalu)" },
   { value: "oci-bv", label: "oci-bv (Oracle Cloud)" },
 ];
+
+async function fetchTargetStorageClasses(clusterId: string): Promise<string[]> {
+  // Try to get StorageClasses from the most recent completed snapshot of the target cluster
+  const { data } = await supabase
+    .from("cluster_snapshots")
+    .select("resource_summary")
+    .eq("cluster_id", clusterId)
+    .eq("status", "completed")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const summary = data?.resource_summary as { storageClasses?: string[] } | null;
+  return summary?.storageClasses ?? [];
+}
 
 type Step = "config" | "analyzing" | "result";
 
@@ -61,8 +78,39 @@ export function MigrationWizard({
   const [snapshotId, setSnapshotId] = useState("");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [targetStorageClass, setTargetStorageClass] = useState("standard");
+  const [targetStorageClass, setTargetStorageClass] = useState("auto");
   const [result, setResult] = useState<ClusterMigration | null>(null);
+  const [detectedStorageClasses, setDetectedStorageClasses] = useState<string[]>([]);
+  const [loadingStorageClasses, setLoadingStorageClasses] = useState(false);
+  const [storageClassSource, setStorageClassSource] = useState<"detected" | "fallback">("fallback");
+
+  // Fetch real StorageClasses from target cluster's snapshot whenever target changes
+  useEffect(() => {
+    if (!targetClusterId) {
+      setDetectedStorageClasses([]);
+      setTargetStorageClass("auto");
+      return;
+    }
+    setLoadingStorageClasses(true);
+    fetchTargetStorageClasses(targetClusterId)
+      .then((classes) => {
+        if (classes.length > 0) {
+          setDetectedStorageClasses(classes);
+          setStorageClassSource("detected");
+          // Auto-select the first class (likely the default)
+          setTargetStorageClass(classes[0]);
+        } else {
+          setDetectedStorageClasses([]);
+          setStorageClassSource("fallback");
+          setTargetStorageClass("auto");
+        }
+      })
+      .catch(() => {
+        setDetectedStorageClasses([]);
+        setStorageClassSource("fallback");
+      })
+      .finally(() => setLoadingStorageClasses(false));
+  }, [targetClusterId]);
 
   const completedSnapshots = snapshots.filter(
     (s) => s.status === "completed" && (!sourceClusterId || s.cluster_id === sourceClusterId)
@@ -161,23 +209,53 @@ export function MigrationWizard({
             </div>
 
             {/* Target StorageClass */}
-            <div className="space-y-1">
-              <Label>StorageClass do Cluster Destino *</Label>
-              <Select value={targetStorageClass} onValueChange={setTargetStorageClass}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {STORAGE_CLASSES.map((sc) => (
-                    <SelectItem key={sc.value} value={sc.value}>
-                      {sc.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                A IA vai converter todas as StorageClasses do cluster de origem para este valor.
-              </p>
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                StorageClass do Cluster Destino
+                {loadingStorageClasses && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
+              </Label>
+
+              {targetClusterId && storageClassSource === "detected" && detectedStorageClasses.length > 0 ? (
+                <>
+                  <Select value={targetStorageClass} onValueChange={setTargetStorageClass}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {detectedStorageClasses.map((sc) => (
+                        <SelectItem key={sc} value={sc}>{sc}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-emerald-600 flex items-center gap-1">
+                    <Info className="w-3 h-3" />
+                    StorageClasses detectadas no cluster destino via snapshot recente.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <Select value={targetStorageClass} onValueChange={setTargetStorageClass} disabled={!targetClusterId || loadingStorageClasses}>
+                    <SelectTrigger>
+                      <SelectValue placeholder={!targetClusterId ? "Selecione o cluster destino primeiro" : "auto-detectar"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">Automático (agente detecta ao aplicar)</SelectItem>
+                      {FALLBACK_STORAGE_CLASSES.map((sc) => (
+                        <SelectItem key={sc.value} value={sc.value}>{sc.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {targetClusterId && !loadingStorageClasses && (
+                    <Alert className="py-2">
+                      <Info className="w-4 h-4" />
+                      <AlertDescription className="text-xs">
+                        Nenhum snapshot do cluster destino encontrado. O agente detectará as StorageClasses disponíveis automaticamente ao aplicar.
+                        Para ver as classes reais, crie um snapshot do cluster destino primeiro.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </>
+              )}
             </div>
 
             {/* Name */}

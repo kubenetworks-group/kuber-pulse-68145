@@ -16,6 +16,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -4454,8 +4456,53 @@ func collectClusterSnapshot(clientset *kubernetes.Clientset, config AgentConfig,
 // APPLY MANIFESTS (migration target side)
 // ---------------------------------------------
 
-// applyManifests downloads transformed manifests from storage and applies them
-// Params: migration_id, download_url (pre-signed GET URL), namespaces (optional filter)
+// detectTargetStorageClasses queries the cluster for available StorageClasses.
+// Returns a set of names and the default class name (empty if none is marked default).
+func detectTargetStorageClasses(clientset *kubernetes.Clientset) (map[string]bool, string) {
+	available := map[string]bool{}
+	defaultClass := ""
+	scList, err := clientset.StorageV1().StorageClasses().List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		log.Printf("⚠️  Could not list StorageClasses: %v", err)
+		return available, defaultClass
+	}
+	for _, sc := range scList.Items {
+		available[sc.Name] = true
+		if sc.Annotations["storageclass.kubernetes.io/is-default-class"] == "true" ||
+			sc.Annotations["storageclass.beta.kubernetes.io/is-default-class"] == "true" {
+			defaultClass = sc.Name
+		}
+	}
+	log.Printf("📦 Target cluster StorageClasses: %v (default: %q)", keysOf(available), defaultClass)
+	return available, defaultClass
+}
+
+func keysOf(m map[string]bool) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+// remapStorageClass returns the best StorageClass for a PVC on the target cluster.
+// If the requested class exists → keep it. If not → use the cluster default.
+// If no default → use the first available class.
+func remapStorageClass(requested string, available map[string]bool, defaultClass string) (string, string) {
+	if requested != "" && available[requested] {
+		return requested, "" // no change needed
+	}
+	if defaultClass != "" {
+		return defaultClass, fmt.Sprintf("%q not found on target; using default StorageClass %q", requested, defaultClass)
+	}
+	for k := range available {
+		return k, fmt.Sprintf("%q not found on target; using first available StorageClass %q", requested, k)
+	}
+	return requested, fmt.Sprintf("no StorageClasses found on target; keeping %q (may fail)", requested)
+}
+
+// applyManifests downloads transformed manifests and applies them to the target cluster.
+// Params: migration_id, download_url (pre-signed GET URL)
 func applyManifests(clientset *kubernetes.Clientset, params map[string]interface{}) (map[string]interface{}, error) {
 	migrationID, _ := params["migration_id"].(string)
 	downloadURL, _ := params["download_url"].(string)
@@ -4465,14 +4512,13 @@ func applyManifests(clientset *kubernetes.Clientset, params map[string]interface
 
 	log.Printf("📥 Downloading transformed manifests for migration %s", migrationID)
 
-	// Download manifests from storage
 	resp, err := http.Get(downloadURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to download manifests: %w", err)
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read manifest data: %w", err)
 	}
@@ -4487,154 +4533,266 @@ func applyManifests(clientset *kubernetes.Clientset, params map[string]interface
 	failed := 0
 	applyLog := []map[string]interface{}{}
 
-	// Apply Namespaces first
-	if nsItems, ok := snapshot["namespaces"].([]interface{}); ok {
-		for _, item := range nsItems {
-			itemBytes, _ := json.Marshal(item)
-			var ns corev1.Namespace
-			if err := json.Unmarshal(itemBytes, &ns); err != nil {
-				continue
-			}
-			// Skip system namespaces
-			if strings.HasPrefix(ns.Name, "kube-") || ns.Name == "default" {
-				continue
-			}
-			ns.ResourceVersion = ""
-			ns.UID = ""
-			ns.CreationTimestamp = metav1.Time{}
-			_, err := clientset.CoreV1().Namespaces().Create(ctx, &ns, metav1.CreateOptions{})
-			if err != nil && !strings.Contains(err.Error(), "already exists") {
-				failed++
-				applyLog = append(applyLog, map[string]interface{}{"kind": "Namespace", "name": ns.Name, "status": "failed", "error": err.Error()})
-			} else {
-				applied++
-				applyLog = append(applyLog, map[string]interface{}{"kind": "Namespace", "name": ns.Name, "status": "applied"})
-			}
-		}
-	}
+	// Detect real StorageClasses on the target cluster before touching PVCs
+	availableSCs, defaultSC := detectTargetStorageClasses(clientset)
 
-	// Apply ConfigMaps
-	if cmItems, ok := snapshot["configmaps"].([]interface{}); ok {
-		for _, item := range cmItems {
-			itemBytes, _ := json.Marshal(item)
-			var cm corev1.ConfigMap
-			if err := json.Unmarshal(itemBytes, &cm); err != nil {
-				continue
-			}
-			cm.ResourceVersion = ""
-			cm.UID = ""
-			cm.CreationTimestamp = metav1.Time{}
-			_, err := clientset.CoreV1().ConfigMaps(cm.Namespace).Create(ctx, &cm, metav1.CreateOptions{})
-			if err != nil && !strings.Contains(err.Error(), "already exists") {
-				failed++
-				applyLog = append(applyLog, map[string]interface{}{"kind": "ConfigMap", "name": cm.Name, "namespace": cm.Namespace, "status": "failed", "error": err.Error()})
-			} else {
-				applied++
-				applyLog = append(applyLog, map[string]interface{}{"kind": "ConfigMap", "name": cm.Name, "namespace": cm.Namespace, "status": "applied"})
-			}
-		}
-	}
+	// ── helpers ─────────────────────────────────────────────────────────────
 
-	// Apply Secrets
-	if secretItems, ok := snapshot["secrets"].([]interface{}); ok {
-		for _, item := range secretItems {
-			itemBytes, _ := json.Marshal(item)
-			var s corev1.Secret
-			if err := json.Unmarshal(itemBytes, &s); err != nil {
-				continue
-			}
-			s.ResourceVersion = ""
-			s.UID = ""
-			s.CreationTimestamp = metav1.Time{}
-			_, err := clientset.CoreV1().Secrets(s.Namespace).Create(ctx, &s, metav1.CreateOptions{})
-			if err != nil && !strings.Contains(err.Error(), "already exists") {
-				failed++
-				applyLog = append(applyLog, map[string]interface{}{"kind": "Secret", "name": s.Name, "namespace": s.Namespace, "status": "failed", "error": err.Error()})
-			} else {
-				applied++
-				applyLog = append(applyLog, map[string]interface{}{"kind": "Secret", "name": s.Name, "namespace": s.Namespace, "status": "applied"})
-			}
-		}
-	}
-
-	// Apply PVCs
-	if pvcItems, ok := snapshot["pvcs"].([]interface{}); ok {
-		for _, item := range pvcItems {
-			itemBytes, _ := json.Marshal(item)
-			var pvc corev1.PersistentVolumeClaim
-			if err := json.Unmarshal(itemBytes, &pvc); err != nil {
-				continue
-			}
-			pvc.ResourceVersion = ""
-			pvc.UID = ""
-			pvc.CreationTimestamp = metav1.Time{}
-			pvc.Spec.VolumeName = "" // clear bound PV reference
-			pvc.Status = corev1.PersistentVolumeClaimStatus{}
-			_, err := clientset.CoreV1().PersistentVolumeClaims(pvc.Namespace).Create(ctx, &pvc, metav1.CreateOptions{})
-			if err != nil && !strings.Contains(err.Error(), "already exists") {
-				failed++
-				applyLog = append(applyLog, map[string]interface{}{"kind": "PVC", "name": pvc.Name, "namespace": pvc.Namespace, "status": "failed", "error": err.Error()})
-			} else {
-				applied++
-				applyLog = append(applyLog, map[string]interface{}{"kind": "PVC", "name": pvc.Name, "namespace": pvc.Namespace, "status": "applied"})
-			}
-		}
-	}
-
-	// Apply Services
-	if svcItems, ok := snapshot["services"].([]interface{}); ok {
-		for _, item := range svcItems {
-			itemBytes, _ := json.Marshal(item)
-			var svc corev1.Service
-			if err := json.Unmarshal(itemBytes, &svc); err != nil {
-				continue
-			}
-			if svc.Name == "kubernetes" && svc.Namespace == "default" {
-				continue
-			}
-			svc.ResourceVersion = ""
-			svc.UID = ""
-			svc.CreationTimestamp = metav1.Time{}
-			svc.Spec.ClusterIP = ""
-			svc.Spec.ClusterIPs = nil
-			svc.Status = corev1.ServiceStatus{}
-			_, err := clientset.CoreV1().Services(svc.Namespace).Create(ctx, &svc, metav1.CreateOptions{})
-			if err != nil && !strings.Contains(err.Error(), "already exists") {
-				failed++
-				applyLog = append(applyLog, map[string]interface{}{"kind": "Service", "name": svc.Name, "namespace": svc.Namespace, "status": "failed", "error": err.Error()})
-			} else {
-				applied++
-				applyLog = append(applyLog, map[string]interface{}{"kind": "Service", "name": svc.Name, "namespace": svc.Namespace, "status": "applied"})
-			}
-		}
-	}
-
-	// Apply Deployments
-	if deplItems, ok := snapshot["deployments"].([]interface{}); ok {
-		for _, item := range deplItems {
-			itemBytes, _ := json.Marshal(item)
-			var d interface{}
-			if err := json.Unmarshal(itemBytes, &d); err != nil {
-				continue
-			}
-			// Use scheme decoder for typed apply
-			obj, _, err := scheme.Codecs.UniversalDeserializer().Decode(itemBytes, nil, nil)
-			if err != nil {
-				// fallback: parse name/namespace from raw JSON
-				dm := d.(map[string]interface{})
-				meta, _ := dm["metadata"].(map[string]interface{})
-				name, _ := meta["name"].(string)
-				ns, _ := meta["namespace"].(string)
-				failed++
-				applyLog = append(applyLog, map[string]interface{}{"kind": "Deployment", "name": name, "namespace": ns, "status": "failed", "error": err.Error()})
-				continue
-			}
-			_ = obj // typed apply would go here; for now log success
+	logResult := func(kind, name, ns string, err error) {
+		if err != nil && !strings.Contains(err.Error(), "already exists") {
+			failed++
+			applyLog = append(applyLog, map[string]interface{}{"kind": kind, "name": name, "namespace": ns, "status": "failed", "error": err.Error()})
+		} else {
 			applied++
+			applyLog = append(applyLog, map[string]interface{}{"kind": kind, "name": name, "namespace": ns, "status": "applied"})
 		}
 	}
 
-	log.Printf("✅ Manifests applied: %d success, %d failed", applied, failed)
+	clearMeta := func(meta *metav1.ObjectMeta) {
+		meta.ResourceVersion = ""
+		meta.UID = ""
+		meta.CreationTimestamp = metav1.Time{}
+		meta.ManagedFields = nil
+	}
+
+	// ── 1. Namespaces ────────────────────────────────────────────────────────
+	if items, ok := snapshot["namespaces"].([]interface{}); ok {
+		for _, item := range items {
+			b, _ := json.Marshal(item)
+			var obj corev1.Namespace
+			if err := json.Unmarshal(b, &obj); err != nil {
+				continue
+			}
+			if strings.HasPrefix(obj.Name, "kube-") || obj.Name == "default" {
+				continue
+			}
+			clearMeta(&obj.ObjectMeta)
+			obj.Status = corev1.NamespaceStatus{}
+			_, err := clientset.CoreV1().Namespaces().Create(ctx, &obj, metav1.CreateOptions{})
+			logResult("Namespace", obj.Name, "", err)
+		}
+	}
+
+	// ── 2. ConfigMaps ────────────────────────────────────────────────────────
+	if items, ok := snapshot["configmaps"].([]interface{}); ok {
+		for _, item := range items {
+			b, _ := json.Marshal(item)
+			var obj corev1.ConfigMap
+			if err := json.Unmarshal(b, &obj); err != nil {
+				continue
+			}
+			clearMeta(&obj.ObjectMeta)
+			_, err := clientset.CoreV1().ConfigMaps(obj.Namespace).Create(ctx, &obj, metav1.CreateOptions{})
+			logResult("ConfigMap", obj.Name, obj.Namespace, err)
+		}
+	}
+
+	// ── 3. Secrets ───────────────────────────────────────────────────────────
+	if items, ok := snapshot["secrets"].([]interface{}); ok {
+		for _, item := range items {
+			b, _ := json.Marshal(item)
+			var obj corev1.Secret
+			if err := json.Unmarshal(b, &obj); err != nil {
+				continue
+			}
+			if obj.Type == corev1.SecretTypeServiceAccountToken {
+				continue // these are auto-created; skip
+			}
+			clearMeta(&obj.ObjectMeta)
+			_, err := clientset.CoreV1().Secrets(obj.Namespace).Create(ctx, &obj, metav1.CreateOptions{})
+			logResult("Secret", obj.Name, obj.Namespace, err)
+		}
+	}
+
+	// ── 4. PVCs — with live StorageClass remapping ───────────────────────────
+	if items, ok := snapshot["pvcs"].([]interface{}); ok {
+		for _, item := range items {
+			b, _ := json.Marshal(item)
+			var pvc corev1.PersistentVolumeClaim
+			if err := json.Unmarshal(b, &pvc); err != nil {
+				continue
+			}
+			clearMeta(&pvc.ObjectMeta)
+			pvc.Spec.VolumeName = ""
+			pvc.Status = corev1.PersistentVolumeClaimStatus{}
+
+			// Remap StorageClass to one that actually exists on this cluster
+			requestedSC := ""
+			if pvc.Spec.StorageClassName != nil {
+				requestedSC = *pvc.Spec.StorageClassName
+			}
+			newSC, reason := remapStorageClass(requestedSC, availableSCs, defaultSC)
+			if reason != "" {
+				log.Printf("🔄 PVC %s/%s: %s", pvc.Namespace, pvc.Name, reason)
+				applyLog = append(applyLog, map[string]interface{}{
+					"kind": "PVC", "name": pvc.Name, "namespace": pvc.Namespace,
+					"note": reason,
+				})
+			}
+			pvc.Spec.StorageClassName = &newSC
+
+			// Downgrade ReadWriteMany if the target SC doesn't support it
+			for i, mode := range pvc.Spec.AccessModes {
+				if mode == corev1.ReadWriteMany && len(availableSCs) > 0 {
+					pvc.Spec.AccessModes[i] = corev1.ReadWriteOnce
+					log.Printf("⬇️  PVC %s/%s: ReadWriteMany → ReadWriteOnce (not universally supported)", pvc.Namespace, pvc.Name)
+				}
+			}
+
+			_, err := clientset.CoreV1().PersistentVolumeClaims(pvc.Namespace).Create(ctx, &pvc, metav1.CreateOptions{})
+			logResult("PVC", pvc.Name, pvc.Namespace, err)
+		}
+	}
+
+	// ── 5. Services ──────────────────────────────────────────────────────────
+	if items, ok := snapshot["services"].([]interface{}); ok {
+		for _, item := range items {
+			b, _ := json.Marshal(item)
+			var obj corev1.Service
+			if err := json.Unmarshal(b, &obj); err != nil {
+				continue
+			}
+			if obj.Name == "kubernetes" && obj.Namespace == "default" {
+				continue
+			}
+			clearMeta(&obj.ObjectMeta)
+			obj.Spec.ClusterIP = ""
+			obj.Spec.ClusterIPs = nil
+			obj.Status = corev1.ServiceStatus{}
+			_, err := clientset.CoreV1().Services(obj.Namespace).Create(ctx, &obj, metav1.CreateOptions{})
+			logResult("Service", obj.Name, obj.Namespace, err)
+		}
+	}
+
+	// ── 6. Deployments ───────────────────────────────────────────────────────
+	if items, ok := snapshot["deployments"].([]interface{}); ok {
+		for _, item := range items {
+			b, _ := json.Marshal(item)
+			var obj appsv1.Deployment
+			if err := json.Unmarshal(b, &obj); err != nil {
+				failed++
+				applyLog = append(applyLog, map[string]interface{}{"kind": "Deployment", "status": "failed", "error": err.Error()})
+				continue
+			}
+			clearMeta(&obj.ObjectMeta)
+			obj.Status = appsv1.DeploymentStatus{}
+			_, err := clientset.AppsV1().Deployments(obj.Namespace).Create(ctx, &obj, metav1.CreateOptions{})
+			if err != nil && strings.Contains(err.Error(), "already exists") {
+				existing, getErr := clientset.AppsV1().Deployments(obj.Namespace).Get(ctx, obj.Name, metav1.GetOptions{})
+				if getErr == nil {
+					obj.ResourceVersion = existing.ResourceVersion
+					_, err = clientset.AppsV1().Deployments(obj.Namespace).Update(ctx, &obj, metav1.UpdateOptions{})
+				}
+			}
+			logResult("Deployment", obj.Name, obj.Namespace, err)
+		}
+	}
+
+	// ── 7. StatefulSets ──────────────────────────────────────────────────────
+	if items, ok := snapshot["statefulsets"].([]interface{}); ok {
+		for _, item := range items {
+			b, _ := json.Marshal(item)
+			var obj appsv1.StatefulSet
+			if err := json.Unmarshal(b, &obj); err != nil {
+				continue
+			}
+			clearMeta(&obj.ObjectMeta)
+			obj.Status = appsv1.StatefulSetStatus{}
+			// Remap volumeClaimTemplates StorageClass
+			for i := range obj.Spec.VolumeClaimTemplates {
+				vct := &obj.Spec.VolumeClaimTemplates[i]
+				requested := ""
+				if vct.Spec.StorageClassName != nil {
+					requested = *vct.Spec.StorageClassName
+				}
+				newSC, reason := remapStorageClass(requested, availableSCs, defaultSC)
+				if reason != "" {
+					log.Printf("🔄 StatefulSet %s/%s VCT %s: %s", obj.Namespace, obj.Name, vct.Name, reason)
+				}
+				vct.Spec.StorageClassName = &newSC
+			}
+			_, err := clientset.AppsV1().StatefulSets(obj.Namespace).Create(ctx, &obj, metav1.CreateOptions{})
+			if err != nil && strings.Contains(err.Error(), "already exists") {
+				existing, getErr := clientset.AppsV1().StatefulSets(obj.Namespace).Get(ctx, obj.Name, metav1.GetOptions{})
+				if getErr == nil {
+					obj.ResourceVersion = existing.ResourceVersion
+					_, err = clientset.AppsV1().StatefulSets(obj.Namespace).Update(ctx, &obj, metav1.UpdateOptions{})
+				}
+			}
+			logResult("StatefulSet", obj.Name, obj.Namespace, err)
+		}
+	}
+
+	// ── 8. DaemonSets ────────────────────────────────────────────────────────
+	if items, ok := snapshot["daemonsets"].([]interface{}); ok {
+		for _, item := range items {
+			b, _ := json.Marshal(item)
+			var obj appsv1.DaemonSet
+			if err := json.Unmarshal(b, &obj); err != nil {
+				continue
+			}
+			if strings.HasPrefix(obj.Namespace, "kube-") {
+				continue // skip system daemonsets
+			}
+			clearMeta(&obj.ObjectMeta)
+			obj.Status = appsv1.DaemonSetStatus{}
+			_, err := clientset.AppsV1().DaemonSets(obj.Namespace).Create(ctx, &obj, metav1.CreateOptions{})
+			if err != nil && strings.Contains(err.Error(), "already exists") {
+				existing, getErr := clientset.AppsV1().DaemonSets(obj.Namespace).Get(ctx, obj.Name, metav1.GetOptions{})
+				if getErr == nil {
+					obj.ResourceVersion = existing.ResourceVersion
+					_, err = clientset.AppsV1().DaemonSets(obj.Namespace).Update(ctx, &obj, metav1.UpdateOptions{})
+				}
+			}
+			logResult("DaemonSet", obj.Name, obj.Namespace, err)
+		}
+	}
+
+	// ── 9. Ingresses ─────────────────────────────────────────────────────────
+	if items, ok := snapshot["ingresses"].([]interface{}); ok {
+		for _, item := range items {
+			b, _ := json.Marshal(item)
+			var obj networkingv1.Ingress
+			if err := json.Unmarshal(b, &obj); err != nil {
+				continue
+			}
+			clearMeta(&obj.ObjectMeta)
+			obj.Status = networkingv1.IngressStatus{}
+			_, err := clientset.NetworkingV1().Ingresses(obj.Namespace).Create(ctx, &obj, metav1.CreateOptions{})
+			if err != nil && strings.Contains(err.Error(), "already exists") {
+				existing, getErr := clientset.NetworkingV1().Ingresses(obj.Namespace).Get(ctx, obj.Name, metav1.GetOptions{})
+				if getErr == nil {
+					obj.ResourceVersion = existing.ResourceVersion
+					_, err = clientset.NetworkingV1().Ingresses(obj.Namespace).Update(ctx, &obj, metav1.UpdateOptions{})
+				}
+			}
+			logResult("Ingress", obj.Name, obj.Namespace, err)
+		}
+	}
+
+	// ── 10. HPAs ─────────────────────────────────────────────────────────────
+	if items, ok := snapshot["hpas"].([]interface{}); ok {
+		for _, item := range items {
+			b, _ := json.Marshal(item)
+			var obj autoscalingv2.HorizontalPodAutoscaler
+			if err := json.Unmarshal(b, &obj); err != nil {
+				continue
+			}
+			clearMeta(&obj.ObjectMeta)
+			obj.Status = autoscalingv2.HorizontalPodAutoscalerStatus{}
+			_, err := clientset.AutoscalingV2().HorizontalPodAutoscalers(obj.Namespace).Create(ctx, &obj, metav1.CreateOptions{})
+			if err != nil && strings.Contains(err.Error(), "already exists") {
+				existing, getErr := clientset.AutoscalingV2().HorizontalPodAutoscalers(obj.Namespace).Get(ctx, obj.Name, metav1.GetOptions{})
+				if getErr == nil {
+					obj.ResourceVersion = existing.ResourceVersion
+					_, err = clientset.AutoscalingV2().HorizontalPodAutoscalers(obj.Namespace).Update(ctx, &obj, metav1.UpdateOptions{})
+				}
+			}
+			logResult("HPA", obj.Name, obj.Namespace, err)
+		}
+	}
+
+	log.Printf("✅ Migration %s applied: %d success, %d failed", migrationID, applied, failed)
 
 	return map[string]interface{}{
 		"migration_id": migrationID,
