@@ -3116,38 +3116,44 @@ func updateDeploymentResources(clientset *kubernetes.Clientset, params map[strin
 	// Find and update the container resources
 	updated := false
 	for i, container := range deployment.Spec.Template.Spec.Containers {
-		if container.Name == containerName {
-			if cpuRequest, ok := params["cpu_request"].(string); ok {
-				if deployment.Spec.Template.Spec.Containers[i].Resources.Requests == nil {
-					deployment.Spec.Template.Spec.Containers[i].Resources.Requests = corev1.ResourceList{}
-				}
-				deployment.Spec.Template.Spec.Containers[i].Resources.Requests[corev1.ResourceCPU] = resource.MustParse(cpuRequest)
+		if !applyToAll && container.Name != containerName {
+			continue
+		}
+		if cpuRequest, ok := params["cpu_request"].(string); ok && cpuRequest != "" {
+			if deployment.Spec.Template.Spec.Containers[i].Resources.Requests == nil {
+				deployment.Spec.Template.Spec.Containers[i].Resources.Requests = corev1.ResourceList{}
 			}
-			if memRequest, ok := params["memory_request"].(string); ok {
-				if deployment.Spec.Template.Spec.Containers[i].Resources.Requests == nil {
-					deployment.Spec.Template.Spec.Containers[i].Resources.Requests = corev1.ResourceList{}
-				}
-				deployment.Spec.Template.Spec.Containers[i].Resources.Requests[corev1.ResourceMemory] = resource.MustParse(memRequest)
+			deployment.Spec.Template.Spec.Containers[i].Resources.Requests[corev1.ResourceCPU] = resource.MustParse(cpuRequest)
+		}
+		if memRequest, ok := params["memory_request"].(string); ok && memRequest != "" {
+			if deployment.Spec.Template.Spec.Containers[i].Resources.Requests == nil {
+				deployment.Spec.Template.Spec.Containers[i].Resources.Requests = corev1.ResourceList{}
 			}
-			if cpuLimit, ok := params["cpu_limit"].(string); ok {
-				if deployment.Spec.Template.Spec.Containers[i].Resources.Limits == nil {
-					deployment.Spec.Template.Spec.Containers[i].Resources.Limits = corev1.ResourceList{}
-				}
-				deployment.Spec.Template.Spec.Containers[i].Resources.Limits[corev1.ResourceCPU] = resource.MustParse(cpuLimit)
+			deployment.Spec.Template.Spec.Containers[i].Resources.Requests[corev1.ResourceMemory] = resource.MustParse(memRequest)
+		}
+		if cpuLimit, ok := params["cpu_limit"].(string); ok && cpuLimit != "" {
+			if deployment.Spec.Template.Spec.Containers[i].Resources.Limits == nil {
+				deployment.Spec.Template.Spec.Containers[i].Resources.Limits = corev1.ResourceList{}
 			}
-			if memLimit, ok := params["memory_limit"].(string); ok {
-				if deployment.Spec.Template.Spec.Containers[i].Resources.Limits == nil {
-					deployment.Spec.Template.Spec.Containers[i].Resources.Limits = corev1.ResourceList{}
-				}
-				deployment.Spec.Template.Spec.Containers[i].Resources.Limits[corev1.ResourceMemory] = resource.MustParse(memLimit)
+			deployment.Spec.Template.Spec.Containers[i].Resources.Limits[corev1.ResourceCPU] = resource.MustParse(cpuLimit)
+		}
+		if memLimit, ok := params["memory_limit"].(string); ok && memLimit != "" {
+			if deployment.Spec.Template.Spec.Containers[i].Resources.Limits == nil {
+				deployment.Spec.Template.Spec.Containers[i].Resources.Limits = corev1.ResourceList{}
 			}
-			updated = true
+			deployment.Spec.Template.Spec.Containers[i].Resources.Limits[corev1.ResourceMemory] = resource.MustParse(memLimit)
+		}
+		updated = true
+		if !applyToAll {
 			break
 		}
 	}
 
 	if !updated {
-		return nil, fmt.Errorf("container %s not found in deployment", containerName)
+		if applyToAll {
+			return nil, fmt.Errorf("deployment %s/%s has no containers", namespace, deploymentName)
+		}
+		return nil, fmt.Errorf("container %s not found in deployment %s/%s", containerName, namespace, deploymentName)
 	}
 
 	_, err = clientset.AppsV1().Deployments(namespace).Update(
