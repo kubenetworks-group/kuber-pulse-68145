@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ArrowUpCircle, Copy, X, Terminal } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCluster } from "@/contexts/ClusterContext";
@@ -99,36 +98,48 @@ export function AgentUpdateBanner() {
   if (!updateInfo?.update_available || dismissed) return null;
 
   return (
-    <Alert className="mb-4 border-blue-500/50 bg-blue-500/10 relative pr-10">
-      <ArrowUpCircle className="h-4 w-4 text-blue-500 hidden sm:block" />
-      <AlertTitle className="text-blue-400 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-sm sm:text-base">
-        <span className="flex items-center gap-2">
-          <ArrowUpCircle className="h-4 w-4 text-blue-500 sm:hidden" />
-          Atualização Disponível
-        </span>
-        <span className="text-xs font-mono bg-blue-500/20 px-2 py-0.5 rounded w-fit">
-          {updateInfo.current_version} → {updateInfo.latest_version}
-        </span>
-      </AlertTitle>
-      <AlertDescription className="mt-2 space-y-3">
-        <p className="text-xs sm:text-sm text-muted-foreground">
-          Uma nova versão do agente Kodo está disponível.
-        </p>
-        
+    <div className="mb-4 rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-3 relative">
+      {/* Dismiss */}
+      <button
+        className="absolute top-2 right-2 h-6 w-6 flex items-center justify-center rounded hover:bg-blue-500/20 transition-colors"
+        onClick={() => setDismissed(true)}
+        aria-label="Dispensar"
+      >
+        <X className="h-3 w-3 text-blue-400" />
+      </button>
+
+      {/* Header row */}
+      <div className="flex items-start gap-2 pr-6">
+        <ArrowUpCircle className="h-4 w-4 text-blue-400 shrink-0 mt-0.5" />
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-sm font-semibold text-blue-400">Atualização Disponível</span>
+            <span className="text-[11px] font-mono bg-blue-500/20 px-1.5 py-0.5 rounded text-blue-300 whitespace-nowrap">
+              {updateInfo.current_version} → {updateInfo.latest_version}
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            Nova versão do agente Kodo disponível.
+          </p>
+        </div>
+      </div>
+
+      {/* Command area */}
+      <div className="mt-3 ml-6">
         {showCommand ? (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Terminal className="h-3 w-3 flex-shrink-0" />
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Terminal className="h-3 w-3 shrink-0" />
               <span>Execute no seu cluster:</span>
             </div>
             <div className="relative bg-muted/50 rounded-md">
-              <pre className="text-[10px] sm:text-xs p-2 sm:p-3 font-mono overflow-x-auto pr-10 whitespace-pre-wrap break-all sm:whitespace-pre sm:break-normal">
+              <pre className="text-[10px] p-2 pr-8 font-mono overflow-x-auto" style={{ wordBreak: "break-all", whiteSpace: "pre-wrap" }}>
                 {updateCommand}
               </pre>
               <Button
                 variant="ghost"
                 size="icon"
-                className="absolute top-1 right-1 h-6 w-6 sm:h-7 sm:w-7 hover:bg-blue-500/20"
+                className="absolute top-1 right-1 h-6 w-6 hover:bg-blue-500/20"
                 onClick={copyCommand}
               >
                 <Copy className="h-3 w-3" />
@@ -139,23 +150,14 @@ export function AgentUpdateBanner() {
           <Button
             variant="outline"
             size="sm"
-            className="border-blue-500/50 hover:bg-blue-500/20 text-xs sm:text-sm h-8 sm:h-9"
+            className="border-blue-500/40 hover:bg-blue-500/20 text-xs h-7"
             onClick={() => setShowCommand(true)}
           >
-            <Terminal className="h-3 w-3 mr-2" />
+            <Terminal className="h-3 w-3 mr-1.5" />
             Ver Comando
           </Button>
         )}
-      </AlertDescription>
-      
-      <Button
-        variant="ghost"
-        size="icon"
-        className="absolute top-2 right-2 h-6 w-6 hover:bg-blue-500/20"
-        onClick={() => setDismissed(true)}
-      >
-        <X className="h-3 w-3" />
-      </Button>
-    </Alert>
+      </div>
+    </div>
   );
 }

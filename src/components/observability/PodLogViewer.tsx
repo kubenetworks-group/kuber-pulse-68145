@@ -266,12 +266,22 @@ export const PodLogViewer = ({ pods: podsProp, onRefresh, loading: externalLoadi
       const [, lvl, ts, src, msg] = k8s;
       const lvlColor = lvl === "E" || lvl === "F" ? "#f47067" : lvl === "W" ? "#e3b341" : lvl === "I" ? "#3fb950" : "#8b949e";
       const msgColor = lvl === "E" || lvl === "F" ? "#ffa198" : lvl === "W" ? "#e3b341" : "#e6edf3";
+      // Two-row layout: metadata on first line, message on second.
+      // Avoids the single-character vertical stacking that happens when the message
+      // span has no horizontal room left after shrink-0 metadata columns consume the width.
       return (
-        <div key={idx} className="flex gap-2 leading-[1.6] min-w-0">
-          <span className="shrink-0 w-3 font-bold text-center" style={{ color: lvlColor }}>{lvl}</span>
-          <span className="shrink-0 tabular-nums" style={{ color: "#484f58" }}>{ts}</span>
-          <span className="shrink-0 max-w-[18ch] truncate" style={{ color: "#484f58" }} title={src}>{src}</span>
-          <span className="break-all" style={{ color: msgColor }}>{msg}</span>
+        <div key={idx} className="min-w-0 mb-1">
+          <div className="flex items-center gap-1.5 leading-[1.4]">
+            <span className="shrink-0 font-bold" style={{ color: lvlColor, width: "0.7rem" }}>{lvl}</span>
+            <span className="shrink-0 text-[10px] tabular-nums" style={{ color: "#484f58" }}>{ts}</span>
+            <span className="shrink-0 text-[10px] truncate" style={{ color: "#484f58", maxWidth: "16ch" }} title={src}>{src}</span>
+          </div>
+          <div
+            className="pl-3 leading-[1.5]"
+            style={{ color: msgColor, wordBreak: "break-word", overflowWrap: "anywhere" }}
+          >
+            {msg}
+          </div>
         </div>
       );
     }
@@ -281,7 +291,15 @@ export const PodLogViewer = ({ pods: podsProp, onRefresh, loading: externalLoadi
     const isWarn  = /\b(warn|WARN|warning|WARNING)\b|^W\d{4}/.test(line);
 
     return (
-      <div key={idx} className="leading-[1.6] break-all" style={{ color: isError ? "#ffa198" : isWarn ? "#e3b341" : "#e6edf3" }}>
+      <div
+        key={idx}
+        className="leading-[1.6]"
+        style={{
+          color: isError ? "#ffa198" : isWarn ? "#e3b341" : "#e6edf3",
+          wordBreak: "break-word",
+          overflowWrap: "anywhere",
+        }}
+      >
         {line}
       </div>
     );
@@ -291,12 +309,12 @@ export const PodLogViewer = ({ pods: podsProp, onRefresh, loading: externalLoadi
     <>
       <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base font-semibold flex items-center gap-2">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <CardTitle className="text-base font-semibold flex items-center gap-2 shrink-0">
               <Terminal className="w-4 h-4 text-green-400" />
               Logs de Containers
             </CardTitle>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <Button
                 variant="ghost"
                 size="sm"
@@ -306,10 +324,10 @@ export const PodLogViewer = ({ pods: podsProp, onRefresh, loading: externalLoadi
                 title="Atualizar lista de pods"
               >
                 <RotateCcw className={`w-3.5 h-3.5 ${podsLoading || externalLoading ? "animate-spin" : ""}`} />
-                Atualizar pods
+                <span className="hidden sm:inline">Atualizar pods</span>
               </Button>
               <Select value={tailLines} onValueChange={setTailLines}>
-                <SelectTrigger className="w-28 h-8 text-xs">
+                <SelectTrigger className="w-24 sm:w-28 h-8 text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -347,7 +365,7 @@ export const PodLogViewer = ({ pods: podsProp, onRefresh, loading: externalLoadi
           )}
 
           {/* Search + namespace filter row */}
-          <div className="flex gap-2 mb-3">
+          <div className="flex flex-col sm:flex-row gap-2 mb-3">
             <div className="relative flex-1">
               <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-muted-foreground" />
               <Input
@@ -359,7 +377,7 @@ export const PodLogViewer = ({ pods: podsProp, onRefresh, loading: externalLoadi
             </div>
             {namespaces.length > 1 && (
               <Select value={namespaceFilter} onValueChange={setNamespaceFilter}>
-                <SelectTrigger className="w-44 h-9 text-xs gap-1.5">
+                <SelectTrigger className="w-full sm:w-44 h-9 text-xs gap-1.5">
                   <Filter className="w-3.5 h-3.5 text-muted-foreground" />
                   <SelectValue placeholder="Namespace" />
                 </SelectTrigger>
@@ -392,23 +410,23 @@ export const PodLogViewer = ({ pods: podsProp, onRefresh, loading: externalLoadi
                   }}
                 >
                   <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <FileText className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary transition-colors" />
+                    <FileText className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
                     <span className="text-xs font-mono truncate">{pod.name}</span>
-                    <Badge variant="outline" className="text-[10px] px-1.5">{pod.namespace}</Badge>
+                    <Badge variant="outline" className="text-[10px] px-1.5 shrink-0 hidden xs:inline-flex">{pod.namespace}</Badge>
                     {pod.restarts > 0 && (
-                      <Badge variant="destructive" className="text-[10px] px-1.5">
-                        {pod.restarts} restarts
+                      <Badge variant="destructive" className="text-[10px] px-1.5 shrink-0">
+                        {pod.restarts}↺
                       </Badge>
                     )}
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 shrink-0">
                     <Badge
                       variant={pod.status === "Running" ? "default" : "destructive"}
                       className="text-[10px]"
                     >
                       {pod.status}
                     </Badge>
-                    <Button variant="ghost" size="sm" className="h-6 text-[10px] opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button variant="ghost" size="sm" className="h-6 text-[10px] opacity-0 group-hover:opacity-100 transition-opacity hidden sm:flex">
                       Ver Logs
                     </Button>
                   </div>
@@ -420,14 +438,14 @@ export const PodLogViewer = ({ pods: podsProp, onRefresh, loading: externalLoadi
       </Card>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden rounded-xl" style={{ background: "#161b22", border: "1px solid #30363d" }}>
+        <DialogContent className="w-[calc(100vw-1rem)] sm:max-w-5xl max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden rounded-xl" style={{ background: "#161b22", border: "1px solid #30363d" }}>
           <DialogHeader className="px-4 pt-3 pb-3 shrink-0" style={{ borderBottom: "1px solid #21262d" }}>
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <DialogTitle className="flex items-center gap-2 text-sm" style={{ color: "#e6edf3" }}>
-                <Terminal className="w-4 h-4" style={{ color: "#3fb950" }} />
-                <span className="font-mono">{selectedPod?.namespace}/{selectedPod?.name}</span>
+            <div className="flex items-start justify-between gap-2 flex-wrap">
+              <DialogTitle className="flex items-center gap-2 text-sm min-w-0" style={{ color: "#e6edf3" }}>
+                <Terminal className="w-4 h-4 shrink-0" style={{ color: "#3fb950" }} />
+                <span className="font-mono truncate">{selectedPod?.namespace}/{selectedPod?.name}</span>
               </DialogTitle>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 {availableContainers.length > 1 && (
                   <Select
                     value={selectedContainer}
@@ -436,7 +454,7 @@ export const PodLogViewer = ({ pods: podsProp, onRefresh, loading: externalLoadi
                       if (selectedPod) fetchLogs(selectedPod, v);
                     }}
                   >
-                    <SelectTrigger className="w-44 h-7 text-xs">
+                    <SelectTrigger className="w-36 sm:w-44 h-7 text-xs">
                       <SelectValue placeholder="Container" />
                     </SelectTrigger>
                     <SelectContent>
@@ -491,8 +509,8 @@ export const PodLogViewer = ({ pods: podsProp, onRefresh, loading: externalLoadi
 
           {/* Terminal — always dark regardless of app theme */}
           <div
-            className="flex-1 min-h-0 overflow-hidden"
-            style={{ background: "#0d1117", margin: "0 16px 16px 16px", borderRadius: "8px", border: "1px solid #21262d" }}
+            className="flex-1 min-h-0 overflow-hidden mx-2 mb-2 sm:mx-4 sm:mb-4 rounded-lg"
+            style={{ background: "#0d1117", border: "1px solid #21262d" }}
           >
             {loadingLogs ? (
               <div className="h-64 flex flex-col items-center justify-center gap-3">
@@ -502,7 +520,7 @@ export const PodLogViewer = ({ pods: podsProp, onRefresh, loading: externalLoadi
               </div>
             ) : (
               <div
-                className="h-full overflow-y-auto p-4 text-[11.5px] font-mono"
+                className="h-full overflow-y-auto p-2 sm:p-4 text-[11.5px] font-mono"
                 style={{ color: "#e6edf3", scrollbarColor: "#30363d #0d1117" }}
               >
                 {logs

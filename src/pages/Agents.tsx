@@ -52,6 +52,21 @@ interface AgentKey {
   };
 }
 
+// ─── Semver helpers ───────────────────────────────────────────────────────────
+
+function cmpSemver(v1: string, v2: string): number {
+  const n = (v: string) => v.replace(/^v/, "").split(".").map(Number);
+  const [a1, b1, c1] = n(v1);
+  const [a2, b2, c2] = n(v2);
+  return a1 !== a2 ? a1 - a2 : b1 !== b2 ? b1 - b2 : c1 - c2;
+}
+
+// Returns true only when agentV is strictly older than latestV (proper semver, not string compare)
+function isAgentOutdated(agentV: string, latestV: string): boolean {
+  if (!agentV || !latestV) return false;
+  return cmpSemver(agentV, latestV) < 0;
+}
+
 // ─── Status helpers ───────────────────────────────────────────────────────────
 
 function getAgentStatus(agent: AgentKey, latestVersion?: string | null): {
@@ -73,7 +88,7 @@ function getAgentStatus(agent: AgentKey, latestVersion?: string | null): {
     // Only show "Desatualizado" if the agent version is truly behind the latest
     const agentV = (agent.clusters?.agent_version ?? "").replace(/^v/, "");
     const latestV = (latestVersion ?? "").replace(/^v/, "");
-    const trulyOutdated = agent.clusters?.agent_update_available && agentV && latestV && agentV !== latestV;
+    const trulyOutdated = agent.clusters?.agent_update_available && isAgentOutdated(agentV, latestV);
     if (trulyOutdated) {
       return { label: "Desatualizado", color: C.warn, dim: C.warnD, border: C.warnB };
     }
@@ -549,11 +564,12 @@ spec:
               const authFailure    = isLikelyAuthFailure(agent);
               const patchSecretId  = `patch-${agent.id}`;
 
-              // Client-side guard: if agent is already on latest version, never show update banner
-              // regardless of stale DB flag (may not have been cleared yet)
+              // Client-side guard: only show update banner if agent is strictly OLDER than latest.
+              // Avoids false positives when agent version is newer than the DB-registered latest
+              // (e.g. after a manual update before the DB migration runs).
               const agentVersionNorm = (agent.clusters?.agent_version ?? "").replace(/^v/, "");
               const latestVersionNorm = (latestAgentVersion ?? "").replace(/^v/, "");
-              const effectiveUpdateAvail = updateAvail && agentVersionNorm !== latestVersionNorm && agentVersionNorm !== "";
+              const effectiveUpdateAvail = updateAvail && isAgentOutdated(agentVersionNorm, latestVersionNorm);
 
               return (
                 <div

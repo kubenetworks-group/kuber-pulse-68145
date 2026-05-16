@@ -141,6 +141,15 @@ All colors MUST be HSL.
     @apply bg-muted-foreground/50;
   }
 
+  /* Hide scrollbar while keeping scrollability (used for horizontal tab bars on mobile) */
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
   /* Tech grid pattern background */
   .bg-grid-pattern {
     background-image: 

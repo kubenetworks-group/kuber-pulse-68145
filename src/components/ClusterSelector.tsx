@@ -27,10 +27,10 @@ export const ClusterSelector = () => {
   }
 
   return (
-    <div className="flex items-center gap-2">
-      <Server className="w-4 h-4 text-muted-foreground" />
+    <div className="flex items-center gap-2 min-w-0">
+      <Server className="w-4 h-4 text-muted-foreground shrink-0" />
       <Select value={selectedClusterId || undefined} onValueChange={setSelectedClusterId}>
-        <SelectTrigger className="w-[280px]">
+        <SelectTrigger className="w-[160px] xs:w-[200px] sm:w-[280px]">
           <SelectValue placeholder={t('clusters.selectCluster')} />
         </SelectTrigger>
         <SelectContent>

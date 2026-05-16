@@ -94,14 +94,14 @@ interface Tab { id: string; label: string; Icon: React.ElementType; badge?: numb
 
 function TabBar({ tabs, active, onChange }: { tabs: Tab[]; active: string; onChange: (id: string) => void }) {
   return (
-    <div className="flex border-b border-border">
+    <div className="flex border-b border-border overflow-x-auto scrollbar-none">
       {tabs.map(({ id, label, Icon, badge, badgeColor }) => {
         const on = active === id;
         return (
           <button
             key={id} onClick={() => onChange(id)}
             className={cn(
-              "flex items-center gap-1.5 px-4 py-2.5 text-sm transition-colors duration-150 outline-none",
+              "flex items-center gap-1.5 px-3 sm:px-4 py-2.5 text-xs sm:text-sm transition-colors duration-150 outline-none whitespace-nowrap shrink-0",
               "border-b-2 -mb-px",
               on
                 ? "text-foreground font-medium"
@@ -253,7 +253,7 @@ export default function RiskPanel() {
           style={{ borderLeftWidth: 3, borderLeftColor: riskColor }}
         >
           {/* Top row */}
-          <div className="px-7 py-5 flex items-center justify-between gap-6 flex-wrap">
+          <div className="px-4 sm:px-7 py-4 sm:py-5 flex items-center justify-between gap-4 flex-wrap">
             {/* Left: title + cluster */}
             <div className="flex flex-col gap-2 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
@@ -288,7 +288,7 @@ export default function RiskPanel() {
             </div>
 
             {/* Right: risk badge + score ring + refresh */}
-            <div className="flex items-center gap-4 flex-shrink-0">
+            <div className="flex items-center gap-3 flex-shrink-0 ml-auto">
               <div className="text-right">
                 <div
                   className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md mb-1"
@@ -335,22 +335,22 @@ export default function RiskPanel() {
               <div
                 key={label}
                 className={cn(
-                  "flex items-center gap-3 px-6 py-3 transition-colors duration-150 hover:bg-muted/50",
+                  "flex flex-col items-center sm:flex-row sm:items-center gap-1 sm:gap-3 px-2 sm:px-6 py-2.5 sm:py-3 transition-colors duration-150 hover:bg-muted/50",
                   i < 3 && "border-r border-border"
                 )}
               >
                 <span
-                  className="rounded-full flex-shrink-0"
+                  className="rounded-full flex-shrink-0 hidden sm:block"
                   style={{ width: 4, height: 4, background: color, boxShadow: `0 0 5px ${color}` }}
                 />
-                <div>
+                <div className="text-center sm:text-left">
                   <div
                     className="font-bold tabular-nums leading-none"
-                    style={{ fontFamily: "'JetBrains Mono','Geist Mono',monospace", fontSize: 22, color }}
+                    style={{ fontFamily: "'JetBrains Mono','Geist Mono',monospace", fontSize: 18, color }}
                   >
                     {value}
                   </div>
-                  <div className="text-[10px] text-muted-foreground uppercase tracking-widest mt-0.5">
+                  <div className="text-[9px] sm:text-[10px] text-muted-foreground uppercase tracking-wide sm:tracking-widest mt-0.5 leading-tight">
                     {label}
                   </div>
                 </div>

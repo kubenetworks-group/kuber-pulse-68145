@@ -123,7 +123,7 @@ export const NodeDetailsCard = ({
       </div>
 
       {/* Resources Grid */}
-      <div className="grid grid-cols-2 gap-4 mb-4">
+      <div className="grid grid-cols-2 xs:grid-cols-2 gap-3 mb-4">
         <div className="space-y-2 p-3 rounded-lg bg-gradient-to-br from-blue-500/5 to-blue-500/10 border border-blue-500/20">
           <div className="flex items-center gap-2">
             <div className="p-1.5 rounded-md bg-blue-500/20">
@@ -188,27 +188,27 @@ export const NodeDetailsCard = ({
   return (
     <Card className="overflow-hidden bg-gradient-to-br from-card via-card to-card/50 border-border/50 shadow-lg">
       {/* Header with animated gradient */}
-      <div className="relative p-6 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent overflow-hidden">
+      <div className="relative p-4 sm:p-6 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent overflow-hidden">
         <div className="absolute inset-0 bg-grid-white/[0.02] pointer-events-none"></div>
         <div className="absolute -top-24 -right-24 w-48 h-48 bg-primary/10 rounded-full blur-3xl animate-pulse"></div>
-        <div className="relative flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="p-4 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/10 backdrop-blur-sm shadow-lg">
-              <Server className="w-7 h-7 text-primary" />
+        <div className="relative flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <div className="p-3 sm:p-4 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/10 backdrop-blur-sm shadow-lg shrink-0">
+              <Server className="w-5 h-5 sm:w-7 sm:h-7 text-primary" />
             </div>
-            <div>
-              <h3 className="text-2xl font-bold bg-gradient-to-r from-foreground via-foreground/90 to-foreground/70 bg-clip-text text-transparent">
+            <div className="min-w-0">
+              <h3 className="text-lg sm:text-2xl font-bold bg-gradient-to-r from-foreground via-foreground/90 to-foreground/70 bg-clip-text text-transparent truncate">
                 Node Infrastructure
               </h3>
-              <div className="flex items-center gap-2 mt-1">
-                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                  <Zap className="w-4 h-4 text-primary" />
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                <div className="flex items-center gap-1.5 text-xs sm:text-sm text-muted-foreground">
+                  <Zap className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary shrink-0" />
                   <span className="font-medium">{nodes.length} nodes ativos</span>
                 </div>
                 {dataAge && (
                   <>
-                    <span className="text-muted-foreground/50">•</span>
-                    <span className="text-xs text-muted-foreground">Atualizado {dataAge}</span>
+                    <span className="text-muted-foreground/50 hidden sm:inline">•</span>
+                    <span className="text-xs text-muted-foreground hidden sm:inline">Atualizado {dataAge}</span>
                   </>
                 )}
               </div>
@@ -218,18 +218,18 @@ export const NodeDetailsCard = ({
             <button
               onClick={handleRefresh}
               disabled={refreshing}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all disabled:opacity-50"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all disabled:opacity-50 shrink-0"
               title="Atualizar métricas"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-              Atualizar
+              <span className="hidden xs:inline">Atualizar</span>
             </button>
           )}
         </div>
       </div>
 
-      <div className="p-6">
-        <Tabs defaultValue="overview" className="space-y-6">
+      <div className="p-3 sm:p-6">
+        <Tabs defaultValue="overview" className="space-y-4 sm:space-y-6">
           <TabsList className="grid w-full grid-cols-3 h-12 p-1 bg-muted/50">
             <TabsTrigger 
               value="overview" 
@@ -271,7 +271,7 @@ export const NodeDetailsCard = ({
                       <div>
                         <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">CPU Total</p>
                         <div className="flex items-baseline gap-2 mt-1.5">
-                          <span className="text-4xl font-bold tabular-nums text-blue-500">{totalCPU}</span>
+                          <span className="text-2xl sm:text-4xl font-bold tabular-nums text-blue-500">{totalCPU}</span>
                           <span className="text-sm text-muted-foreground font-medium">cores</span>
                         </div>
                       </div>
@@ -311,7 +311,7 @@ export const NodeDetailsCard = ({
                       <div>
                         <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Memória Total</p>
                         <div className="flex items-baseline gap-2 mt-1.5">
-                          <span className="text-4xl font-bold tabular-nums text-purple-500">{totalMemory.toFixed(1)}</span>
+                          <span className="text-2xl sm:text-4xl font-bold tabular-nums text-purple-500">{totalMemory.toFixed(1)}</span>
                           <span className="text-sm text-muted-foreground font-medium">GB</span>
                         </div>
                       </div>

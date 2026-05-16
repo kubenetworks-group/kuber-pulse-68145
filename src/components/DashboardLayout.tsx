@@ -7,7 +7,7 @@ import { AgentUpdateButton } from "./AgentUpdateButton";
 import { UserProfileDropdown } from "./UserProfileDropdown";
 import { useState, useEffect, useRef } from "react";
 import { useLocation } from "react-router-dom";
-import { Menu, X } from "lucide-react";
+import { Menu, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "./ui/button";
 import { useAuditLog } from "@/hooks/useAuditLog";
 
@@ -58,41 +58,45 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
   // Hide cluster selector on settings and admin pages
   const hideClusterSelector = ['/settings', '/admin'].includes(location.pathname);
 
-  const sidebarWidth = sidebarCollapsed ? 'w-16' : 'w-64';
+  // Desktop: collapsed = icon-only (w-16), expanded = full (w-64)
+  // Mobile: sidebar always overlays as full-width (w-64); desktop width follows collapsed state
+  const desktopSidebarWidth = sidebarCollapsed ? 'lg:w-16' : 'lg:w-64';
   const mainMargin = sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64';
 
   return (
     <div className="min-h-screen bg-background">
       {/* Mobile overlay */}
       {sidebarOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
-      
-      {/* Sidebar */}
+
+      {/* Sidebar — always w-64 on mobile overlay, desktop width follows collapsed state */}
       <div className={`
-        fixed left-0 top-0 bottom-0 z-50 transition-all duration-300 ${sidebarWidth}
+        fixed left-0 top-0 bottom-0 z-50 transition-all duration-300
+        w-64 ${desktopSidebarWidth}
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
-        {/* Mobile close button */}
-        {sidebarOpen && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute top-3 right-3 z-50 lg:hidden bg-background/50 hover:bg-background/80"
-            onClick={() => setSidebarOpen(false)}
-          >
-            <X className="h-5 w-5" />
-          </Button>
-        )}
-        <Sidebar 
-          collapsed={sidebarCollapsed} 
+        <Sidebar
+          // Mobile overlay: always show full sidebar with labels (not icon-only)
+          // Desktop: respect the collapsed state
+          collapsed={sidebarOpen ? false : sidebarCollapsed}
           onNavigate={() => setSidebarOpen(false)}
           onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
           onCollapse={() => setSidebarCollapsed(true)}
         />
+
+        {/* Mobile edge handle — visible tab on the right side to close the drawer */}
+        <button
+          className="lg:hidden absolute top-1/2 -translate-y-1/2 -right-8 z-50 flex items-center justify-center w-8 h-14 rounded-r-xl shadow-lg transition-all duration-200 active:scale-95"
+          style={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderLeft: "none" }}
+          onClick={() => setSidebarOpen(false)}
+          aria-label="Fechar menu"
+        >
+          <ChevronLeft className="w-4 h-4 text-muted-foreground" />
+        </button>
       </div>
 
       {/* Main content */}
@@ -108,10 +112,11 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
               <Button
                 variant="outline"
                 size="icon"
-                className="lg:hidden flex-shrink-0 h-10 w-10 border-border"
-                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="lg:hidden flex-shrink-0 h-9 w-9 border-border"
+                onClick={() => setSidebarOpen(true)}
+                aria-label="Abrir menu"
               >
-                <Menu className="h-5 w-5" />
+                <Menu className="h-4 w-4" />
               </Button>
               {!hideClusterSelector && <ClusterSelector />}
             </div>
