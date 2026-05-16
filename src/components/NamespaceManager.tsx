@@ -147,7 +147,7 @@ export function NamespaceManager() {
         .select("metric_data, collected_at")
         .eq("cluster_id", selectedClusterId)
         .eq("metric_type", "namespace_resources")
-        .order("collected_at", { ascending: false })
+        .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
 
@@ -168,7 +168,7 @@ export function NamespaceManager() {
           .select("metric_data, collected_at")
           .eq("cluster_id", selectedClusterId)
           .eq("metric_type", "pod_details")
-          .order("collected_at", { ascending: false })
+          .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle(),
         supabase
@@ -176,7 +176,7 @@ export function NamespaceManager() {
           .select("metric_data")
           .eq("cluster_id", selectedClusterId)
           .eq("metric_type", "pvcs")
-          .order("collected_at", { ascending: false })
+          .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle(),
       ]);
@@ -296,18 +296,46 @@ export function NamespaceManager() {
 
   // ─── Actions ─────────────────────────────────────────────────────────────────
 
+  const waitForCommand = useCallback(
+    async (commandId: string, timeoutMs = 30_000): Promise<{ ok: boolean; error?: string }> => {
+      const deadline = Date.now() + timeoutMs;
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 2000));
+        const { data } = await supabase
+          .from("agent_commands")
+          .select("status, result")
+          .eq("id", commandId)
+          .maybeSingle();
+        if (!data) continue;
+        if (data.status === "completed") return { ok: true };
+        if (data.status === "failed") {
+          const res = data.result as any;
+          return { ok: false, error: res?.error || "Comando falhou" };
+        }
+      }
+      return { ok: false, error: "Timeout: agente não respondeu" };
+    },
+    []
+  );
+
   const handleCreate = async () => {
     if (!newName.trim() || !selectedClusterId || !user) return;
     const ns = newName.trim().toLowerCase().replace(/[^a-z0-9-]/g, "-");
     setCreating(true);
     try {
-      await sendAgentCommand(selectedClusterId, user.id, "create_namespace", {
+      const cmd = await sendAgentCommand(selectedClusterId, user.id, "create_namespace", {
         namespace: ns,
       });
-      toast.success(`Namespace "${ns}" criado com sucesso`);
       setShowCreate(false);
       setNewName("");
-      setTimeout(fetchNamespaces, 2000);
+      const toastId = toast.loading(`Criando namespace "${ns}"...`);
+      const result = await waitForCommand(cmd.id);
+      if (result.ok) {
+        toast.success(`Namespace "${ns}" criado com sucesso`, { id: toastId });
+        setTimeout(fetchNamespaces, 1500);
+      } else {
+        toast.error(result.error || `Erro ao criar "${ns}"`, { id: toastId });
+      }
     } catch (err: any) {
       toast.error(err.message || "Erro ao criar namespace");
     } finally {
@@ -318,14 +346,20 @@ export function NamespaceManager() {
   const handleDelete = async (ns: NamespaceInfo) => {
     if (!selectedClusterId || !user) return;
     setDeleting(true);
+    setDeleteNs(null);
+    setResourcesNs(null);
     try {
-      await sendAgentCommand(selectedClusterId, user.id, "delete_namespace", {
+      const cmd = await sendAgentCommand(selectedClusterId, user.id, "delete_namespace", {
         namespace: ns.name,
       });
-      toast.success(`Deleção de "${ns.name}" enviada ao agente`);
-      setDeleteNs(null);
-      setResourcesNs(null);
-      setTimeout(fetchNamespaces, 3000);
+      const toastId = toast.loading(`Deletando namespace "${ns.name}"...`);
+      const result = await waitForCommand(cmd.id);
+      if (result.ok) {
+        toast.success(`Namespace "${ns.name}" deletado com sucesso`, { id: toastId });
+        setTimeout(fetchNamespaces, 1500);
+      } else {
+        toast.error(result.error || `Erro ao deletar "${ns.name}"`, { id: toastId });
+      }
     } catch (err: any) {
       toast.error(err.message || "Erro ao deletar namespace");
     } finally {
@@ -336,25 +370,35 @@ export function NamespaceManager() {
   const handleBulkDelete = async () => {
     if (!selectedClusterId || !user || selected.size === 0) return;
     setBulkDeleting(true);
+    setShowBulkConfirm(false);
     const names = Array.from(selected);
+    setSelected(new Set());
+    const toastId = toast.loading(`Deletando ${names.length} namespace(s)...`);
     let success = 0;
     let failed = 0;
-    for (const name of names) {
-      try {
-        await sendAgentCommand(selectedClusterId, user.id, "delete_namespace", {
-          namespace: name,
-        });
-        success++;
-      } catch {
-        failed++;
-      }
-    }
+    await Promise.all(
+      names.map(async (name) => {
+        try {
+          const cmd = await sendAgentCommand(selectedClusterId, user.id, "delete_namespace", {
+            namespace: name,
+          });
+          const result = await waitForCommand(cmd.id);
+          if (result.ok) success++;
+          else failed++;
+        } catch {
+          failed++;
+        }
+      })
+    );
     setBulkDeleting(false);
-    setShowBulkConfirm(false);
-    setSelected(new Set());
-    if (success > 0) toast.success(`${success} namespace(s) enviados para deleção`);
-    if (failed > 0) toast.error(`${failed} namespace(s) falharam`);
-    setTimeout(fetchNamespaces, 3000);
+    if (failed === 0) {
+      toast.success(`${success} namespace(s) deletado(s) com sucesso`, { id: toastId });
+    } else if (success === 0) {
+      toast.error(`Todos os ${failed} namespace(s) falharam — verifique as permissões RBAC`, { id: toastId });
+    } else {
+      toast.warning(`${success} deletado(s), ${failed} falharam`, { id: toastId });
+    }
+    setTimeout(fetchNamespaces, 1500);
   };
 
   // ─── Render ──────────────────────────────────────────────────────────────────

@@ -53,7 +53,7 @@ export const useNodeMetrics = (clusterId: string | undefined) => {
           .select('metric_data, collected_at')
           .eq('cluster_id', clusterId)
           .eq('metric_type', 'nodes')
-          .order('collected_at', { ascending: false })
+          .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle(),
         supabase
@@ -61,7 +61,7 @@ export const useNodeMetrics = (clusterId: string | undefined) => {
           .select('metric_data, collected_at')
           .eq('cluster_id', clusterId)
           .eq('metric_type', 'cpu')
-          .order('collected_at', { ascending: false })
+          .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle(),
         supabase
@@ -69,7 +69,7 @@ export const useNodeMetrics = (clusterId: string | undefined) => {
           .select('metric_data, collected_at')
           .eq('cluster_id', clusterId)
           .eq('metric_type', 'memory')
-          .order('collected_at', { ascending: false })
+          .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle(),
       ]);

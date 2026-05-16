@@ -201,13 +201,13 @@ const FinOps = () => {
     const [podRes, nodeRes, pvcRes] = await Promise.all([
       supabase.from("agent_metrics").select("metric_data, collected_at")
         .eq("cluster_id", selectedClusterId).eq("metric_type", "pod_details")
-        .order("collected_at", { ascending: false }).limit(1).maybeSingle(),
+        .order("created_at", { ascending: false }).limit(1).maybeSingle(),
       supabase.from("agent_metrics").select("metric_data")
         .eq("cluster_id", selectedClusterId).eq("metric_type", "nodes")
-        .order("collected_at", { ascending: false }).limit(1).maybeSingle(),
+        .order("created_at", { ascending: false }).limit(1).maybeSingle(),
       supabase.from("agent_metrics").select("metric_data")
         .eq("cluster_id", selectedClusterId).eq("metric_type", "pvcs")
-        .order("collected_at", { ascending: false }).limit(1).maybeSingle(),
+        .order("created_at", { ascending: false }).limit(1).maybeSingle(),
     ]);
 
     const pods: any[] = (podRes.data?.metric_data as any)?.pods || [];

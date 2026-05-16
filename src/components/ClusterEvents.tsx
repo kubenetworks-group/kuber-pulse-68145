@@ -51,7 +51,7 @@ export const ClusterEvents = () => {
         .select('*')
         .eq('cluster_id', selectedClusterId)
         .eq('metric_type', 'events')
-        .order('collected_at', { ascending: false })
+        .order('created_at', { ascending: false })
         .limit(1);
 
       if (error) throw error;

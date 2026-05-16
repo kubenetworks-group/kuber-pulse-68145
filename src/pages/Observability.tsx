@@ -68,7 +68,7 @@ const Observability = () => {
             </TabsContent>
 
             <TabsContent value="logs" className="space-y-5">
-              <PodLogViewer pods={pods} />
+              <PodLogViewer pods={pods} onRefresh={refetch} loading={loading} />
             </TabsContent>
 
             <TabsContent value="agents" className="space-y-5">

@@ -54,7 +54,7 @@ export const useClusterAnalysis = (clusterId: string | null) => {
           .select("metric_data")
           .eq("cluster_id", clusterId)
           .eq("metric_type", "nodes")
-          .order("collected_at", { ascending: false })
+          .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle();
 
@@ -70,7 +70,7 @@ export const useClusterAnalysis = (clusterId: string | null) => {
           .select("metric_data")
           .eq("cluster_id", clusterId)
           .eq("metric_type", "pods")
-          .order("collected_at", { ascending: false })
+          .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle();
 
@@ -182,7 +182,7 @@ export const useClusterAnalysis = (clusterId: string | null) => {
             .select("metric_data")
             .eq("cluster_id", clusterId)
             .eq("metric_type", "pod_details")
-            .order("collected_at", { ascending: false })
+            .order("created_at", { ascending: false })
             .limit(1)
             .maybeSingle();
 

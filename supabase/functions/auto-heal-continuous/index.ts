@@ -211,9 +211,11 @@ serve(async (req) => {
       'linkerd', 'linkerd-viz',
       'metallb-system', 'ingress-nginx', 'cert-manager',
       'monitoring', 'prometheus', 'grafana',
+      'lens-metrics', // Lens IDE monitoring stack — system-managed
       'flux-system', 'argocd', 'argo',
       'velero', 'external-secrets', 'sealed-secrets',
       'gatekeeper-system', 'kyverno',
+      'cattle-system', 'cattle-global-data', 'cattle-global-nt', 'cattle-capi-system', // Rancher
       'kodo', 'kodo-agent', // Agent namespace — NEVER auto-restart, manual only
       'local-path-storage', 'default',
     ];
@@ -642,6 +644,50 @@ serve(async (req) => {
           .single();
 
         try {
+          const healReason = hasBackOff ? 'auto_heal_backoff' : isNotReady ? 'auto_heal_not_ready' : 'auto_heal_restarts';
+
+          // ── Insert audit record BEFORE restarting so there's always context ──
+          // episode_key uses restart_count+1 to avoid collision with the capture from
+          // agent-receive-metrics (which keys on the current restart_count).
+          const episodeKey = `${pod.namespace}/${pod.name}/${restartCount}_autoheal`;
+          const { data: auditRecord } = await supabase
+            .from('pod_restart_audit')
+            .upsert({
+              cluster_id,
+              user_id: userId,
+              pod_name:       pod.name,
+              namespace:      pod.namespace,
+              restart_reason: healReason,
+              restart_count:  restartCount,
+              analysis_summary: triggerReason,
+              source:         'auto_heal',
+              episode_key:    episodeKey,
+              previous_state: { has_backoff: hasBackOff, is_not_ready: isNotReady },
+            }, { onConflict: 'cluster_id,episode_key', ignoreDuplicates: true })
+            .select('id')
+            .maybeSingle();
+
+          // Also queue get_pod_logs (current logs, not previous) so we can see WHY it misbehaves
+          if (auditRecord?.id) {
+            await supabase.from('agent_commands').insert({
+              cluster_id,
+              user_id: userId,
+              command_type: 'get_pod_logs',
+              command_params: {
+                pod_name:       pod.name,
+                namespace:      pod.namespace,
+                tail_lines:     150,
+                previous:       false,
+                episode_key:    episodeKey,
+                restart_reason: healReason,
+                restart_count:  restartCount,
+                user_id:        userId,
+                trigger:        'auto_restart_capture',
+              },
+              status: 'pending',
+            });
+          }
+
           // Create restart command for the agent
           await supabase
             .from('agent_commands')
@@ -652,7 +698,7 @@ serve(async (req) => {
               command_params: {
                 pod_name: pod.name,
                 namespace: pod.namespace,
-                reason: hasBackOff ? 'auto_heal_backoff' : isNotReady ? 'auto_heal_not_ready' : 'auto_heal_restarts',
+                reason: healReason,
               },
               status: 'pending',
             });

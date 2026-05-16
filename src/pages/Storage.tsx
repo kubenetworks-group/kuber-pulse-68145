@@ -122,14 +122,14 @@ const Storage = () => {
             .select('pvc_name, namespace, used_bytes, collected_at')
             .eq('cluster_id', selectedClusterId)
             .gt('used_bytes', 0)
-            .order('collected_at', { ascending: false })
+            .order('created_at', { ascending: false })
             .limit(200),
           supabase
             .from('agent_metrics')
             .select('metric_data, collected_at')
             .eq('cluster_id', selectedClusterId)
             .eq('metric_type', 'pvcs')
-            .order('collected_at', { ascending: false })
+            .order('created_at', { ascending: false })
             .limit(1),
         ]);
 

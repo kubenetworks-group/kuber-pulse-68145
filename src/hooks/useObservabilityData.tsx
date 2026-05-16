@@ -64,7 +64,7 @@ export const useObservabilityData = () => {
         .from("agent_metrics")
         .select("*")
         .eq("cluster_id", selectedClusterId)
-        .order("collected_at", { ascending: false })
+        .order("created_at", { ascending: false })
         .limit(50);
 
       if (error) {

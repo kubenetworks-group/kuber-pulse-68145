@@ -92,14 +92,26 @@ serve(async (req) => {
     let commandParams: any = {};
 
     switch (fix_type) {
-      case 'create_network_policy':
-        commandType = 'create_network_policy';
+      case 'create_network_policy': {
+        const targetNamespace = threat.affected_resources?.[0]?.namespace || 'default';
+        const policyName = `kodo-deny-ingress-${Date.now()}`;
+        commandType = 'apply_manifests';
         commandParams = {
-          namespace: threat.affected_resources?.[0]?.namespace || 'default',
-          policy_name: `deny-ingress-${Date.now()}`,
-          policy_type: 'deny-all-ingress',
+          manifests: `apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ${policyName}
+  namespace: ${targetNamespace}
+  labels:
+    managed-by: kodo-auto-heal
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress`,
+          description: `Auto-created deny-all-ingress NetworkPolicy for namespace ${targetNamespace}`,
         };
         break;
+      }
 
       case 'apply_resource_limits':
         commandType = 'update_deployment_resources';

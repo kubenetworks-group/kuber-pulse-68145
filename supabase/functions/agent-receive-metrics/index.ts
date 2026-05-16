@@ -758,11 +758,27 @@ serve(async (req) => {
 
     console.log(`✅ Successfully stored ${metrics.length} metrics`);
 
-    // Auto-capture pre-restart logs for pods with spontaneous crashes
-    // Detects pods with restart_count > 0 that haven't been captured yet
-    const podDetailsMetric = metrics.find((m: any) => m.type === 'pod_details');
+    // ── Auto-detect & capture container restarts ──────────────────────────────
+    // Uses pod_details (restart counts + last_state) and pod_previous_logs
+    // (already collected in this same batch) to immediately create audit records.
+    // Deduplication: episode_key = namespace/pod_name/restart_count (unique index).
+    // Staleness guard: only process restarts whose finished_at is within 30 minutes,
+    // preventing false positives from historical restart counts on running pods.
+    const podDetailsMetric      = metrics.find((m: any) => m.type === 'pod_details');
+    const podPreviousLogsMetric = metrics.find((m: any) => m.type === 'pod_previous_logs');
+
     if (podDetailsMetric) {
-      const pods = (podDetailsMetric.data as any)?.pods || [];
+      const pods: any[] = (podDetailsMetric.data as any)?.pods || [];
+
+      // Build lookup: namespace/pod_name(/container)? → log entry from this batch
+      const logsMap = new Map<string, any>();
+      const prevLogsArr: any[] = (podPreviousLogsMetric?.data as any)?.pods_with_logs || [];
+      for (const entry of prevLogsArr) {
+        const keyFull = `${entry.namespace}/${entry.pod}/${entry.container}`;
+        const keyPod  = `${entry.namespace}/${entry.pod}`;
+        logsMap.set(keyFull, entry);
+        if (!logsMap.has(keyPod)) logsMap.set(keyPod, entry); // first container as fallback
+      }
 
       if (pods.length > 0) {
         const { data: clusterOwner } = await supabaseClient
@@ -772,21 +788,49 @@ serve(async (req) => {
           .single();
 
         if (clusterOwner) {
-          // Namespaces excluded from any automated action — must be manual only
           const excludedNamespaces = new Set([
-            'kodo', 'kodo-agent',
-            'kube-system', 'kube-public', 'kube-node-lease',
+            'kodo', 'kodo-agent', 'kube-system', 'kube-public', 'kube-node-lease',
           ]);
+          // Only process restarts that finished within the last 30 minutes
+          const thirtyMinsAgo = new Date(Date.now() - 30 * 60 * 1000);
 
           for (const pod of pods) {
-            if (excludedNamespaces.has(pod.namespace)) continue; // never auto-act on agent or system pods
+            if (excludedNamespaces.has(pod.namespace)) continue;
             const totalRestarts = pod.total_restarts || 0;
             if (totalRestarts === 0) continue;
 
-            // episode_key identifies this specific restart count for this pod
+            // Extract restart info from the first container with a last_state
+            let restartReason  = 'Unknown';
+            let exitCode: number | null = null;
+            let containerName  = '';
+            let lastFinishedAt: Date | null = null;
+            let lastState: any = {};
+
+            for (const cs of pod.containers || []) {
+              const ls = cs.last_state || {};
+              if (ls.status === 'terminated' || ls.reason || ls.exit_code != null) {
+                restartReason = ls.reason || 'Unknown';
+                exitCode      = ls.exit_code ?? null;
+                if (exitCode === 137) restartReason = 'OOMKilled';
+                containerName = cs.name || '';
+                lastState     = ls;
+                if (ls.finished_at) lastFinishedAt = new Date(ls.finished_at);
+                break;
+              }
+            }
+
+            // ── Staleness guard ──────────────────────────────────────────────
+            // If finished_at is available and older than 30 min → skip.
+            // If finished_at is missing we fall through and let deduplication
+            // (episode_key) handle any repeated processing.
+            if (lastFinishedAt && lastFinishedAt < thirtyMinsAgo) {
+              console.log(`⏭️ Skipping stale restart ${pod.namespace}/${pod.name} (finished ${lastFinishedAt.toISOString()})`);
+              continue;
+            }
+
             const episodeKey = `${pod.namespace}/${pod.name}/${totalRestarts}`;
 
-            // Check if this restart episode is already captured
+            // Deduplication check
             const { data: existing } = await supabaseClient
               .from('pod_restart_audit')
               .select('id')
@@ -796,55 +840,76 @@ serve(async (req) => {
 
             if (existing) continue;
 
-            // Check if a capture command is already pending for this pod+episode
-            const { data: pending } = await supabaseClient
-              .from('agent_commands')
-              .select('id')
-              .eq('cluster_id', cluster_id)
-              .eq('command_type', 'get_pod_logs')
-              .eq('status', 'pending')
-              .filter('command_params->pod_name', 'eq', pod.name)
-              .filter('command_params->namespace', 'eq', pod.namespace)
-              .filter('command_params->trigger', 'eq', 'auto_restart_capture')
-              .maybeSingle();
+            // ── Logs from this same batch (preferred — no extra round-trip) ──
+            const logEntry = logsMap.get(`${pod.namespace}/${pod.name}/${containerName}`)
+                          ?? logsMap.get(`${pod.namespace}/${pod.name}`);
+            const logs = logEntry?.logs || null;
 
-            if (pending) continue;
+            if (logs) {
+              // Direct creation: logs are already here
+              const { data: auditRecord } = await supabaseClient
+                .from('pod_restart_audit')
+                .insert({
+                  cluster_id,
+                  user_id:             clusterOwner.user_id,
+                  pod_name:            pod.name,
+                  namespace:           pod.namespace,
+                  container_name:      containerName || null,
+                  restart_reason:      restartReason,
+                  exit_code:           exitCode,
+                  restart_count:       totalRestarts,
+                  container_logs:      logs,
+                  container_logs_tail: 100,
+                  episode_key:         episodeKey,
+                  source:              'auto',
+                  previous_state:      lastState,
+                  terminated_at:       lastFinishedAt?.toISOString() ?? logEntry?.last_finished_at ?? null,
+                })
+                .select('id')
+                .maybeSingle();
 
-            // Detect restart cause from container last_state
-            let restartReason = 'Unknown';
-            let exitCode: number | null = null;
-            for (const cs of pod.containers || []) {
-              const lastState = cs.last_state || {};
-              if (lastState.reason) {
-                restartReason = lastState.reason;
-                exitCode = lastState.exit_code ?? null;
-                if (lastState.exit_code === 137) restartReason = 'OOMKilled';
-                break;
+              if (auditRecord?.id) {
+                console.log(`✅ Auto-captured restart: ${episodeKey}`);
+                // Fire-and-forget AI root-cause analysis
+                supabaseClient.functions.invoke('analyze-restart-cause', {
+                  body: { audit_id: auditRecord.id, cluster_id }
+                }).catch((err: any) => console.error('analyze-restart-cause failed:', err));
               }
-            }
+            } else {
+              // Fallback: queue get_pod_logs --previous (when pod_previous_logs not in batch)
+              // This also handles the case where the pod is still running and Previous logs are available
+              const { data: pendingCmd } = await supabaseClient
+                .from('agent_commands')
+                .select('id')
+                .eq('cluster_id', cluster_id)
+                .eq('command_type', 'get_pod_logs')
+                .in('status', ['pending', 'sent'])
+                .filter('command_params->pod_name', 'eq', pod.name)
+                .filter('command_params->namespace', 'eq', pod.namespace)
+                .filter('command_params->trigger', 'eq', 'auto_restart_capture')
+                .maybeSingle();
 
-            // Create command to fetch previous (crashed) container logs
-            const { error: cmdError } = await supabaseClient.from('agent_commands').insert({
-              cluster_id,
-              user_id: clusterOwner.user_id,
-              command_type: 'get_pod_logs',
-              command_params: {
-                pod_name: pod.name,
-                namespace: pod.namespace,
-                tail_lines: 200,
-                previous: true,
-                episode_key: episodeKey,
-                restart_reason: restartReason,
-                exit_code: exitCode,
-                restart_count: totalRestarts,
-                user_id: clusterOwner.user_id,
-                trigger: 'auto_restart_capture',
-              },
-              status: 'pending',
-            });
-
-            if (!cmdError) {
-              console.log(`📋 Auto log-capture queued: ${episodeKey}`);
+              if (!pendingCmd) {
+                const { error: cmdErr } = await supabaseClient.from('agent_commands').insert({
+                  cluster_id,
+                  user_id:      clusterOwner.user_id,
+                  command_type: 'get_pod_logs',
+                  command_params: {
+                    pod_name:       pod.name,
+                    namespace:      pod.namespace,
+                    tail_lines:     200,
+                    previous:       true,
+                    episode_key:    episodeKey,
+                    restart_reason: restartReason,
+                    exit_code:      exitCode,
+                    restart_count:  totalRestarts,
+                    user_id:        clusterOwner.user_id,
+                    trigger:        'auto_restart_capture',
+                  },
+                  status: 'pending',
+                });
+                if (!cmdErr) console.log(`📋 Auto log-capture queued (fallback cmd): ${episodeKey}`);
+              }
             }
           }
         }

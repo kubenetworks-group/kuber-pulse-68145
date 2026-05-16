@@ -227,7 +227,7 @@ export const useRiskAnalysis = () => {
         .select("metric_data")
         .eq("cluster_id", selectedClusterId)
         .eq("metric_type", "security")
-        .order("collected_at", { ascending: false })
+        .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
 
@@ -237,7 +237,7 @@ export const useRiskAnalysis = () => {
         .select("metric_data")
         .eq("cluster_id", selectedClusterId)
         .eq("metric_type", "pod_details")
-        .order("collected_at", { ascending: false })
+        .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
 
@@ -247,7 +247,7 @@ export const useRiskAnalysis = () => {
         .select("metric_data")
         .eq("cluster_id", selectedClusterId)
         .eq("metric_type", "nodes")
-        .order("collected_at", { ascending: false })
+        .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
 
@@ -257,7 +257,7 @@ export const useRiskAnalysis = () => {
         .select("metric_data")
         .eq("cluster_id", selectedClusterId)
         .eq("metric_type", "events")
-        .order("collected_at", { ascending: false })
+        .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
 
@@ -279,7 +279,7 @@ export const useRiskAnalysis = () => {
         .select("metric_data")
         .eq("cluster_id", selectedClusterId)
         .eq("metric_type", "services")
-        .order("collected_at", { ascending: false })
+        .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
 

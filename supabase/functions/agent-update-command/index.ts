@@ -244,32 +244,58 @@ serve(async (req) => {
       const params = currentCommand.command_params as any;
       if (params?.trigger === 'auto_restart_capture') {
         const logs = (result as any).logs || '';
+        const clusterId = apiKeyData.cluster_id;
 
-        const { data: auditRecord } = await supabaseClient
-          .from('pod_restart_audit')
-          .upsert({
-            cluster_id: apiKeyData.cluster_id,
-            user_id: params.user_id,
-            pod_name: params.pod_name,
-            namespace: params.namespace,
-            restart_reason: params.restart_reason || 'Unknown',
-            exit_code: params.exit_code || null,
-            restart_count: params.restart_count || 0,
-            container_logs: logs || null,
-            container_logs_tail: 200,
-            episode_key: params.episode_key,
-            source: 'auto',
-            command_id,
-            previous_state: {},
-          }, { onConflict: 'cluster_id,episode_key', ignoreDuplicates: true })
-          .select('id')
-          .maybeSingle();
+        // Try to update an existing record (created by auto-heal pre-capture)
+        let auditId: string | null = null;
+        if (params.episode_key) {
+          const { data: existing } = await supabaseClient
+            .from('pod_restart_audit')
+            .select('id, container_logs')
+            .eq('cluster_id', clusterId)
+            .eq('episode_key', params.episode_key)
+            .maybeSingle();
 
-        if (auditRecord?.id) {
+          if (existing?.id) {
+            // Update the existing record with logs (only if we actually have logs)
+            if (logs) {
+              await supabaseClient
+                .from('pod_restart_audit')
+                .update({ container_logs: logs, container_logs_tail: 200, command_id })
+                .eq('id', existing.id);
+            }
+            auditId = existing.id;
+          }
+        }
+
+        // No existing record — create a new one
+        if (!auditId) {
+          const { data: auditRecord } = await supabaseClient
+            .from('pod_restart_audit')
+            .upsert({
+              cluster_id: clusterId,
+              user_id: params.user_id,
+              pod_name: params.pod_name,
+              namespace: params.namespace,
+              restart_reason: params.restart_reason || 'Unknown',
+              exit_code: params.exit_code || null,
+              restart_count: params.restart_count || 0,
+              container_logs: logs || null,
+              container_logs_tail: 200,
+              episode_key: params.episode_key,
+              source: 'auto',
+              command_id,
+              previous_state: {},
+            }, { onConflict: 'cluster_id,episode_key', ignoreDuplicates: true })
+            .select('id')
+            .maybeSingle();
+          auditId = auditRecord?.id ?? null;
+        }
+
+        if (auditId) {
           console.log(`📋 Saved restart audit: ${params.episode_key}, invoking AI analysis`);
-          // Fire-and-forget: invoke AI analysis asynchronously
           supabaseClient.functions.invoke('analyze-restart-cause', {
-            body: { audit_id: auditRecord.id, cluster_id: apiKeyData.cluster_id }
+            body: { audit_id: auditId, cluster_id: clusterId }
           }).catch((err: any) => console.error('Failed to invoke analyze-restart-cause:', err));
         }
       }

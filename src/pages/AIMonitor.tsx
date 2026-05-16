@@ -9,10 +9,11 @@ import { CronJobsStatus } from "@/components/CronJobsStatus";
 import { ScanHistoryTab } from "@/components/ScanHistoryTab";
 import { AgentUpdateBanner } from "@/components/AgentUpdateBanner";
 import { useSecurityThreats } from "@/hooks/useSecurityThreats";
-import { Bot, Activity, CheckCircle, Shield, Zap, AlertCircle, History, ShieldAlert, Settings2, Clock, Server, AlertTriangle, RefreshCw, Search, FileText, Sliders } from "lucide-react";
+import { Bot, Activity, CheckCircle, Shield, Zap, AlertCircle, History, ShieldAlert, Settings2, Clock, Server, AlertTriangle, RefreshCw, Search, FileText, Sliders, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AutoHealConfig } from "@/components/AutoHealConfig";
 import { AutoHealActionsLog } from "@/components/AutoHealActionsLog";
+import { PodRemediationPanel } from "@/components/PodRemediationPanel";
 import { ClusterSecurityAnalysis } from "@/components/ClusterSecurityAnalysis";
 import { PodRestartAuditTab } from "@/components/PodRestartAuditTab";
 import { toast } from "@/hooks/use-toast";
@@ -522,8 +523,12 @@ export default function AIMonitor() {
         </div>
 
         {/* ── Tabs ── */}
-        <Tabs defaultValue="autoheal" className="space-y-4">
+        <Tabs defaultValue="remediation" className="space-y-4">
           <TabsList className="flex flex-nowrap overflow-x-auto w-full max-w-full h-auto p-1 gap-0.5">
+            <TabsTrigger value="remediation" className="flex items-center gap-2 text-sm whitespace-nowrap px-3 py-2">
+              <Wrench className="h-4 w-4" />
+              <span>Remediações</span>
+            </TabsTrigger>
             <TabsTrigger value="autoheal" className="flex items-center gap-2 text-sm whitespace-nowrap px-3 py-2">
               <Sliders className="h-4 w-4" />
               <span>Automação</span>
@@ -1304,6 +1309,13 @@ export default function AIMonitor() {
             {scanHistory.length > 0 && (
               <ScanHistoryTab scanHistory={scanHistory} loading={loading} />
             )}
+          </TabsContent>
+
+          {/* Remediation Tab */}
+          <TabsContent value="remediation" className="space-y-5">
+            <div className="rounded-xl border border-border bg-card p-4">
+              <PodRemediationPanel />
+            </div>
           </TabsContent>
 
           {/* Auto-Heal Tab */}

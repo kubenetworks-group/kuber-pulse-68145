@@ -208,7 +208,7 @@ export default function Developer() {
         .select("metric_data")
         .eq("cluster_id", selectedClusterId)
         .eq("metric_type", "pod_details")
-        .order("collected_at", { ascending: false })
+        .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
 

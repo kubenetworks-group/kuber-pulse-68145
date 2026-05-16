@@ -15,8 +15,11 @@ metadata:
   name: kodo-agent
 rules:
 - apiGroups: [""]
-  resources: ["nodes", "pods", "events", "namespaces", "persistentvolumeclaims", "persistentvolumes", "secrets", "resourcequotas", "limitranges", "services", "configmaps", "endpoints"]
+  resources: ["nodes", "pods", "events", "persistentvolumeclaims", "persistentvolumes", "secrets", "resourcequotas", "limitranges", "services", "configmaps", "endpoints"]
   verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["namespaces"]
+  verbs: ["get", "list", "watch", "create", "delete"]
 - apiGroups: [""]
   resources: ["nodes/proxy", "nodes/stats"]
   verbs: ["get"]
@@ -83,7 +86,7 @@ metadata:
   namespace: kodo
 type: Opaque
 stringData:
-  API_KEY: "kp_5471324356aa4091aae5453794dad2f5"
+  API_KEY: "kp_e73b403925384b38957d0fae7d37f4df"
   CLUSTER_ID: "4e630bb6-99f5-4787-b662-f8fe38dbc31f"
 ---
 apiVersion: apps/v1

@@ -46,7 +46,7 @@ export const CleanMetricsRow = ({ clusterData, cpuUsage, memoryUsage }: CleanMet
         .select("metric_data")
         .eq("cluster_id", selectedClusterId)
         .eq("metric_type", "pods")
-        .order("collected_at", { ascending: false })
+        .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
 

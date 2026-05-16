@@ -1,16 +1,26 @@
-User-agent: Googlebot
-Allow: /
-
-User-agent: Bingbot
-Allow: /
-
-User-agent: Twitterbot
-Allow: /
-
-User-agent: facebookexternalhit
-Allow: /
-
 User-agent: *
 Allow: /
+Allow: /sobre
+Allow: /auth
+Allow: /pricing
+Allow: /plans
+Allow: /terms
+Allow: /privacy
+
+# Rotas autenticadas — não indexar
+Disallow: /dashboard
+Disallow: /welcome
+Disallow: /clusters
+Disallow: /ai-monitor
+Disallow: /risk
+Disallow: /costs
+Disallow: /storage
+Disallow: /settings
+Disallow: /agents
+Disallow: /migration
+Disallow: /developer
+Disallow: /ai-savings
+Disallow: /observability
+Disallow: /admin
 
 Sitemap: https://kodo.kubenetworks.com.br/sitemap.xml

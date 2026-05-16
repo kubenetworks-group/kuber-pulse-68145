@@ -144,7 +144,7 @@ function IngressStatusPanel({ clusterId }: { clusterId: string | null }) {
         .select("metric_data")
         .eq("cluster_id", clusterId)
         .eq("metric_type", "pod_details")
-        .order("collected_at", { ascending: false })
+        .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
 
@@ -183,7 +183,7 @@ function IngressStatusPanel({ clusterId }: { clusterId: string | null }) {
         .select("metric_data")
         .eq("cluster_id", clusterId)
         .eq("metric_type", "ingresses")
-        .order("collected_at", { ascending: false })
+        .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
 
