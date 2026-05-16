@@ -18,6 +18,7 @@ import (
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -2479,6 +2480,9 @@ func executeCommands(clientset *kubernetes.Clientset, config AgentConfig, comman
 		case "delete_namespace":
 			log.Printf("   → Deleting namespace...")
 			result, err = deleteNamespace(clientset, cmd.CommandParams)
+		case "create_network_policy":
+			log.Printf("   → Creating network policy...")
+			result, err = createNetworkPolicy(clientset, cmd.CommandParams)
 		default:
 			err = fmt.Errorf("unknown command type: %s", cmd.CommandType)
 			log.Printf("   ❌ Unknown command type!")
@@ -3090,9 +3094,19 @@ func updateDeploymentImage(clientset *kubernetes.Clientset, params map[string]in
 }
 
 func updateDeploymentResources(clientset *kubernetes.Clientset, params map[string]interface{}) (map[string]interface{}, error) {
-	deploymentName := params["deployment_name"].(string)
-	namespace := params["namespace"].(string)
-	containerName := params["container_name"].(string)
+	deploymentName, _ := params["deployment_name"].(string)
+	namespace, _ := params["namespace"].(string)
+	containerName, _ := params["container_name"].(string)
+
+	if namespace == "" {
+		namespace = "default"
+	}
+	if deploymentName == "" {
+		return nil, fmt.Errorf("deployment_name is required (got nil/empty); apply_to_all_pods is not supported")
+	}
+
+	// If container_name is empty, target all containers in the deployment.
+	applyToAll := containerName == ""
 
 	deployment, err := clientset.AppsV1().Deployments(namespace).Get(
 		context.Background(),
@@ -3106,38 +3120,44 @@ func updateDeploymentResources(clientset *kubernetes.Clientset, params map[strin
 	// Find and update the container resources
 	updated := false
 	for i, container := range deployment.Spec.Template.Spec.Containers {
-		if container.Name == containerName {
-			if cpuRequest, ok := params["cpu_request"].(string); ok {
-				if deployment.Spec.Template.Spec.Containers[i].Resources.Requests == nil {
-					deployment.Spec.Template.Spec.Containers[i].Resources.Requests = corev1.ResourceList{}
-				}
-				deployment.Spec.Template.Spec.Containers[i].Resources.Requests[corev1.ResourceCPU] = resource.MustParse(cpuRequest)
+		if !applyToAll && container.Name != containerName {
+			continue
+		}
+		if cpuRequest, ok := params["cpu_request"].(string); ok && cpuRequest != "" {
+			if deployment.Spec.Template.Spec.Containers[i].Resources.Requests == nil {
+				deployment.Spec.Template.Spec.Containers[i].Resources.Requests = corev1.ResourceList{}
 			}
-			if memRequest, ok := params["memory_request"].(string); ok {
-				if deployment.Spec.Template.Spec.Containers[i].Resources.Requests == nil {
-					deployment.Spec.Template.Spec.Containers[i].Resources.Requests = corev1.ResourceList{}
-				}
-				deployment.Spec.Template.Spec.Containers[i].Resources.Requests[corev1.ResourceMemory] = resource.MustParse(memRequest)
+			deployment.Spec.Template.Spec.Containers[i].Resources.Requests[corev1.ResourceCPU] = resource.MustParse(cpuRequest)
+		}
+		if memRequest, ok := params["memory_request"].(string); ok && memRequest != "" {
+			if deployment.Spec.Template.Spec.Containers[i].Resources.Requests == nil {
+				deployment.Spec.Template.Spec.Containers[i].Resources.Requests = corev1.ResourceList{}
 			}
-			if cpuLimit, ok := params["cpu_limit"].(string); ok {
-				if deployment.Spec.Template.Spec.Containers[i].Resources.Limits == nil {
-					deployment.Spec.Template.Spec.Containers[i].Resources.Limits = corev1.ResourceList{}
-				}
-				deployment.Spec.Template.Spec.Containers[i].Resources.Limits[corev1.ResourceCPU] = resource.MustParse(cpuLimit)
+			deployment.Spec.Template.Spec.Containers[i].Resources.Requests[corev1.ResourceMemory] = resource.MustParse(memRequest)
+		}
+		if cpuLimit, ok := params["cpu_limit"].(string); ok && cpuLimit != "" {
+			if deployment.Spec.Template.Spec.Containers[i].Resources.Limits == nil {
+				deployment.Spec.Template.Spec.Containers[i].Resources.Limits = corev1.ResourceList{}
 			}
-			if memLimit, ok := params["memory_limit"].(string); ok {
-				if deployment.Spec.Template.Spec.Containers[i].Resources.Limits == nil {
-					deployment.Spec.Template.Spec.Containers[i].Resources.Limits = corev1.ResourceList{}
-				}
-				deployment.Spec.Template.Spec.Containers[i].Resources.Limits[corev1.ResourceMemory] = resource.MustParse(memLimit)
+			deployment.Spec.Template.Spec.Containers[i].Resources.Limits[corev1.ResourceCPU] = resource.MustParse(cpuLimit)
+		}
+		if memLimit, ok := params["memory_limit"].(string); ok && memLimit != "" {
+			if deployment.Spec.Template.Spec.Containers[i].Resources.Limits == nil {
+				deployment.Spec.Template.Spec.Containers[i].Resources.Limits = corev1.ResourceList{}
 			}
-			updated = true
+			deployment.Spec.Template.Spec.Containers[i].Resources.Limits[corev1.ResourceMemory] = resource.MustParse(memLimit)
+		}
+		updated = true
+		if !applyToAll {
 			break
 		}
 	}
 
 	if !updated {
-		return nil, fmt.Errorf("container %s not found in deployment", containerName)
+		if applyToAll {
+			return nil, fmt.Errorf("deployment %s/%s has no containers", namespace, deploymentName)
+		}
+		return nil, fmt.Errorf("container %s not found in deployment %s/%s", containerName, namespace, deploymentName)
 	}
 
 	_, err = clientset.AppsV1().Deployments(namespace).Update(
@@ -3158,6 +3178,99 @@ func updateDeploymentResources(clientset *kubernetes.Clientset, params map[strin
 		"message":    "Deployment resources updated successfully. Kubernetes will roll out the new pods.",
 	}, nil
 }
+
+// createNetworkPolicy creates a NetworkPolicy in the target namespace.
+// Supported policy_type values: "deny-all-ingress" (default), "deny-all-egress", "deny-all".
+// If apply_to_all_namespaces=true, the policy is applied to every non-system namespace.
+func createNetworkPolicy(clientset *kubernetes.Clientset, params map[string]interface{}) (map[string]interface{}, error) {
+	namespace, _ := params["namespace"].(string)
+	policyName, _ := params["policy_name"].(string)
+	policyType, _ := params["policy_type"].(string)
+	applyAll, _ := params["apply_to_all_namespaces"].(bool)
+
+	if policyName == "" {
+		policyName = fmt.Sprintf("kodo-deny-%d", time.Now().Unix())
+	}
+	if policyType == "" {
+		policyType = "deny-all-ingress"
+	}
+
+	buildSpec := func() networkingv1.NetworkPolicySpec {
+		spec := networkingv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{}, // empty = all pods
+		}
+		switch policyType {
+		case "deny-all-egress":
+			spec.PolicyTypes = []networkingv1.PolicyType{networkingv1.PolicyTypeEgress}
+		case "deny-all":
+			spec.PolicyTypes = []networkingv1.PolicyType{networkingv1.PolicyTypeIngress, networkingv1.PolicyTypeEgress}
+		default:
+			spec.PolicyTypes = []networkingv1.PolicyType{networkingv1.PolicyTypeIngress}
+		}
+		return spec
+	}
+
+	targets := []string{}
+	if applyAll {
+		nsList, err := clientset.CoreV1().Namespaces().List(context.Background(), metav1.ListOptions{})
+		if err != nil {
+			return nil, fmt.Errorf("failed to list namespaces: %v", err)
+		}
+		systemNS := map[string]bool{
+			"kube-system": true, "kube-public": true, "kube-node-lease": true,
+			"cert-manager": true, "ingress": true, "kodo": true, "lens-metrics": true,
+		}
+		for _, ns := range nsList.Items {
+			if !systemNS[ns.Name] {
+				targets = append(targets, ns.Name)
+			}
+		}
+	} else {
+		if namespace == "" {
+			namespace = "default"
+		}
+		targets = append(targets, namespace)
+	}
+
+	created := []string{}
+	skipped := []string{}
+	for _, ns := range targets {
+		np := &networkingv1.NetworkPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      policyName,
+				Namespace: ns,
+				Labels:    map[string]string{"managed-by": "kodo-agent"},
+			},
+			Spec: buildSpec(),
+		}
+		_, err := clientset.NetworkingV1().NetworkPolicies(ns).Create(
+			context.Background(), np, metav1.CreateOptions{},
+		)
+		if err != nil {
+			if strings.Contains(err.Error(), "already exists") {
+				skipped = append(skipped, ns)
+				continue
+			}
+			return map[string]interface{}{
+				"action":  "create_network_policy",
+				"created": created,
+				"skipped": skipped,
+				"error":   err.Error(),
+			}, fmt.Errorf("failed to create network policy in %s: %v", ns, err)
+		}
+		created = append(created, ns)
+	}
+
+	return map[string]interface{}{
+		"action":      "network_policy_created",
+		"policy_name": policyName,
+		"policy_type": policyType,
+		"created":     created,
+		"skipped":     skipped,
+		"message":     fmt.Sprintf("NetworkPolicy %s applied to %d namespace(s), %d already existed", policyName, len(created), len(skipped)),
+	}, nil
+}
+
 
 func updateCommandStatus(config AgentConfig, commandID string, result map[string]interface{}, err error) {
 	status := "completed"
