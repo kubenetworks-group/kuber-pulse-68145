@@ -5,7 +5,6 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Terminal, Search, Download, Copy, Loader2, FileText, AlertTriangle, RefreshCw, Filter, RotateCcw, ExternalLink } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -57,39 +56,26 @@ export const PodLogViewer = ({ pods: podsProp, onRefresh, loading: externalLoadi
   // Unique namespaces for the filter dropdown
   const namespaces = Array.from(new Set(pods.map((p) => p.namespace))).sort();
 
-  // Direct query for the freshest pod_details metric — independent of useObservabilityData
+  // Send a send_metrics command to the agent so it pushes fresh data immediately,
+  // then the realtime subscription in useObservabilityData picks up the new row.
   const refreshPods = useCallback(async () => {
-    if (!selectedClusterId) return;
+    if (!selectedClusterId || !user) return;
     setPodsLoading(true);
     try {
-      const { data } = await supabase
-        .from("agent_metrics")
-        .select("metric_data, collected_at")
-        .eq("cluster_id", selectedClusterId)
-        .eq("metric_type", "pod_details")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (!data?.metric_data) return;
-
-      const raw = data.metric_data as any;
-      const podArr: any[] = raw?.pods ?? [];
-      const parsed: PodData[] = podArr.map((p: any) => ({
-        name: p.name || p.pod_name || "unknown",
-        namespace: p.namespace || "default",
-        status: p.status || p.phase || "Unknown",
-        restarts: p.restarts ?? p.restart_count ?? p.total_restarts ?? 0,
-        cpu: p.cpu || p.cpu_usage || "0m",
-        memory: p.memory || p.memory_usage || "0Mi",
-        node: p.node || p.node_name || "",
-      }));
-
-      setLocalPods(parsed);
+      await supabase.from("agent_commands").insert({
+        cluster_id: selectedClusterId,
+        user_id: user.id,
+        command_type: "send_metrics",
+        command_params: {},
+        status: "pending",
+      });
+      // onRefresh triggers a DB re-read after a brief delay for the agent to respond
+      setTimeout(() => onRefresh?.(), 4000);
     } finally {
-      setPodsLoading(false);
+      // Keep spinner for 5s so user sees feedback
+      setTimeout(() => setPodsLoading(false), 5000);
     }
-  }, [selectedClusterId]);
+  }, [selectedClusterId, user, onRefresh]);
 
   const handleRefresh = useCallback(() => {
     refreshPods();
@@ -259,23 +245,43 @@ export const PodLogViewer = ({ pods: podsProp, onRefresh, loading: externalLoadi
   });
 
   const renderLogLine = (line: string, idx: number) => {
-    const isError = /error|ERROR|FATAL|fatal|Exception|exception|panic/i.test(line);
-    const isWarn = /warn|WARN|warning|WARNING/i.test(line);
-    const isSeparator = line.startsWith("===");
+    if (!line) return <div key={idx} className="h-[1em]" />;
+
+    // Section separator  === ... ===
+    if (line.startsWith("===")) {
+      return (
+        <div key={idx} className="flex items-center gap-2 mt-4 mb-2">
+          <span className="h-px flex-1" style={{ background: "#30363d" }} />
+          <span className="text-[10px] font-semibold tracking-widest uppercase px-2" style={{ color: "#58a6ff" }}>
+            {line.replace(/^=+\s*/, "").replace(/\s*=+$/, "")}
+          </span>
+          <span className="h-px flex-1" style={{ background: "#30363d" }} />
+        </div>
+      );
+    }
+
+    // Kubernetes structured log: I0516 16:40:28.918355    1 file.go:288] message
+    const k8s = line.match(/^([IWEF])(\d{4} \d{2}:\d{2}:\d{2}\.\d+)\s+\d+\s+([^\]]+)\]\s*(.*)/s);
+    if (k8s) {
+      const [, lvl, ts, src, msg] = k8s;
+      const lvlColor = lvl === "E" || lvl === "F" ? "#f47067" : lvl === "W" ? "#e3b341" : lvl === "I" ? "#3fb950" : "#8b949e";
+      const msgColor = lvl === "E" || lvl === "F" ? "#ffa198" : lvl === "W" ? "#e3b341" : "#e6edf3";
+      return (
+        <div key={idx} className="flex gap-2 leading-[1.6] min-w-0">
+          <span className="shrink-0 w-3 font-bold text-center" style={{ color: lvlColor }}>{lvl}</span>
+          <span className="shrink-0 tabular-nums" style={{ color: "#484f58" }}>{ts}</span>
+          <span className="shrink-0 max-w-[18ch] truncate" style={{ color: "#484f58" }} title={src}>{src}</span>
+          <span className="break-all" style={{ color: msgColor }}>{msg}</span>
+        </div>
+      );
+    }
+
+    // Generic error / warn / info coloring
+    const isError = /\b(error|ERROR|FATAL|fatal|Exception|panic|CRIT)\b|^E\d{4}/.test(line);
+    const isWarn  = /\b(warn|WARN|warning|WARNING)\b|^W\d{4}/.test(line);
 
     return (
-      <div
-        key={idx}
-        className={
-          isSeparator
-            ? "text-blue-400 font-semibold mt-3 mb-1"
-            : isError
-            ? "text-red-400"
-            : isWarn
-            ? "text-yellow-400"
-            : "text-foreground/85"
-        }
-      >
+      <div key={idx} className="leading-[1.6] break-all" style={{ color: isError ? "#ffa198" : isWarn ? "#e3b341" : "#e6edf3" }}>
         {line}
       </div>
     );
@@ -414,11 +420,11 @@ export const PodLogViewer = ({ pods: podsProp, onRefresh, loading: externalLoadi
       </Card>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col">
-          <DialogHeader>
+        <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden rounded-xl" style={{ background: "#161b22", border: "1px solid #30363d" }}>
+          <DialogHeader className="px-4 pt-3 pb-3 shrink-0" style={{ borderBottom: "1px solid #21262d" }}>
             <div className="flex items-center justify-between gap-2 flex-wrap">
-              <DialogTitle className="flex items-center gap-2 text-sm">
-                <Terminal className="w-4 h-4 text-green-400" />
+              <DialogTitle className="flex items-center gap-2 text-sm" style={{ color: "#e6edf3" }}>
+                <Terminal className="w-4 h-4" style={{ color: "#3fb950" }} />
                 <span className="font-mono">{selectedPod?.namespace}/{selectedPod?.name}</span>
               </DialogTitle>
               <div className="flex items-center gap-2">
@@ -474,31 +480,38 @@ export const PodLogViewer = ({ pods: podsProp, onRefresh, loading: externalLoadi
           </DialogHeader>
 
           {isPermissionError && (
-            <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs text-amber-600 dark:text-amber-400 mx-0">
+            <div className="flex items-start gap-2 px-4 py-3 text-xs" style={{ background: "#1a1200", borderBottom: "1px solid #30363d", color: "#e3b341" }}>
               <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
               <div>
                 <p className="font-semibold">Permissão ausente no ClusterRole</p>
-                <p className="mt-0.5">Adicione <code className="bg-background/60 px-1 rounded">pods/log</code> ao ClusterRole do kodo-agent e aplique novamente o YAML de configuração.</p>
+                <p className="mt-0.5 opacity-80">Adicione <code className="px-1 rounded font-mono" style={{ background: "#0d1117", color: "#79c0ff" }}>pods/log</code> ao ClusterRole do kodo-agent.</p>
               </div>
             </div>
           )}
 
-          <ScrollArea className="flex-1 min-h-0 rounded-lg border bg-[#0d1117]">
+          {/* Terminal — always dark regardless of app theme */}
+          <div
+            className="flex-1 min-h-0 overflow-hidden"
+            style={{ background: "#0d1117", margin: "0 16px 16px 16px", borderRadius: "8px", border: "1px solid #21262d" }}
+          >
             {loadingLogs ? (
               <div className="h-64 flex flex-col items-center justify-center gap-3">
-                <Loader2 className="w-8 h-8 animate-spin text-green-400" />
-                <p className="text-sm text-muted-foreground">Aguardando resposta do agente...</p>
-                <p className="text-xs text-muted-foreground/60">O agente coleta os logs e retorna em até 30s</p>
+                <Loader2 className="w-8 h-8 animate-spin" style={{ color: "#3fb950" }} />
+                <p className="text-sm" style={{ color: "#8b949e" }}>Aguardando resposta do agente...</p>
+                <p className="text-xs" style={{ color: "#484f58" }}>O agente coleta os logs e retorna em até 30s</p>
               </div>
             ) : (
-              <div className="p-4 text-[11px] font-mono leading-5">
+              <div
+                className="h-full overflow-y-auto p-4 text-[11.5px] font-mono"
+                style={{ color: "#e6edf3", scrollbarColor: "#30363d #0d1117" }}
+              >
                 {logs
                   ? logs.split("\n").map((line, idx) => renderLogLine(line, idx))
-                  : <span className="text-muted-foreground">Nenhum log disponível</span>
+                  : <span style={{ color: "#484f58" }}>Nenhum log disponível</span>
                 }
               </div>
             )}
-          </ScrollArea>
+          </div>
         </DialogContent>
       </Dialog>
     </>

@@ -465,7 +465,7 @@ func main() {
 		select {
 		case <-ticker.C:
 			go sendMetrics(clientset, metricsClient, kubeconfig, config)
-			go getCommands(clientset, config)
+			go getCommands(clientset, metricsClient, kubeconfig, config)
 		}
 	}
 }
@@ -2393,7 +2393,7 @@ type CommandsResponse struct {
 	Commands []Command `json:"commands"`
 }
 
-func getCommands(clientset *kubernetes.Clientset, config AgentConfig) {
+func getCommands(clientset *kubernetes.Clientset, metricsClient *metricsv.Clientset, restConfig *rest.Config, config AgentConfig) {
 	url := fmt.Sprintf("%s/agent-get-commands", config.APIEndpoint)
 	log.Printf("🔍 Polling commands from: %s", url)
 
@@ -2430,7 +2430,7 @@ func getCommands(clientset *kubernetes.Clientset, config AgentConfig) {
 		for i, cmd := range commandsResp.Commands {
 			log.Printf("  [%d] ID=%s Type=%s Params=%v", i+1, cmd.ID, cmd.CommandType, cmd.CommandParams)
 		}
-		executeCommands(clientset, config, commandsResp.Commands)
+		executeCommands(clientset, metricsClient, restConfig, config, commandsResp.Commands)
 	} else {
 		log.Printf("📭 No pending commands")
 	}
@@ -2439,7 +2439,7 @@ func getCommands(clientset *kubernetes.Clientset, config AgentConfig) {
 // ---------------------------------------------
 // COMMAND EXECUTION
 // ---------------------------------------------
-func executeCommands(clientset *kubernetes.Clientset, config AgentConfig, commands []Command) {
+func executeCommands(clientset *kubernetes.Clientset, metricsClient *metricsv.Clientset, restConfig *rest.Config, config AgentConfig, commands []Command) {
 	for _, cmd := range commands {
 		log.Printf("⚡ Executing command: %s (ID: %s)", cmd.CommandType, cmd.ID)
 		log.Printf("   Params: %v", cmd.CommandParams)
@@ -2476,10 +2476,14 @@ func executeCommands(clientset *kubernetes.Clientset, config AgentConfig, comman
 		case "get_pod_logs":
 			log.Printf("   → Fetching pod logs...")
 			result, err = getPodLogs(clientset, cmd.CommandParams)
-		case "collect_cluster_snapshot":
-			log.Printf("   → Collecting cluster snapshot...")
-			markCommandExecuting(config, cmd.ID)
-			result, err = collectClusterSnapshot(clientset, config, cmd.CommandParams)
+		case "send_metrics":
+				log.Printf("   → Forcing immediate metrics push...")
+				go sendMetrics(clientset, metricsClient, restConfig, config)
+				result = map[string]interface{}{"status": "triggered"}
+			case "collect_cluster_snapshot":
+				log.Printf("   → Collecting cluster snapshot...")
+				markCommandExecuting(config, cmd.ID)
+				result, err = collectClusterSnapshot(clientset, config, cmd.CommandParams)
 		case "apply_manifests":
 			log.Printf("   → Applying transformed manifests...")
 			markCommandExecuting(config, cmd.ID)
@@ -4570,6 +4574,31 @@ func applyManifests(clientset *kubernetes.Clientset, params map[string]interface
 	failed := 0
 	applyLog := []map[string]interface{}{}
 
+	// Namespaces that MUST NOT be touched on the target cluster.
+	// These contain infrastructure services or the agent's own credentials —
+	// overwriting them would break cluster networking or authentication.
+	infraNamespaces := map[string]bool{
+		"kube-system":      true,
+		"kube-public":      true,
+		"kube-node-lease":  true,
+		"default":          true,
+		"kodo":             true,        // agent credentials live here
+		"kodo-agent":       true,
+		"calico-system":    true,
+		"calico-apiserver": true,
+		"tigera-operator":  true,
+		"cert-manager":     true,
+		"ingress-nginx":    true,
+		"nginx-ingress":    true,
+		"lens-metrics":     true,        // Lens system namespace
+		"monitoring":       true,
+		"istio-system":     true,
+	}
+
+	isInfraNamespace := func(ns string) bool {
+		return infraNamespaces[ns] || strings.HasPrefix(ns, "kube-")
+	}
+
 	// Detect real StorageClasses on the target cluster before touching PVCs
 	availableSCs, defaultSC := detectTargetStorageClasses(clientset)
 
@@ -4600,7 +4629,7 @@ func applyManifests(clientset *kubernetes.Clientset, params map[string]interface
 			if err := json.Unmarshal(b, &obj); err != nil {
 				continue
 			}
-			if strings.HasPrefix(obj.Name, "kube-") || obj.Name == "default" {
+			if isInfraNamespace(obj.Name) {
 				continue
 			}
 			clearMeta(&obj.ObjectMeta)
@@ -4616,6 +4645,9 @@ func applyManifests(clientset *kubernetes.Clientset, params map[string]interface
 			b, _ := json.Marshal(item)
 			var obj corev1.ConfigMap
 			if err := json.Unmarshal(b, &obj); err != nil {
+				continue
+			}
+			if isInfraNamespace(obj.Namespace) {
 				continue
 			}
 			clearMeta(&obj.ObjectMeta)
@@ -4635,6 +4667,9 @@ func applyManifests(clientset *kubernetes.Clientset, params map[string]interface
 			if obj.Type == corev1.SecretTypeServiceAccountToken {
 				continue // these are auto-created; skip
 			}
+			if isInfraNamespace(obj.Namespace) {
+				continue
+			}
 			clearMeta(&obj.ObjectMeta)
 			_, err := clientset.CoreV1().Secrets(obj.Namespace).Create(ctx, &obj, metav1.CreateOptions{})
 			logResult("Secret", obj.Name, obj.Namespace, err)
@@ -4652,6 +4687,25 @@ func applyManifests(clientset *kubernetes.Clientset, params map[string]interface
 			clearMeta(&pvc.ObjectMeta)
 			pvc.Spec.VolumeName = ""
 			pvc.Status = corev1.PersistentVolumeClaimStatus{}
+
+			// Strip binding annotations — if present, the binding controller thinks the PVC
+			// is already bound and looks for spec.volumeName (which we cleared to ""),
+			// making it go to Lost immediately.
+			bindingAnnotations := []string{
+				"pv.kubernetes.io/bind-completed",
+				"pv.kubernetes.io/bound-by-controller",
+				"pv.kubernetes.io/provisioned-by",
+				"volume.beta.kubernetes.io/storage-provisioner",
+				"volume.kubernetes.io/selected-node",
+			}
+			if pvc.Annotations != nil {
+				for _, key := range bindingAnnotations {
+					delete(pvc.Annotations, key)
+				}
+			}
+			// Strip cloning/snapshot sources — these objects don't exist on the target cluster
+			pvc.Spec.DataSource = nil
+			pvc.Spec.DataSourceRef = nil
 
 			// Remap StorageClass to one that actually exists on this cluster
 			requestedSC := ""
@@ -4723,6 +4777,9 @@ func applyManifests(clientset *kubernetes.Clientset, params map[string]interface
 			if obj.Name == "kubernetes" && obj.Namespace == "default" {
 				continue
 			}
+			if isInfraNamespace(obj.Namespace) {
+				continue
+			}
 			clearMeta(&obj.ObjectMeta)
 			obj.Spec.ClusterIP = ""
 			obj.Spec.ClusterIPs = nil
@@ -4740,6 +4797,9 @@ func applyManifests(clientset *kubernetes.Clientset, params map[string]interface
 			if err := json.Unmarshal(b, &obj); err != nil {
 				failed++
 				applyLog = append(applyLog, map[string]interface{}{"kind": "Deployment", "status": "failed", "error": err.Error()})
+				continue
+			}
+			if isInfraNamespace(obj.Namespace) {
 				continue
 			}
 			clearMeta(&obj.ObjectMeta)
@@ -4762,6 +4822,9 @@ func applyManifests(clientset *kubernetes.Clientset, params map[string]interface
 			b, _ := json.Marshal(item)
 			var obj appsv1.StatefulSet
 			if err := json.Unmarshal(b, &obj); err != nil {
+				continue
+			}
+			if isInfraNamespace(obj.Namespace) {
 				continue
 			}
 			clearMeta(&obj.ObjectMeta)
@@ -4799,8 +4862,8 @@ func applyManifests(clientset *kubernetes.Clientset, params map[string]interface
 			if err := json.Unmarshal(b, &obj); err != nil {
 				continue
 			}
-			if strings.HasPrefix(obj.Namespace, "kube-") {
-				continue // skip system daemonsets
+			if isInfraNamespace(obj.Namespace) {
+				continue
 			}
 			clearMeta(&obj.ObjectMeta)
 			obj.Status = appsv1.DaemonSetStatus{}
@@ -4824,6 +4887,9 @@ func applyManifests(clientset *kubernetes.Clientset, params map[string]interface
 			if err := json.Unmarshal(b, &obj); err != nil {
 				continue
 			}
+			if isInfraNamespace(obj.Namespace) {
+				continue
+			}
 			clearMeta(&obj.ObjectMeta)
 			obj.Status = networkingv1.IngressStatus{}
 			_, err := clientset.NetworkingV1().Ingresses(obj.Namespace).Create(ctx, &obj, metav1.CreateOptions{})
@@ -4844,6 +4910,9 @@ func applyManifests(clientset *kubernetes.Clientset, params map[string]interface
 			b, _ := json.Marshal(item)
 			var obj autoscalingv2.HorizontalPodAutoscaler
 			if err := json.Unmarshal(b, &obj); err != nil {
+				continue
+			}
+			if isInfraNamespace(obj.Namespace) {
 				continue
 			}
 			clearMeta(&obj.ObjectMeta)

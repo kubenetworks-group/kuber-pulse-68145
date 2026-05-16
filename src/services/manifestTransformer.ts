@@ -76,6 +76,8 @@ const CLOUD_ANNOTATIONS_TO_STRIP = [
   "volume.beta.kubernetes.io/storage-provisioner",
   "pv.kubernetes.io/provisioned-by",
   "pv.kubernetes.io/bound-by-controller",
+  "pv.kubernetes.io/bind-completed",        // tells controller PVC is already bound → clears volumeName → Lost
+  "volume.kubernetes.io/selected-node",     // node affinity hint from source cluster, invalid on target
 ];
 
 // AccessModes that need downgrade (multi-node → single-node)
@@ -249,14 +251,17 @@ export function transformManifests(
     }
     meta["annotations"] = cleanAnnotations;
 
-    // Clear immutable fields
+    // Clear immutable fields and binding state
     delete (meta as Record<string, unknown>)["resourceVersion"];
     delete (meta as Record<string, unknown>)["uid"];
     delete (meta as Record<string, unknown>)["creationTimestamp"];
+    delete (meta as Record<string, unknown>)["finalizers"];
     delete (pvcClone as Record<string, unknown>)["status"];
-    if (spec["volumeName"]) {
-      spec["volumeName"] = "";
-    }
+    // Always clear volumeName — if kept, the binding controller treats the PVC as already
+    // bound and looks for that PV on the target cluster (it won't exist → Lost status)
+    delete (spec as Record<string, unknown>)["volumeName"];
+    delete (spec as Record<string, unknown>)["dataSource"];
+    delete (spec as Record<string, unknown>)["dataSourceRef"];
 
     return pvcClone;
   });
