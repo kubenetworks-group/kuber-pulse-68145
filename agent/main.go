@@ -3179,6 +3179,99 @@ func updateDeploymentResources(clientset *kubernetes.Clientset, params map[strin
 	}, nil
 }
 
+// createNetworkPolicy creates a NetworkPolicy in the target namespace.
+// Supported policy_type values: "deny-all-ingress" (default), "deny-all-egress", "deny-all".
+// If apply_to_all_namespaces=true, the policy is applied to every non-system namespace.
+func createNetworkPolicy(clientset *kubernetes.Clientset, params map[string]interface{}) (map[string]interface{}, error) {
+	namespace, _ := params["namespace"].(string)
+	policyName, _ := params["policy_name"].(string)
+	policyType, _ := params["policy_type"].(string)
+	applyAll, _ := params["apply_to_all_namespaces"].(bool)
+
+	if policyName == "" {
+		policyName = fmt.Sprintf("kodo-deny-%d", time.Now().Unix())
+	}
+	if policyType == "" {
+		policyType = "deny-all-ingress"
+	}
+
+	buildSpec := func() networkingv1.NetworkPolicySpec {
+		spec := networkingv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{}, // empty = all pods
+		}
+		switch policyType {
+		case "deny-all-egress":
+			spec.PolicyTypes = []networkingv1.PolicyType{networkingv1.PolicyTypeEgress}
+		case "deny-all":
+			spec.PolicyTypes = []networkingv1.PolicyType{networkingv1.PolicyTypeIngress, networkingv1.PolicyTypeEgress}
+		default:
+			spec.PolicyTypes = []networkingv1.PolicyType{networkingv1.PolicyTypeIngress}
+		}
+		return spec
+	}
+
+	targets := []string{}
+	if applyAll {
+		nsList, err := clientset.CoreV1().Namespaces().List(context.Background(), metav1.ListOptions{})
+		if err != nil {
+			return nil, fmt.Errorf("failed to list namespaces: %v", err)
+		}
+		systemNS := map[string]bool{
+			"kube-system": true, "kube-public": true, "kube-node-lease": true,
+			"cert-manager": true, "ingress": true, "kodo": true, "lens-metrics": true,
+		}
+		for _, ns := range nsList.Items {
+			if !systemNS[ns.Name] {
+				targets = append(targets, ns.Name)
+			}
+		}
+	} else {
+		if namespace == "" {
+			namespace = "default"
+		}
+		targets = append(targets, namespace)
+	}
+
+	created := []string{}
+	skipped := []string{}
+	for _, ns := range targets {
+		np := &networkingv1.NetworkPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      policyName,
+				Namespace: ns,
+				Labels:    map[string]string{"managed-by": "kodo-agent"},
+			},
+			Spec: buildSpec(),
+		}
+		_, err := clientset.NetworkingV1().NetworkPolicies(ns).Create(
+			context.Background(), np, metav1.CreateOptions{},
+		)
+		if err != nil {
+			if strings.Contains(err.Error(), "already exists") {
+				skipped = append(skipped, ns)
+				continue
+			}
+			return map[string]interface{}{
+				"action":  "create_network_policy",
+				"created": created,
+				"skipped": skipped,
+				"error":   err.Error(),
+			}, fmt.Errorf("failed to create network policy in %s: %v", ns, err)
+		}
+		created = append(created, ns)
+	}
+
+	return map[string]interface{}{
+		"action":      "network_policy_created",
+		"policy_name": policyName,
+		"policy_type": policyType,
+		"created":     created,
+		"skipped":     skipped,
+		"message":     fmt.Sprintf("NetworkPolicy %s applied to %d namespace(s), %d already existed", policyName, len(created), len(skipped)),
+	}, nil
+}
+
+
 func updateCommandStatus(config AgentConfig, commandID string, result map[string]interface{}, err error) {
 	status := "completed"
 	if err != nil {
