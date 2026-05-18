@@ -49,12 +49,6 @@
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://kodo.kubenetworks.com.br/auth</loc>
-    <lastmod>2026-05-18</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
-  </url>
-  <url>
     <loc>https://kodo.kubenetworks.com.br/terms</loc>
     <lastmod>2026-05-18</lastmod>
     <changefreq>yearly</changefreq>
