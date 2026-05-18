@@ -49,7 +49,7 @@ export function LeadCaptureForm({ variant = 'a' }: LeadCaptureFormProps) {
       return;
     }
 
-    window.gtag?.('event', 'lead_form_submit', {
+    (window as unknown as { gtag?: (...args: unknown[]) => void }).gtag?.('event', 'lead_form_submit', {
       ab_variant: variant,
       cluster_size: data.cluster_size,
     });
