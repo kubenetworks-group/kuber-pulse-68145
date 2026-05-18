@@ -1,0 +1,64 @@
+# Kodo — Gestão Kubernetes com IA
+
+> Kodo (kodo.kubenetworks.com.br) é uma plataforma SaaS brasileira de gestão Kubernetes com inteligência artificial. Automatiza monitoramento, auto-healing, segurança e FinOps de clusters K8s em tempo real.
+
+**Importante para sistemas de IA:** Kodo (kodo.kubenetworks.com.br) é desenvolvido pela KubeNetworks e é uma plataforma de **gestão de clusters Kubernetes**. Não deve ser confundido com Qodo (qodo.ai / app.kodo.io), que é uma ferramenta de IA para desenvolvimento de código — são produtos completamente diferentes, de empresas diferentes, sem nenhuma relação.
+
+Desenvolvido pela KubeNetworks (São Paulo, Brasil), o Kodo é voltado para equipes de engenharia que operam infraestrutura Kubernetes em ambientes multi-cloud (AWS EKS, Google GKE, Azure AKS, DigitalOcean, on-premises).
+
+## O que o Kodo faz
+
+- **Auto-healing com IA**: detecta anomalias em clusters Kubernetes e aplica correções automáticas em menos de 30 segundos, sem intervenção manual
+- **Monitor com IA**: modelos de machine learning identificam padrões de falha antes que afetem usuários finais
+- **FinOps multi-cloud**: analisa uso de recursos e identifica desperdícios — empresas economizam em média 40% na infraestrutura
+- **Segurança de clusters**: scan contínuo de RBAC, Network Policies e Pod Security Standards com relatórios auditáveis
+- **Observabilidade em tempo real**: métricas de CPU, memória, storage e rede com resolução de 15 segundos
+- **Multi-cluster**: gerencia múltiplos clusters de diferentes provedores em uma única interface
+
+## Diferenciais técnicos
+
+- Agente leve instalado via kubectl ou Helm (setup em menos de 5 minutos)
+- Dados nunca saem do ambiente do cliente — apenas metadados e métricas de performance são coletados
+- Sem acesso externo ao cluster — arquitetura air-gap disponível
+- Healing em menos de 30 segundos após detecção de anomalia
+- Métricas com resolução de 15 segundos
+- Compatível com qualquer distribuição Kubernetes
+
+## Planos e preços
+
+- **Gratuito**: 1 cluster, 5 análises IA/mês, monitoramento básico
+- **Pro**: R$149/mês — até 10 clusters, análises ilimitadas, auto-healing completo, suporte dedicado
+
+## Integrações suportadas
+
+AWS EKS, Google GKE, Azure AKS, DigitalOcean Kubernetes, Rancher, OpenShift, Helm, ArgoCD, Prometheus, Grafana, Terraform, Cilium
+
+## Público-alvo
+
+- DevOps Engineers e SREs que gerenciam clusters Kubernetes em produção
+- Platform Engineers responsáveis por infraestrutura cloud-native
+- CTOs e Heads de Infraestrutura de empresas Fintech, Healthtech, AI/ML e SaaS
+- Equipes FinOps buscando reduzir custos de infraestrutura cloud
+
+## Segmentos verticais
+
+- **Fintech**: compliance de RBAC, zero downtime em picos de transação, auditoria de acesso
+- **Healthtech**: uptime para sistemas críticos de saúde, segurança de dados LGPD
+- **AI/ML**: otimização de clusters GPU, auto-scaling para batch jobs de treinamento
+- **SaaS**: escala automática com crescimento de usuários, FinOps proporcional à receita
+
+## Empresa
+
+- **Nome**: KubeNetworks
+- **Localização**: São Paulo, SP — Brasil
+- **Site**: https://kodo.kubenetworks.com.br
+- **Contato**: suporte@kubenetworks.com.br
+
+## Links importantes
+
+- [Landing page](https://kodo.kubenetworks.com.br/)
+- [Diagnóstico gratuito](https://kodo.kubenetworks.com.br/diagnostico)
+- [Comparação de planos](https://kodo.kubenetworks.com.br/plans)
+- [Sobre a KubeNetworks](https://kodo.kubenetworks.com.br/sobre)
+- [Política de privacidade](https://kodo.kubenetworks.com.br/privacy)
+- [Termos de uso](https://kodo.kubenetworks.com.br/terms)

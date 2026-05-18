@@ -1151,8 +1151,8 @@ export default function About() {
   return (
     <div className="min-h-screen bg-[#050810] text-white antialiased overflow-x-hidden">
       <SEO
-        title="Sobre o Kodo — Kubernetes inteligente para LATAM"
-        description="Conheça o Kodo: a plataforma brasileira de gestão Kubernetes com IA para auto-healing, segurança, FinOps e observabilidade."
+        title="Sobre o Kodo — Gestão Kubernetes com IA feita no Brasil"
+        description="Conheça a KubeNetworks e o Kodo: plataforma brasileira de gestão Kubernetes com IA. Auto-healing automático, FinOps e segurança para clusters K8s em produção."
         path="/sobre"
       />
       <div className="fixed inset-0 -z-10 pointer-events-none">

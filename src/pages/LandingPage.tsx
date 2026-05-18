@@ -803,8 +803,8 @@ export default function LandingPage() {
   return (
     <div className="klp min-h-screen overflow-x-hidden" style={{ background: '#ffffff', color: '#0f172a' }}>
       <SEO
-        title="Kodo — Kubernetes com Inteligência Artificial"
-        description="Plataforma de gestão Kubernetes com IA: auto-healing, segurança, FinOps e observabilidade em tempo real para seus clusters K8s."
+        title="Kodo — Plataforma de Gestão Kubernetes com IA | Auto-Healing e FinOps"
+        description="Gerencie clusters Kubernetes com inteligência artificial. Auto-healing em 30s, FinOps com economia de 40%, segurança contínua. AWS EKS, GKE e AKS. Setup em 5 minutos."
         path="/"
       />
 

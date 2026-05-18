@@ -31,6 +31,11 @@ import NotFound from "./pages/NotFound";
 import AdminDashboard from "./pages/AdminDashboard";
 import Migration from "./pages/Migration";
 import Developer from "./pages/Developer";
+import Diagnostico from "./pages/Diagnostico";
+import BlogIndex from "./pages/blog/BlogIndex";
+import KubernetesIA from "./pages/blog/KubernetesIA";
+import AutoHealingKubernetes from "./pages/blog/AutoHealingKubernetes";
+import FinOpsKubernetes from "./pages/blog/FinOpsKubernetes";
 import { CookieBanner } from "@/components/CookieBanner";
 
 const queryClient = new QueryClient();
@@ -185,6 +190,11 @@ const App = () => (
                     </AdminProtectedRoute>
                   }
                 />
+                <Route path="/diagnostico" element={<Diagnostico />} />
+                <Route path="/blog" element={<BlogIndex />} />
+                <Route path="/blog/kubernetes-ia" element={<KubernetesIA />} />
+                <Route path="/blog/auto-healing-kubernetes" element={<AutoHealingKubernetes />} />
+                <Route path="/blog/finops-kubernetes" element={<FinOpsKubernetes />} />
                 <Route path="/plans" element={<PlansComparison />} />
                 <Route path="/terms" element={<TermsOfService />} />
                 <Route path="/privacy" element={<PrivacyPolicy />} />

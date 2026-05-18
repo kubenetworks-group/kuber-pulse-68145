@@ -122,8 +122,8 @@ export default function PlansComparison() {
   return (
     <div className="min-h-screen bg-background">
       <SEO
-        title="Comparativo de Planos — Kodo"
-        description="Compare em detalhes os planos Free e Pro do Kodo: clusters, IA, observabilidade e auto-healing para Kubernetes."
+        title="Planos e Preços — Kodo Gestão Kubernetes com IA"
+        description="Compare os planos do Kodo: Free (1 cluster grátis) e Pro (R$149/mês, até 10 clusters). Auto-healing, FinOps e segurança para Kubernetes incluídos."
         path="/plans"
       />
       {/* Header */}

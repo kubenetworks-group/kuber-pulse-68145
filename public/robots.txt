@@ -6,6 +6,8 @@ Allow: /pricing
 Allow: /plans
 Allow: /terms
 Allow: /privacy
+Allow: /diagnostico
+Allow: /llms.txt
 
 # Rotas autenticadas — não indexar
 Disallow: /dashboard
@@ -23,4 +25,42 @@ Disallow: /ai-savings
 Disallow: /observability
 Disallow: /admin
 
+# ── AI Crawlers — permitir explicitamente ─────────────────────────
+
+# OpenAI / ChatGPT
+User-agent: GPTBot
+Allow: /
+
+# Anthropic / Claude
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+# Perplexity
+User-agent: PerplexityBot
+Allow: /
+
+# Google AI (AI Overviews / Gemini)
+User-agent: Google-Extended
+Allow: /
+
+# Meta AI
+User-agent: FacebookBot
+Allow: /
+
+# Common Crawl (base usada por vários LLMs)
+User-agent: CCBot
+Allow: /
+
+# Cohere
+User-agent: cohere-ai
+Allow: /
+
+# Apple
+User-agent: Applebot
+Allow: /
+
+# ── Sitemap ───────────────────────────────────────────────────────
 Sitemap: https://kodo.kubenetworks.com.br/sitemap.xml

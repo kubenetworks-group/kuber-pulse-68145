@@ -51,7 +51,8 @@
       "Bash(xargs ls)",
       "Bash(xargs ls -la)",
       "Bash(xargs ls -lh)",
-      "Bash(git -C /Users/denercavalcante/Workspace/Pessoal/kodo diff --stat HEAD)"
+      "Bash(git -C /Users/denercavalcante/Workspace/Pessoal/kodo diff --stat HEAD)",
+      "Bash(xargs -I {} basename {})"
     ]
   }
 }
