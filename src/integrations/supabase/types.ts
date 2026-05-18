@@ -1289,6 +1289,51 @@ export type Database = {
         }
         Relationships: []
       }
+      leads: {
+        Row: {
+          ab_variant: string | null
+          cluster_size: string | null
+          company: string | null
+          created_at: string
+          email: string
+          id: string
+          updated_at: string
+          utm_campaign: string | null
+          utm_content: string | null
+          utm_medium: string | null
+          utm_source: string | null
+          vertical: string | null
+        }
+        Insert: {
+          ab_variant?: string | null
+          cluster_size?: string | null
+          company?: string | null
+          created_at?: string
+          email: string
+          id?: string
+          updated_at?: string
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          vertical?: string | null
+        }
+        Update: {
+          ab_variant?: string | null
+          cluster_size?: string | null
+          company?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          updated_at?: string
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          vertical?: string | null
+        }
+        Relationships: []
+      }
       loadbalancer_services: {
         Row: {
           cluster_id: string

@@ -940,7 +940,7 @@ export default function LandingPage() {
                   <Button size="lg"
                     className="text-base px-8 py-6 font-medium rounded-xl text-white transition-all hover:-translate-y-0.5 group"
                     style={{ background: 'linear-gradient(135deg, #0891b2 0%, #4f46e5 100%)', boxShadow: '0 8px 32px rgba(8,145,178,0.3)' }}
-                    onClick={() => window.gtag?.('event', 'hero_cta_click', { ab_variant: abVariant })}>
+                    onClick={() => (window as unknown as { gtag?: (...args: unknown[]) => void }).gtag?.('event', 'hero_cta_click', { ab_variant: abVariant })}>
                     Começar grátis — sem cartão
                     <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
                   </Button>
