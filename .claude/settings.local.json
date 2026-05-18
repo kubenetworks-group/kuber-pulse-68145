@@ -48,7 +48,10 @@
       "Bash(lsof -ti:5173)",
       "Bash(npm run *)",
       "Bash(curl -s http://localhost:5173)",
-      "Bash(xargs ls)"
+      "Bash(xargs ls)",
+      "Bash(xargs ls -la)",
+      "Bash(xargs ls -lh)",
+      "Bash(git -C /Users/denercavalcante/Workspace/Pessoal/kodo diff --stat HEAD)"
     ]
   }
 }

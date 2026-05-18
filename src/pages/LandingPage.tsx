@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { SEO } from "@/components/SEO";
 import { Button } from "@/components/ui/button";
 import { Footer } from "@/components/Footer";
+import { LeadCaptureForm } from "@/components/LeadCaptureForm";
 import kodoLogo from "@/assets/kodo-logo.png";
 import { useEffect, useState, useRef } from "react";
 import {
@@ -672,6 +673,8 @@ const FAQS = [
 
 /* ─── Component ─────────────────────────────────────────────────── */
 export default function LandingPage() {
+  const abVariant = (new URLSearchParams(window.location.search).get('variant') as 'a' | 'b' | 'c') ?? 'a';
+
   const [menuOpen,      setMenuOpen]      = useState(false);
   const [scrolled,      setScrolled]      = useState(false);
   const [morphIdx,      setMorphIdx]      = useState(0);
@@ -936,8 +939,9 @@ export default function LandingPage() {
                 <Link to="/auth?tab=signup">
                   <Button size="lg"
                     className="text-base px-8 py-6 font-medium rounded-xl text-white transition-all hover:-translate-y-0.5 group"
-                    style={{ background: 'linear-gradient(135deg, #0891b2 0%, #4f46e5 100%)', boxShadow: '0 8px 32px rgba(8,145,178,0.3)' }}>
-                    Começar grátis
+                    style={{ background: 'linear-gradient(135deg, #0891b2 0%, #4f46e5 100%)', boxShadow: '0 8px 32px rgba(8,145,178,0.3)' }}
+                    onClick={() => window.gtag?.('event', 'hero_cta_click', { ab_variant: abVariant })}>
+                    Começar grátis — sem cartão
                     <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
                   </Button>
                 </Link>
@@ -1284,6 +1288,48 @@ export default function LandingPage() {
                   </AccordionItem>
                 ))}
               </Accordion>
+            </div>
+          </div>
+        </section>
+
+        {/* ══════════════════ LEAD CAPTURE ══════════════════ */}
+        <section className="py-24 px-6 bg-white border-t border-slate-100">
+          <div className="max-w-5xl mx-auto">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+
+              {/* Left — copy */}
+              <div className="space-y-6">
+                <p className="klp-mono text-[11px] uppercase tracking-[0.2em]" style={{ color: '#0891b2' }}>
+                  Diagnóstico gratuito
+                </p>
+                <h2 className="klp-syne font-extrabold leading-tight text-slate-900"
+                  style={{ fontSize: 'clamp(1.75rem, 3vw, 2.5rem)' }}>
+                  Descubra quanto você pode economizar no seu cluster
+                </h2>
+                <p className="text-slate-500 leading-relaxed">
+                  Informe seu email e nossa equipe envia uma análise personalizada com potencial de economia e riscos de segurança — sem instalar nada.
+                </p>
+                <div className="space-y-3">
+                  {[
+                    'Análise de custo e recursos subutilizados',
+                    'Mapa de riscos de segurança (RBAC, Pod Security)',
+                    'Estimativa de economia mensal',
+                  ].map((item) => (
+                    <div key={item} className="flex items-start gap-3">
+                      <div className="mt-0.5 w-5 h-5 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center shrink-0">
+                        <Check className="w-3 h-3 text-emerald-500" />
+                      </div>
+                      <span className="text-sm text-slate-600">{item}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Right — form */}
+              <div className="rounded-2xl p-8 border border-slate-200" style={{ background: '#f8fafc' }}>
+                <LeadCaptureForm variant={abVariant} />
+              </div>
+
             </div>
           </div>
         </section>

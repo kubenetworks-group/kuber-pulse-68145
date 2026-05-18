@@ -1,16 +1,21 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Terminal, Search, Download, Copy, Loader2, FileText, AlertTriangle, RefreshCw, Filter, RotateCcw, ExternalLink } from "lucide-react";
+import {
+  Terminal, Search, Download, Copy, Loader2, FileText, AlertTriangle,
+  RefreshCw, Filter, RotateCcw, ExternalLink, Maximize2, Minimize2,
+  Clock, WrapText, ChevronUp, ChevronDown, Layers, History,
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useCluster } from "@/contexts/ClusterContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 interface PodData {
   name: string;
@@ -47,11 +52,124 @@ export const PodLogViewer = ({ pods: podsProp, onRefresh, loading: externalLoadi
   const [activeCommandId, setActiveCommandId] = useState<string | null>(null);
   const [liveTail, setLiveTail] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [isBackgroundRefreshing, setIsBackgroundRefreshing] = useState(false);
   const liveTailTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const resolvedRef = useRef(false);
 
+  // Viewer options
+  const [fullscreen, setFullscreen] = useState(false);
+  const [logSearch, setLogSearch] = useState("");
+  const [searchCaseSensitive, setSearchCaseSensitive] = useState(false);
+  const [searchRegex, setSearchRegex] = useState(false);
+  const [currentMatchIdx, setCurrentMatchIdx] = useState(0);
+  const [showTimestamps, setShowTimestamps] = useState(true);
+  const [wrapLines, setWrapLines] = useState(true);
+  const [showPreviousLogs, setShowPreviousLogs] = useState(false);
+  const terminalRef = useRef<HTMLDivElement>(null);
+  const matchElemRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+
   // The displayed pods: prefer fresh local data fetched on demand, fall back to prop
   const pods = localPods ?? podsProp;
+
+  // ── Previous container section filtering ────────────────────────────────────
+  const allLogLines = useMemo(() => (logs ? logs.split("\n") : []), [logs]);
+
+  // Detect if the response contains a "previous container" section
+  const prevSectionStartIdx = useMemo(() =>
+    allLogLines.findIndex(l => /CONTAINER ANTERIOR/i.test(l)),
+    [allLogLines]
+  );
+  const hasPreviousLogs = prevSectionStartIdx !== -1;
+
+  // When a new pod dialog opens, auto-show previous section if it has restarts
+  useEffect(() => {
+    if (selectedPod && selectedPod.restarts > 0) {
+      setShowPreviousLogs(true);
+    } else {
+      setShowPreviousLogs(false);
+    }
+  }, [selectedPod?.name, selectedPod?.namespace]);
+
+  // Strip previous container section when toggle is off
+  const logLines = useMemo(() => {
+    if (showPreviousLogs || prevSectionStartIdx === -1) return allLogLines;
+    return allLogLines.slice(0, prevSectionStartIdx);
+  }, [allLogLines, showPreviousLogs, prevSectionStartIdx]);
+
+  // ── Search helpers ──────────────────────────────────────────────────────────
+
+  const matchingLineIndices = useMemo(() => {
+    if (!logSearch) return [];
+    const indices: number[] = [];
+    for (let i = 0; i < logLines.length; i++) {
+      try {
+        const flags = searchCaseSensitive ? "g" : "gi";
+        const pattern = searchRegex
+          ? logSearch
+          : logSearch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        if (new RegExp(pattern, flags).test(logLines[i])) indices.push(i);
+      } catch { /* invalid regex */ }
+    }
+    return indices;
+  }, [logLines, logSearch, searchCaseSensitive, searchRegex]);
+
+  const totalMatches = matchingLineIndices.length;
+  const safeMatchIdx = totalMatches > 0 ? Math.min(currentMatchIdx, totalMatches - 1) : 0;
+
+  const navigateMatch = useCallback((dir: 1 | -1) => {
+    if (!totalMatches) return;
+    setCurrentMatchIdx((prev) => {
+      const next = (prev + dir + totalMatches) % totalMatches;
+      return next;
+    });
+  }, [totalMatches]);
+
+  // Scroll to active match when it changes
+  useEffect(() => {
+    if (!totalMatches) return;
+    const lineIdx = matchingLineIndices[safeMatchIdx];
+    const el = matchElemRefs.current.get(lineIdx);
+    if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [safeMatchIdx, matchingLineIndices, totalMatches]);
+
+  // Reset search match index when query changes
+  useEffect(() => { setCurrentMatchIdx(0); }, [logSearch, searchCaseSensitive, searchRegex]);
+
+  // Highlight matching text in a string
+  const highlightText = useCallback((text: string, activeMatch: boolean) => {
+    if (!logSearch) return <>{text}</>;
+    try {
+      const flags = searchCaseSensitive ? "g" : "gi";
+      const pattern = searchRegex
+        ? logSearch
+        : logSearch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const re = new RegExp(`(${pattern})`, flags);
+      const parts = text.split(re);
+      return (
+        <>
+          {parts.map((part, i) =>
+            i % 2 === 1 ? (
+              <mark
+                key={i}
+                style={{
+                  background: activeMatch ? "#f5c518" : "#e3b34180",
+                  color: "#000",
+                  borderRadius: 2,
+                  padding: "0 1px",
+                }}
+              >
+                {part}
+              </mark>
+            ) : (
+              <span key={i}>{part}</span>
+            )
+          )}
+        </>
+      );
+    } catch {
+      return <>{text}</>;
+    }
+  }, [logSearch, searchCaseSensitive, searchRegex]);
 
   // Unique namespaces for the filter dropdown
   const namespaces = Array.from(new Set(pods.map((p) => p.namespace))).sort();
@@ -97,12 +215,14 @@ export const PodLogViewer = ({ pods: podsProp, onRefresh, loading: externalLoadi
       setLogs(logText);
       setLastUpdated(new Date());
       setLoadingLogs(false);
+      setIsBackgroundRefreshing(false);
     } else if (cmd.status === "failed") {
       resolvedRef.current = true;
       const errMsg = (cmd.result as any)?.error || "Falha ao obter logs";
       setIsPermissionError(errMsg.includes("403") || errMsg.includes("Forbidden"));
       setLogs(`Erro: ${errMsg}`);
       setLoadingLogs(false);
+      setIsBackgroundRefreshing(false);
     }
   }, []);
 
@@ -163,17 +283,25 @@ export const PodLogViewer = ({ pods: podsProp, onRefresh, loading: externalLoadi
       }
       setActiveCommandId(null);
       setLastUpdated(null);
+      setIsBackgroundRefreshing(false);
       resolvedRef.current = false;
     }
   }, [dialogOpen]);
 
-  const fetchLogs = async (pod: PodData, containerOverride?: string) => {
+  const fetchLogs = async (pod: PodData, containerOverride?: string, backgroundRefresh = false) => {
     if (!selectedClusterId || !user) return;
     setSelectedPod(pod);
     setDialogOpen(true);
-    setLoadingLogs(true);
-    setLogs("");
-    setIsPermissionError(false);
+
+    if (backgroundRefresh) {
+      // Keep existing logs visible; just spin the refresh icon subtly
+      setIsBackgroundRefreshing(true);
+    } else {
+      setLoadingLogs(true);
+      setLogs("");
+      setIsPermissionError(false);
+    }
+
     setActiveCommandId(null);
     resolvedRef.current = false;
 
@@ -213,9 +341,11 @@ export const PodLogViewer = ({ pods: podsProp, onRefresh, loading: externalLoadi
       setLiveTail(false);
     } else {
       setLiveTail(true);
+      // First fetch: foreground (no logs yet or user just enabled live tail)
       if (selectedPod) fetchLogs(selectedPod, selectedContainer);
+      // Subsequent ticks: background refresh — keep old logs visible
       liveTailTimerRef.current = setInterval(() => {
-        if (selectedPod) fetchLogs(selectedPod, selectedContainer);
+        if (selectedPod) fetchLogs(selectedPod, selectedContainer, true);
       }, 15000);
     }
   };
@@ -244,13 +374,30 @@ export const PodLogViewer = ({ pods: podsProp, onRefresh, loading: externalLoadi
     return matchesSearch && matchesNs;
   });
 
-  const renderLogLine = (line: string, idx: number) => {
-    if (!line) return <div key={idx} className="h-[1em]" />;
+  const renderLogLine = (line: string, lineIdx: number) => {
+    const isMatchLine = matchingLineIndices.includes(lineIdx);
+    const isActiveMatch = isMatchLine && matchingLineIndices[safeMatchIdx] === lineIdx;
+
+    const setRef = (el: HTMLDivElement | null) => {
+      if (el && isMatchLine) matchElemRefs.current.set(lineIdx, el);
+    };
+
+    const wrapStyle: React.CSSProperties = wrapLines
+      ? { wordBreak: "break-word", overflowWrap: "anywhere" }
+      : { whiteSpace: "nowrap" };
+
+    const matchBg = isActiveMatch
+      ? "rgba(245,197,24,0.15)"
+      : isMatchLine
+      ? "rgba(245,197,24,0.06)"
+      : undefined;
+
+    if (!line) return <div key={lineIdx} className="h-[1em]" />;
 
     // Section separator  === ... ===
     if (line.startsWith("===")) {
       return (
-        <div key={idx} className="flex items-center gap-2 mt-4 mb-2">
+        <div key={lineIdx} className="flex items-center gap-2 mt-4 mb-2">
           <span className="h-px flex-1" style={{ background: "#30363d" }} />
           <span className="text-[10px] font-semibold tracking-widest uppercase px-2" style={{ color: "#58a6ff" }}>
             {line.replace(/^=+\s*/, "").replace(/\s*=+$/, "")}
@@ -266,21 +413,24 @@ export const PodLogViewer = ({ pods: podsProp, onRefresh, loading: externalLoadi
       const [, lvl, ts, src, msg] = k8s;
       const lvlColor = lvl === "E" || lvl === "F" ? "#f47067" : lvl === "W" ? "#e3b341" : lvl === "I" ? "#3fb950" : "#8b949e";
       const msgColor = lvl === "E" || lvl === "F" ? "#ffa198" : lvl === "W" ? "#e3b341" : "#e6edf3";
-      // Two-row layout: metadata on first line, message on second.
-      // Avoids the single-character vertical stacking that happens when the message
-      // span has no horizontal room left after shrink-0 metadata columns consume the width.
       return (
-        <div key={idx} className="min-w-0 mb-1">
+        <div
+          key={lineIdx}
+          ref={setRef}
+          className="min-w-0 mb-1 rounded-sm px-1"
+          style={{ background: matchBg }}
+        >
           <div className="flex items-center gap-1.5 leading-[1.4]">
             <span className="shrink-0 font-bold" style={{ color: lvlColor, width: "0.7rem" }}>{lvl}</span>
-            <span className="shrink-0 text-[10px] tabular-nums" style={{ color: "#484f58" }}>{ts}</span>
+            {showTimestamps && (
+              <span className="shrink-0 text-[10px] tabular-nums" style={{ color: "#484f58" }}>
+                {highlightText(ts, isActiveMatch)}
+              </span>
+            )}
             <span className="shrink-0 text-[10px] truncate" style={{ color: "#484f58", maxWidth: "16ch" }} title={src}>{src}</span>
           </div>
-          <div
-            className="pl-3 leading-[1.5]"
-            style={{ color: msgColor, wordBreak: "break-word", overflowWrap: "anywhere" }}
-          >
-            {msg}
+          <div className="pl-3 leading-[1.5]" style={{ color: msgColor, ...wrapStyle }}>
+            {highlightText(msg, isActiveMatch)}
           </div>
         </div>
       );
@@ -289,18 +439,16 @@ export const PodLogViewer = ({ pods: podsProp, onRefresh, loading: externalLoadi
     // Generic error / warn / info coloring
     const isError = /\b(error|ERROR|FATAL|fatal|Exception|panic|CRIT)\b|^E\d{4}/.test(line);
     const isWarn  = /\b(warn|WARN|warning|WARNING)\b|^W\d{4}/.test(line);
+    const lineColor = isError ? "#ffa198" : isWarn ? "#e3b341" : "#e6edf3";
 
     return (
       <div
-        key={idx}
-        className="leading-[1.6]"
-        style={{
-          color: isError ? "#ffa198" : isWarn ? "#e3b341" : "#e6edf3",
-          wordBreak: "break-word",
-          overflowWrap: "anywhere",
-        }}
+        key={lineIdx}
+        ref={setRef}
+        className="leading-[1.6] rounded-sm px-1"
+        style={{ color: lineColor, background: matchBg, ...wrapStyle }}
       >
-        {line}
+        {highlightText(line, isActiveMatch)}
       </div>
     );
   };
@@ -437,69 +585,229 @@ export const PodLogViewer = ({ pods: podsProp, onRefresh, loading: externalLoadi
         </CardContent>
       </Card>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="w-[calc(100vw-1rem)] sm:max-w-5xl max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden rounded-xl" style={{ background: "#161b22", border: "1px solid #30363d" }}>
-          <DialogHeader className="px-4 pt-3 pb-3 shrink-0" style={{ borderBottom: "1px solid #21262d" }}>
-            <div className="flex items-start justify-between gap-2 flex-wrap">
-              <DialogTitle className="flex items-center gap-2 text-sm min-w-0" style={{ color: "#e6edf3" }}>
-                <Terminal className="w-4 h-4 shrink-0" style={{ color: "#3fb950" }} />
-                <span className="font-mono truncate">{selectedPod?.namespace}/{selectedPod?.name}</span>
+      <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setFullscreen(false); }}>
+        <DialogContent
+          className={cn(
+            "flex flex-col p-0 gap-0 overflow-hidden rounded-xl transition-all duration-200",
+            fullscreen
+              ? "fixed inset-2 max-w-none w-auto max-h-none translate-x-0 translate-y-0"
+              : "w-[calc(100vw-1rem)] sm:max-w-5xl h-[85vh] max-h-[90vh]"
+          )}
+          style={{ background: "#161b22", border: "1px solid #30363d" }}
+        >
+          {/* ── Top bar: pod name + container selector + actions ────────────── */}
+          <DialogHeader className="px-3 pt-2.5 pb-2.5 shrink-0" style={{ borderBottom: "1px solid #21262d" }}>
+            <div className="flex items-center gap-2 min-w-0">
+              <Terminal className="w-3.5 h-3.5 shrink-0" style={{ color: "#3fb950" }} />
+              <DialogTitle className="text-xs font-mono min-w-0 flex-1 truncate" style={{ color: "#e6edf3" }}>
+                {selectedPod?.namespace}/{selectedPod?.name}
               </DialogTitle>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {availableContainers.length > 1 && (
-                  <Select
-                    value={selectedContainer}
-                    onValueChange={(v) => {
-                      setSelectedContainer(v);
-                      if (selectedPod) fetchLogs(selectedPod, v);
-                    }}
+
+              {/* Container selector */}
+              {availableContainers.length > 0 && (
+                <Select
+                  value={selectedContainer || "__all__"}
+                  onValueChange={(v) => {
+                    const val = v === "__all__" ? "" : v;
+                    setSelectedContainer(val);
+                    if (selectedPod) fetchLogs(selectedPod, val);
+                  }}
+                >
+                  <SelectTrigger
+                    className="h-6 text-[11px] gap-1 px-2 shrink-0"
+                    style={{ minWidth: 120, maxWidth: 180, background: "#21262d", border: "1px solid #30363d", color: "#e6edf3" }}
                   >
-                    <SelectTrigger className="w-36 sm:w-44 h-7 text-xs">
-                      <SelectValue placeholder="Container" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableContainers.map((c) => (
-                        <SelectItem key={c} value={c} className="text-xs">{c}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    <Layers className="w-3 h-3 shrink-0" style={{ color: "#58a6ff" }} />
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__all__" className="text-xs">Todos os containers</SelectItem>
+                    {availableContainers.map((c) => (
+                      <SelectItem key={c} value={c} className="text-xs font-mono">{c}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+
+              {/* Live tail indicator */}
+              <button
+                onClick={toggleLiveTail}
+                disabled={!selectedPod}
+                title={liveTail ? "Parar live tail" : "Iniciar live tail"}
+                className={cn(
+                  "flex items-center gap-1 h-6 px-2 rounded text-[11px] font-medium transition-colors shrink-0",
+                  liveTail
+                    ? "text-green-300 border border-green-700/60"
+                    : "text-muted-foreground hover:text-foreground border border-transparent"
                 )}
-                <Button
-                  variant={liveTail ? "default" : "ghost"}
-                  size="sm"
-                  className={`h-7 text-xs gap-1.5 ${liveTail ? "bg-green-900/40 text-green-300 hover:bg-green-900/60 border border-green-700/50" : ""}`}
-                  onClick={toggleLiveTail}
-                  disabled={!selectedPod}
-                >
-                  <div className={`w-2 h-2 rounded-full ${liveTail ? "bg-green-400 animate-pulse" : "bg-muted-foreground"}`} />
-                  {liveTail ? "Live" : "Live Tail"}
-                </Button>
-                {lastUpdated && (
-                  <span className="text-[10px] text-muted-foreground hidden sm:inline">
-                    {lastUpdated.toLocaleTimeString()}
-                  </span>
-                )}
-                <Button
-                  variant="ghost" size="sm" className="h-7 text-xs gap-1"
-                  onClick={() => selectedPod && fetchLogs(selectedPod, selectedContainer)}
-                  disabled={loadingLogs}
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${loadingLogs ? "animate-spin" : ""}`} />
-                  Atualizar
-                </Button>
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={copyLogs} disabled={!logs || loadingLogs}>
-                  <Copy className="w-3.5 h-3.5" />
-                </Button>
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={downloadLogs} disabled={!logs || loadingLogs}>
-                  <Download className="w-3.5 h-3.5" />
-                </Button>
-              </div>
+                style={{ background: liveTail ? "rgba(63,185,80,0.12)" : undefined }}
+              >
+                <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", liveTail ? "bg-green-400 animate-pulse" : "bg-muted-foreground/50")} />
+                {liveTail ? "LIVE" : "Live"}
+              </button>
+
+              {/* Refresh */}
+              <button
+                onClick={() => selectedPod && fetchLogs(selectedPod, selectedContainer, !!logs)}
+                disabled={loadingLogs}
+                title="Atualizar logs"
+                className="flex items-center justify-center h-6 w-6 rounded hover:bg-white/10 transition-colors disabled:opacity-40"
+                style={{ color: "#8b949e" }}
+              >
+                <RefreshCw className={cn("w-3.5 h-3.5", (loadingLogs || isBackgroundRefreshing) && "animate-spin")} />
+              </button>
+
+              {/* Fullscreen toggle */}
+              <button
+                onClick={() => setFullscreen((f) => !f)}
+                title={fullscreen ? "Sair da tela cheia" : "Tela cheia"}
+                className="flex items-center justify-center h-6 w-6 rounded hover:bg-white/10 transition-colors"
+                style={{ color: "#8b949e" }}
+              >
+                {fullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+              </button>
             </div>
           </DialogHeader>
 
+          {/* ── Search + toolbar bar ─────────────────────────────────────────── */}
+          <div className="flex items-center gap-2 px-3 py-1.5 shrink-0" style={{ borderBottom: "1px solid #21262d", background: "#0d1117" }}>
+            {/* Search input */}
+            <div className="flex items-center gap-1 flex-1 min-w-0 rounded px-2 h-7" style={{ background: "#161b22", border: "1px solid #30363d" }}>
+              <Search className="w-3 h-3 shrink-0" style={{ color: "#484f58" }} />
+              <input
+                value={logSearch}
+                onChange={(e) => setLogSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") navigateMatch(e.shiftKey ? -1 : 1);
+                  if (e.key === "Escape") setLogSearch("");
+                }}
+                placeholder="Buscar nos logs..."
+                className="flex-1 min-w-0 bg-transparent outline-none text-[11.5px] font-mono"
+                style={{ color: "#e6edf3" }}
+              />
+              {/* Case-sensitive toggle */}
+              <button
+                onClick={() => setSearchCaseSensitive((v) => !v)}
+                title="Diferenciar maiúsculas (Aa)"
+                className="flex items-center justify-center h-5 w-5 rounded text-[10px] font-bold shrink-0 transition-colors"
+                style={{
+                  color: searchCaseSensitive ? "#e6edf3" : "#484f58",
+                  background: searchCaseSensitive ? "#30363d" : "transparent",
+                }}
+              >
+                Aa
+              </button>
+              {/* Regex toggle */}
+              <button
+                onClick={() => setSearchRegex((v) => !v)}
+                title="Expressão regular (.*)"
+                className="flex items-center justify-center h-5 w-5 rounded text-[10px] font-bold shrink-0 transition-colors"
+                style={{
+                  color: searchRegex ? "#e6edf3" : "#484f58",
+                  background: searchRegex ? "#30363d" : "transparent",
+                  fontFamily: "monospace",
+                }}
+              >
+                .*
+              </button>
+            </div>
+
+            {/* Match counter + navigation */}
+            {logSearch && (
+              <div className="flex items-center gap-1 shrink-0">
+                <span className="text-[10px] tabular-nums" style={{ color: "#484f58", minWidth: 36, textAlign: "right" }}>
+                  {totalMatches > 0 ? `${safeMatchIdx + 1}/${totalMatches}` : "0/0"}
+                </span>
+                <button
+                  onClick={() => navigateMatch(-1)}
+                  disabled={!totalMatches}
+                  className="flex items-center justify-center h-6 w-5 rounded hover:bg-white/10 disabled:opacity-30 transition-colors"
+                  style={{ color: "#8b949e" }}
+                >
+                  <ChevronUp className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => navigateMatch(1)}
+                  disabled={!totalMatches}
+                  className="flex items-center justify-center h-6 w-5 rounded hover:bg-white/10 disabled:opacity-30 transition-colors"
+                  style={{ color: "#8b949e" }}
+                >
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
+            {/* Divider */}
+            <span className="h-4 w-px shrink-0" style={{ background: "#30363d" }} />
+
+            {/* Timestamps toggle */}
+            <button
+              onClick={() => setShowTimestamps((v) => !v)}
+              title="Mostrar/ocultar timestamps"
+              className="flex items-center justify-center h-6 w-6 rounded transition-colors shrink-0"
+              style={{
+                color: showTimestamps ? "#58a6ff" : "#484f58",
+                background: showTimestamps ? "rgba(88,166,255,0.12)" : "transparent",
+              }}
+            >
+              <Clock className="w-3.5 h-3.5" />
+            </button>
+
+            {/* Wrap toggle */}
+            <button
+              onClick={() => setWrapLines((v) => !v)}
+              title="Quebra de linha"
+              className="flex items-center justify-center h-6 w-6 rounded transition-colors shrink-0"
+              style={{
+                color: wrapLines ? "#58a6ff" : "#484f58",
+                background: wrapLines ? "rgba(88,166,255,0.12)" : "transparent",
+              }}
+            >
+              <WrapText className="w-3.5 h-3.5" />
+            </button>
+
+            {/* Previous container logs toggle — only shown when response has a prev section */}
+            {hasPreviousLogs && (
+              <button
+                onClick={() => setShowPreviousLogs((v) => !v)}
+                title={showPreviousLogs ? "Ocultar logs do container anterior" : "Mostrar logs do container anterior (último crash)"}
+                className="flex items-center justify-center h-6 w-6 rounded transition-colors shrink-0"
+                style={{
+                  color: showPreviousLogs ? "#f47067" : "#484f58",
+                  background: showPreviousLogs ? "rgba(244,112,103,0.12)" : "transparent",
+                }}
+              >
+                <History className="w-3.5 h-3.5" />
+              </button>
+            )}
+
+            {/* Copy */}
+            <button
+              onClick={copyLogs}
+              disabled={!logs || loadingLogs}
+              title="Copiar logs"
+              className="flex items-center justify-center h-6 w-6 rounded hover:bg-white/10 disabled:opacity-30 transition-colors shrink-0"
+              style={{ color: "#8b949e" }}
+            >
+              <Copy className="w-3.5 h-3.5" />
+            </button>
+
+            {/* Download */}
+            <button
+              onClick={downloadLogs}
+              disabled={!logs || loadingLogs}
+              title="Baixar logs"
+              className="flex items-center justify-center h-6 w-6 rounded hover:bg-white/10 disabled:opacity-30 transition-colors shrink-0"
+              style={{ color: "#8b949e" }}
+            >
+              <Download className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* ── Permission error ─────────────────────────────────────────────── */}
           {isPermissionError && (
-            <div className="flex items-start gap-2 px-4 py-3 text-xs" style={{ background: "#1a1200", borderBottom: "1px solid #30363d", color: "#e3b341" }}>
-              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+            <div className="flex items-start gap-2 px-4 py-2.5 text-xs shrink-0" style={{ background: "#1a1200", borderBottom: "1px solid #30363d", color: "#e3b341" }}>
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
               <div>
                 <p className="font-semibold">Permissão ausente no ClusterRole</p>
                 <p className="mt-0.5 opacity-80">Adicione <code className="px-1 rounded font-mono" style={{ background: "#0d1117", color: "#79c0ff" }}>pods/log</code> ao ClusterRole do kodo-agent.</p>
@@ -507,28 +815,48 @@ export const PodLogViewer = ({ pods: podsProp, onRefresh, loading: externalLoadi
             </div>
           )}
 
-          {/* Terminal — always dark regardless of app theme */}
-          <div
-            className="flex-1 min-h-0 overflow-hidden mx-2 mb-2 sm:mx-4 sm:mb-4 rounded-lg"
-            style={{ background: "#0d1117", border: "1px solid #21262d" }}
-          >
+          {/* ── Terminal ─────────────────────────────────────────────────────── */}
+          <div className="flex-1 min-h-0 overflow-hidden mx-2 mb-2 sm:mx-3 sm:mb-3 mt-2 rounded-lg" style={{ background: "#0d1117", border: "1px solid #21262d" }}>
             {loadingLogs ? (
-              <div className="h-64 flex flex-col items-center justify-center gap-3">
-                <Loader2 className="w-8 h-8 animate-spin" style={{ color: "#3fb950" }} />
+              <div className="h-full flex flex-col items-center justify-center gap-3 min-h-[200px]">
+                <Loader2 className="w-7 h-7 animate-spin" style={{ color: "#3fb950" }} />
                 <p className="text-sm" style={{ color: "#8b949e" }}>Aguardando resposta do agente...</p>
                 <p className="text-xs" style={{ color: "#484f58" }}>O agente coleta os logs e retorna em até 30s</p>
               </div>
             ) : (
               <div
-                className="h-full overflow-y-auto p-2 sm:p-4 text-[11.5px] font-mono"
+                ref={terminalRef}
+                className="h-full overflow-y-auto p-2 sm:p-3 text-[11.5px] font-mono"
                 style={{ color: "#e6edf3", scrollbarColor: "#30363d #0d1117" }}
               >
                 {logs
-                  ? logs.split("\n").map((line, idx) => renderLogLine(line, idx))
+                  ? logLines.map((line, idx) => renderLogLine(line, idx))
                   : <span style={{ color: "#484f58" }}>Nenhum log disponível</span>
                 }
               </div>
             )}
+          </div>
+
+          {/* ── Status bar ───────────────────────────────────────────────────── */}
+          <div className="flex items-center justify-between px-3 py-1 shrink-0 text-[10px]" style={{ borderTop: "1px solid #21262d", color: "#484f58" }}>
+            <div className="flex items-center gap-3">
+              <span>{logLines.filter(Boolean).length} linhas</span>
+              {hasPreviousLogs && !showPreviousLogs && (
+                <button
+                  onClick={() => setShowPreviousLogs(true)}
+                  className="flex items-center gap-1 hover:opacity-80 transition-opacity"
+                  style={{ color: "#f47067" }}
+                >
+                  <History className="w-3 h-3" />
+                  <span>container anterior oculto</span>
+                </button>
+              )}
+              {lastUpdated && <span>atualizado {lastUpdated.toLocaleTimeString()}</span>}
+            </div>
+            <div className="flex items-center gap-3">
+              <span style={{ color: wrapLines ? "#58a6ff" : "#484f58" }}>wrap {wrapLines ? "on" : "off"}</span>
+              <span style={{ color: showTimestamps ? "#58a6ff" : "#484f58" }}>ts {showTimestamps ? "on" : "off"}</span>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

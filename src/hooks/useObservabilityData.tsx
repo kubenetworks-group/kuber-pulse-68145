@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCluster } from "@/contexts/ClusterContext";
 
@@ -53,10 +53,12 @@ export const useObservabilityData = () => {
   const [agents, setAgents] = useState<AgentStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastSync, setLastSync] = useState<string | null>(null);
+  const hasDataRef = useRef(false);
 
   const fetchData = useCallback(async () => {
     if (!selectedClusterId) return;
-    setLoading(true);
+    // Only show full loading spinner on first fetch; background refreshes are silent
+    if (!hasDataRef.current) setLoading(true);
 
     try {
       // Fetch latest metrics from agent_metrics
@@ -75,6 +77,7 @@ export const useObservabilityData = () => {
 
       if (!metrics || metrics.length === 0) {
         setLoading(false);
+        hasDataRef.current = true;
         return;
       }
 
@@ -396,7 +399,20 @@ export const useObservabilityData = () => {
       console.error("Error in observability data:", err);
     } finally {
       setLoading(false);
+      hasDataRef.current = true;
     }
+  }, [selectedClusterId]);
+
+  // Reset on cluster change: clear stale data and show loading spinner
+  useEffect(() => {
+    if (!selectedClusterId) return;
+    hasDataRef.current = false;
+    setPods([]);
+    setServices([]);
+    setIngresses([]);
+    setNamespaceUsage([]);
+    setLastSync(null);
+    setLoading(true);
   }, [selectedClusterId]);
 
   useEffect(() => {
