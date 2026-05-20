@@ -273,6 +273,7 @@ const Agents = () => {
   };
 
   const downloadYaml = (apiKey: string, clusterId: string) => {
+    const imageTag = `ghcr.io/kubenetworks-group/kodo-agent:${latestAgentVersion ?? "v0.1.77"}`;
     const yaml = `apiVersion: v1
 kind: Namespace
 metadata:
@@ -363,7 +364,7 @@ spec:
       serviceAccountName: kodo-agent
       containers:
       - name: agent
-        image: ghcr.io/kubenetworks-group/kodo-agent:latest
+        image: ${imageTag}
         imagePullPolicy: Always
         envFrom:
         - configMapRef:

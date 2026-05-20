@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Server, Activity, HardDrive, Cpu, Download, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface ClusterCardProps {
   id?: string;
@@ -119,9 +120,16 @@ export const ClusterCard = ({
     }
   }, [status, id, onRefresh]);
 
-  const downloadAgentConfig = () => {
+  const downloadAgentConfig = async () => {
     if (!id) return;
-    
+
+    const { data: versionData } = await supabase
+      .from("agent_versions")
+      .select("version")
+      .eq("is_latest", true)
+      .single();
+    const imageTag = `ghcr.io/kubenetworks-group/kodo-agent:${versionData?.version ?? "v0.1.77"}`;
+
     const agentConfig = `apiVersion: v1
 kind: Namespace
 metadata:
@@ -217,7 +225,7 @@ spec:
       serviceAccountName: kodo-agent
       containers:
       - name: agent
-        image: ghcr.io/kubenetworks-group/kodo-agent:latest
+        image: ${imageTag}
         imagePullPolicy: Always
         envFrom:
         - configMapRef:

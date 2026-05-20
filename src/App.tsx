@@ -23,6 +23,17 @@ import Settings from "./pages/Settings";
 import Agents from "./pages/Agents";
 import AISavings from "./pages/AISavings";
 import Observability from "./pages/Observability";
+import KubernetesPods from "./pages/KubernetesPods";
+import KubernetesServices from "./pages/KubernetesServices";
+import KubernetesIngress from "./pages/KubernetesIngress";
+import KubernetesDeployments from "./pages/KubernetesDeployments";
+import KubernetesDaemonSets from "./pages/KubernetesDaemonSets";
+import KubernetesStatefulSets from "./pages/KubernetesStatefulSets";
+import KubernetesJobs from "./pages/KubernetesJobs";
+import KubernetesCronJobs from "./pages/KubernetesCronJobs";
+import KubernetesNetworkPolicies from "./pages/KubernetesNetworkPolicies";
+import KubernetesPVCs from "./pages/KubernetesPVCs";
+import KubernetesVolumes from "./pages/KubernetesVolumes";
 import PlansComparison from "./pages/PlansComparison";
 import Pricing from "./pages/Pricing";
 import TermsOfService from "./pages/TermsOfService";
@@ -179,6 +190,94 @@ const App = () => (
                   element={
                     <ProtectedRoute>
                       <Observability />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/kubernetes/pods"
+                  element={
+                    <ProtectedRoute>
+                      <KubernetesPods />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/kubernetes/services"
+                  element={
+                    <ProtectedRoute>
+                      <KubernetesServices />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/kubernetes/ingress"
+                  element={
+                    <ProtectedRoute>
+                      <KubernetesIngress />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/kubernetes/deployments"
+                  element={
+                    <ProtectedRoute>
+                      <KubernetesDeployments />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/kubernetes/daemonsets"
+                  element={
+                    <ProtectedRoute>
+                      <KubernetesDaemonSets />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/kubernetes/statefulsets"
+                  element={
+                    <ProtectedRoute>
+                      <KubernetesStatefulSets />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/kubernetes/jobs"
+                  element={
+                    <ProtectedRoute>
+                      <KubernetesJobs />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/kubernetes/cronjobs"
+                  element={
+                    <ProtectedRoute>
+                      <KubernetesCronJobs />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/kubernetes/networkpolicies"
+                  element={
+                    <ProtectedRoute>
+                      <KubernetesNetworkPolicies />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/kubernetes/pvcs"
+                  element={
+                    <ProtectedRoute>
+                      <KubernetesPVCs />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/kubernetes/volumes"
+                  element={
+                    <ProtectedRoute>
+                      <KubernetesVolumes />
                     </ProtectedRoute>
                   }
                 />

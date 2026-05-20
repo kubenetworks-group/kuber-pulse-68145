@@ -648,6 +648,216 @@ func collectServicesData(clientset *kubernetes.Clientset) []map[string]interface
 	return result
 }
 
+// collectIngressesData collects all ingresses across namespaces for the dashboard
+func collectIngressesData(clientset *kubernetes.Clientset) []map[string]interface{} {
+	ctx := context.Background()
+	var result []map[string]interface{}
+
+	ingresses, err := clientset.NetworkingV1().Ingresses("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		log.Printf("⚠️  Error listing ingresses: %v", err)
+		return result
+	}
+
+	for _, ing := range ingresses.Items {
+		hosts := []string{}
+		tls := len(ing.Spec.TLS) > 0
+		rules := []map[string]interface{}{}
+
+		for _, rule := range ing.Spec.Rules {
+			paths := []string{}
+			if rule.HTTP != nil {
+				for _, path := range rule.HTTP.Paths {
+					paths = append(paths, path.Path)
+				}
+			}
+			ruleEntry := map[string]interface{}{
+				"host":  rule.Host,
+				"paths": paths,
+			}
+			rules = append(rules, ruleEntry)
+			if rule.Host != "" {
+				hosts = append(hosts, rule.Host)
+			}
+		}
+
+		var className *string
+		if ing.Spec.IngressClassName != nil {
+			className = ing.Spec.IngressClassName
+		}
+
+		ingEntry := map[string]interface{}{
+			"name":       ing.Name,
+			"namespace":  ing.Namespace,
+			"hosts":      hosts,
+			"tls":        tls,
+			"rules":      rules,
+			"class_name": className,
+		}
+		result = append(result, ingEntry)
+	}
+
+	log.Printf("✅ Collected %d ingresses", len(result))
+	return result
+}
+
+func collectDeployments(clientset *kubernetes.Clientset) []map[string]interface{} {
+	ctx := context.Background()
+	var result []map[string]interface{}
+	deploys, err := clientset.AppsV1().Deployments("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		log.Printf("⚠️  Error listing deployments: %v", err)
+		return result
+	}
+	for _, d := range deploys.Items {
+		desired := int32(1)
+		if d.Spec.Replicas != nil {
+			desired = *d.Spec.Replicas
+		}
+		result = append(result, map[string]interface{}{
+			"name":       d.Name,
+			"namespace":  d.Namespace,
+			"desired":    desired,
+			"ready":      d.Status.ReadyReplicas,
+			"available":  d.Status.AvailableReplicas,
+			"updated":    d.Status.UpdatedReplicas,
+			"created_at": d.CreationTimestamp.Time.Format(time.RFC3339),
+		})
+	}
+	log.Printf("✅ Collected %d deployments", len(result))
+	return result
+}
+
+func collectDaemonSets(clientset *kubernetes.Clientset) []map[string]interface{} {
+	ctx := context.Background()
+	var result []map[string]interface{}
+	dss, err := clientset.AppsV1().DaemonSets("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		log.Printf("⚠️  Error listing daemonsets: %v", err)
+		return result
+	}
+	for _, ds := range dss.Items {
+		result = append(result, map[string]interface{}{
+			"name":       ds.Name,
+			"namespace":  ds.Namespace,
+			"desired":    ds.Status.DesiredNumberScheduled,
+			"ready":      ds.Status.NumberReady,
+			"available":  ds.Status.NumberAvailable,
+			"updated":    ds.Status.UpdatedNumberScheduled,
+			"created_at": ds.CreationTimestamp.Time.Format(time.RFC3339),
+		})
+	}
+	log.Printf("✅ Collected %d daemonsets", len(result))
+	return result
+}
+
+func collectStatefulSets(clientset *kubernetes.Clientset) []map[string]interface{} {
+	ctx := context.Background()
+	var result []map[string]interface{}
+	stss, err := clientset.AppsV1().StatefulSets("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		log.Printf("⚠️  Error listing statefulsets: %v", err)
+		return result
+	}
+	for _, sts := range stss.Items {
+		desired := int32(1)
+		if sts.Spec.Replicas != nil {
+			desired = *sts.Spec.Replicas
+		}
+		result = append(result, map[string]interface{}{
+			"name":       sts.Name,
+			"namespace":  sts.Namespace,
+			"desired":    desired,
+			"ready":      sts.Status.ReadyReplicas,
+			"available":  sts.Status.AvailableReplicas,
+			"updated":    sts.Status.UpdatedReplicas,
+			"created_at": sts.CreationTimestamp.Time.Format(time.RFC3339),
+		})
+	}
+	log.Printf("✅ Collected %d statefulsets", len(result))
+	return result
+}
+
+func collectJobs(clientset *kubernetes.Clientset) []map[string]interface{} {
+	ctx := context.Background()
+	var result []map[string]interface{}
+	jobs, err := clientset.BatchV1().Jobs("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		log.Printf("⚠️  Error listing jobs: %v", err)
+		return result
+	}
+	for _, j := range jobs.Items {
+		status := "Active"
+		if j.Status.Succeeded > 0 {
+			status = "Complete"
+		} else if j.Status.Failed > 0 {
+			status = "Failed"
+		}
+		result = append(result, map[string]interface{}{
+			"name":        j.Name,
+			"namespace":   j.Namespace,
+			"status":      status,
+			"completions": j.Status.Succeeded,
+			"failed":      j.Status.Failed,
+			"active":      j.Status.Active,
+			"created_at":  j.CreationTimestamp.Time.Format(time.RFC3339),
+		})
+	}
+	log.Printf("✅ Collected %d jobs", len(result))
+	return result
+}
+
+func collectCronJobs(clientset *kubernetes.Clientset) []map[string]interface{} {
+	ctx := context.Background()
+	var result []map[string]interface{}
+	cjs, err := clientset.BatchV1().CronJobs("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		log.Printf("⚠️  Error listing cronjobs: %v", err)
+		return result
+	}
+	for _, cj := range cjs.Items {
+		lastSchedule := ""
+		if cj.Status.LastScheduleTime != nil {
+			lastSchedule = cj.Status.LastScheduleTime.Time.Format(time.RFC3339)
+		}
+		result = append(result, map[string]interface{}{
+			"name":          cj.Name,
+			"namespace":     cj.Namespace,
+			"schedule":      cj.Spec.Schedule,
+			"suspend":       cj.Spec.Suspend != nil && *cj.Spec.Suspend,
+			"active":        len(cj.Status.Active),
+			"last_schedule": lastSchedule,
+			"created_at":    cj.CreationTimestamp.Time.Format(time.RFC3339),
+		})
+	}
+	log.Printf("✅ Collected %d cronjobs", len(result))
+	return result
+}
+
+func collectNetworkPolicies(clientset *kubernetes.Clientset) []map[string]interface{} {
+	ctx := context.Background()
+	var result []map[string]interface{}
+	nps, err := clientset.NetworkingV1().NetworkPolicies("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		log.Printf("⚠️  Error listing networkpolicies: %v", err)
+		return result
+	}
+	for _, np := range nps.Items {
+		policyTypes := []string{}
+		for _, pt := range np.Spec.PolicyTypes {
+			policyTypes = append(policyTypes, string(pt))
+		}
+		result = append(result, map[string]interface{}{
+			"name":         np.Name,
+			"namespace":    np.Namespace,
+			"policy_types": policyTypes,
+			"created_at":   np.CreationTimestamp.Time.Format(time.RFC3339),
+		})
+	}
+	log.Printf("✅ Collected %d networkpolicies", len(result))
+	return result
+}
+
 func getContainerState(state corev1.ContainerState) map[string]interface{} {
 	if state.Running != nil {
 		return map[string]interface{}{
@@ -2238,6 +2448,55 @@ func sendMetrics(clientset *kubernetes.Clientset, metricsClient *metricsv.Client
 			"type": "services",
 			"data": map[string]interface{}{
 				"services": collectServicesData(clientset),
+			},
+			"collected_at": time.Now().UTC().Format(time.RFC3339),
+		},
+		{
+			"type": "ingresses",
+			"data": map[string]interface{}{
+				"ingresses": collectIngressesData(clientset),
+			},
+			"collected_at": time.Now().UTC().Format(time.RFC3339),
+		},
+		{
+			"type": "deployments",
+			"data": map[string]interface{}{
+				"deployments": collectDeployments(clientset),
+			},
+			"collected_at": time.Now().UTC().Format(time.RFC3339),
+		},
+		{
+			"type": "daemonsets",
+			"data": map[string]interface{}{
+				"daemonsets": collectDaemonSets(clientset),
+			},
+			"collected_at": time.Now().UTC().Format(time.RFC3339),
+		},
+		{
+			"type": "statefulsets",
+			"data": map[string]interface{}{
+				"statefulsets": collectStatefulSets(clientset),
+			},
+			"collected_at": time.Now().UTC().Format(time.RFC3339),
+		},
+		{
+			"type": "jobs",
+			"data": map[string]interface{}{
+				"jobs": collectJobs(clientset),
+			},
+			"collected_at": time.Now().UTC().Format(time.RFC3339),
+		},
+		{
+			"type": "cronjobs",
+			"data": map[string]interface{}{
+				"cronjobs": collectCronJobs(clientset),
+			},
+			"collected_at": time.Now().UTC().Format(time.RFC3339),
+		},
+		{
+			"type": "networkpolicies",
+			"data": map[string]interface{}{
+				"networkpolicies": collectNetworkPolicies(clientset),
 			},
 			"collected_at": time.Now().UTC().Format(time.RFC3339),
 		},

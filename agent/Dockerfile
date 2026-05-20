@@ -1,7 +1,6 @@
 # Build stage
 FROM --platform=$BUILDPLATFORM golang:1.22-alpine AS builder
 
-# Argumentos para cross-compilation
 ARG TARGETARCH
 ARG TARGETOS
 
@@ -18,11 +17,14 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
 # Final stage
 FROM --platform=$TARGETPLATFORM alpine:latest
 
-RUN apk --no-cache add ca-certificates
+RUN apk --no-cache add ca-certificates && \
+    addgroup -S kodo && adduser -S kodo -G kodo
 
-WORKDIR /root/
+WORKDIR /app
 
-# Copy the binary from builder
 COPY --from=builder /app/kodo-agent .
+RUN chmod +x kodo-agent && chown kodo:kodo kodo-agent
+
+USER kodo
 
 CMD ["./kodo-agent"]

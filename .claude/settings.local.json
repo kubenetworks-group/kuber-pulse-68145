@@ -52,7 +52,13 @@
       "Bash(xargs ls -la)",
       "Bash(xargs ls -lh)",
       "Bash(git -C /Users/denercavalcante/Workspace/Pessoal/kodo diff --stat HEAD)",
-      "Bash(xargs -I {} basename {})"
+      "Bash(xargs -I {} basename {})",
+      "Read(//usr/local/go/bin/**)",
+      "Read(//Users/denercavalcante/go/bin/**)",
+      "Bash(command -v go)",
+      "Read(//opt/homebrew/bin/**)",
+      "Read(//Users/denercavalcante/**)",
+      "Bash(awk '{print $NF}')"
     ]
   }
 }

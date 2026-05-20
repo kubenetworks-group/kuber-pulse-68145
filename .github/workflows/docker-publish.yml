@@ -37,7 +37,6 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: |
             ghcr.io/${{ github.repository_owner }}/kodo-agent:${{ github.ref_name }}
-            ghcr.io/${{ github.repository_owner }}/kodo-agent:latest
 
       - name: Publish agent version to Kodo backend
         if: startsWith(github.ref, 'refs/tags/v')

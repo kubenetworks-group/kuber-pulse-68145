@@ -30,6 +30,57 @@ interface IngressData {
   className: string | null;
 }
 
+export interface DeploymentData {
+  name: string;
+  namespace: string;
+  desired: number;
+  ready: number;
+  available: number;
+  updated: number;
+}
+
+export interface DaemonSetData {
+  name: string;
+  namespace: string;
+  desired: number;
+  ready: number;
+  available: number;
+  updated: number;
+}
+
+export interface StatefulSetData {
+  name: string;
+  namespace: string;
+  desired: number;
+  ready: number;
+  available: number;
+  updated: number;
+}
+
+export interface JobData {
+  name: string;
+  namespace: string;
+  status: string;
+  completions: number;
+  failed: number;
+  active: number;
+}
+
+export interface CronJobData {
+  name: string;
+  namespace: string;
+  schedule: string;
+  suspend: boolean;
+  active: number;
+  last_schedule: string | null;
+}
+
+export interface NetworkPolicyData {
+  name: string;
+  namespace: string;
+  policy_types: string[];
+}
+
 interface NamespaceUsage {
   namespace: string;
   cpuPercent: number;
@@ -48,6 +99,12 @@ export const useObservabilityData = () => {
   const [pods, setPods] = useState<PodData[]>([]);
   const [services, setServices] = useState<ServiceData[]>([]);
   const [ingresses, setIngresses] = useState<IngressData[]>([]);
+  const [deployments, setDeployments] = useState<DeploymentData[]>([]);
+  const [daemonSets, setDaemonSets] = useState<DaemonSetData[]>([]);
+  const [statefulSets, setStatefulSets] = useState<StatefulSetData[]>([]);
+  const [jobs, setJobs] = useState<JobData[]>([]);
+  const [cronJobs, setCronJobs] = useState<CronJobData[]>([]);
+  const [networkPolicies, setNetworkPolicies] = useState<NetworkPolicyData[]>([]);
   const [namespaceUsage, setNamespaceUsage] = useState<NamespaceUsage[]>([]);
   const [hasResourceData, setHasResourceData] = useState(false);
   const [agents, setAgents] = useState<AgentStatus[]>([]);
@@ -265,6 +322,87 @@ export const useObservabilityData = () => {
       console.log("[observability] ingresses parsed:", ingList.length, ingList.slice(0, 2));
       setIngresses(ingList);
 
+      // Parse deployments
+      const deplMetric = latestByType["deployments"];
+      if (deplMetric) {
+        const raw: any[] = (deplMetric.metric_data as any)?.deployments || [];
+        setDeployments(raw.map((d: any) => ({
+          name: d.name || "unknown",
+          namespace: d.namespace || "default",
+          desired: d.desired ?? d.replicas ?? 0,
+          ready: d.ready ?? d.ready_replicas ?? 0,
+          available: d.available ?? d.available_replicas ?? 0,
+          updated: d.updated ?? d.updated_replicas ?? 0,
+        })));
+      }
+
+      // Parse daemonsets
+      const dsMetric = latestByType["daemonsets"];
+      if (dsMetric) {
+        const raw: any[] = (dsMetric.metric_data as any)?.daemonsets || [];
+        setDaemonSets(raw.map((d: any) => ({
+          name: d.name || "unknown",
+          namespace: d.namespace || "default",
+          desired: d.desired ?? d.desired_number_scheduled ?? 0,
+          ready: d.ready ?? d.number_ready ?? 0,
+          available: d.available ?? d.number_available ?? 0,
+          updated: d.updated ?? d.updated_number_scheduled ?? 0,
+        })));
+      }
+
+      // Parse statefulsets
+      const stsMetric = latestByType["statefulsets"];
+      if (stsMetric) {
+        const raw: any[] = (stsMetric.metric_data as any)?.statefulsets || [];
+        setStatefulSets(raw.map((s: any) => ({
+          name: s.name || "unknown",
+          namespace: s.namespace || "default",
+          desired: s.desired ?? s.replicas ?? 0,
+          ready: s.ready ?? s.ready_replicas ?? 0,
+          available: s.available ?? s.current_replicas ?? 0,
+          updated: s.updated ?? s.updated_replicas ?? 0,
+        })));
+      }
+
+      // Parse jobs
+      const jobsMetric = latestByType["jobs"];
+      if (jobsMetric) {
+        const raw: any[] = (jobsMetric.metric_data as any)?.jobs || [];
+        setJobs(raw.map((j: any) => ({
+          name: j.name || "unknown",
+          namespace: j.namespace || "default",
+          status: j.status || "Unknown",
+          completions: j.completions ?? 0,
+          failed: j.failed ?? 0,
+          active: j.active ?? 0,
+        })));
+      }
+
+      // Parse cronjobs
+      const cjMetric = latestByType["cronjobs"];
+      if (cjMetric) {
+        const raw: any[] = (cjMetric.metric_data as any)?.cronjobs || [];
+        setCronJobs(raw.map((c: any) => ({
+          name: c.name || "unknown",
+          namespace: c.namespace || "default",
+          schedule: c.schedule || "",
+          suspend: c.suspend ?? false,
+          active: c.active ?? 0,
+          last_schedule: c.last_schedule ?? null,
+        })));
+      }
+
+      // Parse networkpolicies
+      const npMetric = latestByType["networkpolicies"];
+      if (npMetric) {
+        const raw: any[] = (npMetric.metric_data as any)?.networkpolicies || [];
+        setNetworkPolicies(raw.map((n: any) => ({
+          name: n.name || "unknown",
+          namespace: n.namespace || "default",
+          policy_types: Array.isArray(n.policy_types) ? n.policy_types : [],
+        })));
+      }
+
       // Parse namespace CPU/memory usage — derived from pod_details containers
       // (agent does not send a dedicated namespace_usage metric; we aggregate here)
       {
@@ -410,6 +548,12 @@ export const useObservabilityData = () => {
     setPods([]);
     setServices([]);
     setIngresses([]);
+    setDeployments([]);
+    setDaemonSets([]);
+    setStatefulSets([]);
+    setJobs([]);
+    setCronJobs([]);
+    setNetworkPolicies([]);
     setNamespaceUsage([]);
     setLastSync(null);
     setLoading(true);
@@ -448,6 +592,12 @@ export const useObservabilityData = () => {
     pods,
     services,
     ingresses,
+    deployments,
+    daemonSets,
+    statefulSets,
+    jobs,
+    cronJobs,
+    networkPolicies,
     namespaceUsage,
     hasResourceData,
     agents,

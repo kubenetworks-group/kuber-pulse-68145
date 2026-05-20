@@ -2,57 +2,77 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: kodo
+  labels:
+    name: kodo
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: kodo-agent
   namespace: kodo
+  labels:
+    app: kodo-agent
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: kodo-agent
+  labels:
+    app: kodo-agent
 rules:
+# Recursos básicos de leitura
 - apiGroups: [""]
   resources: ["nodes", "pods", "events", "persistentvolumeclaims", "persistentvolumes", "secrets", "resourcequotas", "limitranges", "services", "configmaps", "endpoints"]
   verbs: ["get", "list", "watch"]
+# Namespaces
 - apiGroups: [""]
   resources: ["namespaces"]
-  verbs: ["get", "list", "watch", "create", "delete"]
+  verbs: ["get", "list", "watch"]
+# Acesso a métricas dos nodes
 - apiGroups: [""]
-  resources: ["nodes/proxy", "nodes/stats"]
+  resources: ["nodes/proxy", "nodes/stats", "nodes/metrics"]
   verbs: ["get"]
+# Deletar pods (para remediation)
 - apiGroups: [""]
   resources: ["pods"]
-  verbs: ["delete"]
+  verbs: ["get", "list", "delete"]
+# Exec em pods (para debugging)
 - apiGroups: [""]
-  resources: ["pods/exec"]
-  verbs: ["create"]
+  resources: ["pods/exec", "pods/log"]
+  verbs: ["create", "get"]
+# Workloads
 - apiGroups: ["apps"]
   resources: ["deployments", "daemonsets", "replicasets", "statefulsets"]
   verbs: ["get", "list", "watch", "update", "patch"]
+# Autoscaling
 - apiGroups: ["autoscaling"]
   resources: ["horizontalpodautoscalers"]
   verbs: ["get", "list", "watch"]
+# Batch jobs
 - apiGroups: ["batch"]
   resources: ["jobs", "cronjobs"]
   verbs: ["get", "list", "watch"]
+# Storage
 - apiGroups: ["storage.k8s.io"]
   resources: ["storageclasses", "volumeattachments"]
   verbs: ["get", "list", "watch"]
+# Métricas (importante para FinOps)
 - apiGroups: ["metrics.k8s.io"]
   resources: ["nodes", "pods"]
-  verbs: ["get", "list", "watch"]
+  verbs: ["get", "list"]
+# RBAC
 - apiGroups: ["rbac.authorization.k8s.io"]
   resources: ["roles", "rolebindings", "clusterroles", "clusterrolebindings"]
   verbs: ["get", "list", "watch"]
+# Networking
 - apiGroups: ["networking.k8s.io"]
   resources: ["networkpolicies", "ingresses", "ingressclasses"]
   verbs: ["get", "list", "watch"]
+# Coordination
 - apiGroups: ["coordination.k8s.io"]
   resources: ["leases"]
-  verbs: ["get", "list", "watch"]
+  verbs: ["get", "list", "watch", "create", "update"]
+# Pod Disruption Budgets
 - apiGroups: ["policy"]
   resources: ["poddisruptionbudgets"]
   verbs: ["get", "list", "watch"]
@@ -61,6 +81,8 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: kodo-agent
+  labels:
+    app: kodo-agent
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -75,19 +97,25 @@ kind: ConfigMap
 metadata:
   name: kodo-config
   namespace: kodo
+  labels:
+    app: kodo-agent
 data:
   API_ENDPOINT: "https://dadaeduevxyvkhjmwlel.supabase.co/functions/v1"
   COLLECT_INTERVAL: "15"
+  LOG_LEVEL: "info"
+  # Adicione conforme necessário
 ---
 apiVersion: v1
 kind: Secret
 metadata:
   name: kodo-secret
   namespace: kodo
+  labels:
+    app: kodo-agent
 type: Opaque
 stringData:
-  API_KEY: "kp_e73b403925384b38957d0fae7d37f4df"
-  CLUSTER_ID: "4e630bb6-99f5-4787-b662-f8fe38dbc31f"
+  API_KEY: "kp_b3059e88005448959a0b90d1832730fa"
+  CLUSTER_ID: "24c38b03-e9a1-4569-b076-5796cf057bdb"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -98,6 +126,11 @@ metadata:
     app: kodo-agent
 spec:
   replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app: kodo-agent
@@ -105,14 +138,15 @@ spec:
     metadata:
       labels:
         app: kodo-agent
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
     spec:
       serviceAccountName: kodo-agent
-      # Uncomment and configure if using a private registry
-      # imagePullSecrets:
-      # - name: ghcr-secret
       containers:
       - name: agent
-        image: ghcr.io/kubenetworks-group/kodo-agent:v0.1.75
+        image: ghcr.io/kubenetworks-group/kodo-agent:v0.1.78
         imagePullPolicy: Always
         envFrom:
         - configMapRef:
@@ -126,8 +160,26 @@ spec:
           limits:
             memory: "512Mi"
             cpu: "500m"
-        securityContext:
-          readOnlyRootFilesystem: true
-          runAsNonRoot: true
-          runAsUser: 1000
-          allowPrivilegeEscalation: false
+      # Pod anti-affinity para melhor disponibilidade
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - kodo-agent
+              topologyKey: kubernetes.io/hostname
+      # Tolerações para autopilot/GKE
+      tolerations:
+      - key: cloud.google.com/gke-preemptible
+        operator: Equal
+        value: "true"
+        effect: NoSchedule
+      - key: cloud.google.com/gke-spot
+        operator: Equal
+        value: "true"
+        effect: NoSchedule
