@@ -54,5 +54,8 @@ verify_jwt = false
 [functions.whatsapp-verify-phone]
 verify_jwt = true
 
+[functions.invite-lead]
+verify_jwt = false
+
 [functions.whatsapp-confirm-verification]
 verify_jwt = true
