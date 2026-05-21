@@ -34,7 +34,7 @@ import (
 )
 
 // Agent version - update this when releasing new versions
-const AgentVersion = "v0.1.79"
+const AgentVersion = "v0.2.81"
 
 // ---------------------------------------------
 // PVC USAGE VIA DF COMMAND (EXEC IN CONTAINERS)
@@ -2852,7 +2852,11 @@ func executeCommands(clientset *kubernetes.Clientset, metricsClient *metricsv.Cl
 		case "self_update", "agent_update":
 			log.Printf("   → Self-updating agent...")
 			result, err = selfUpdate(clientset, cmd.CommandParams)
-			// After successful update, the pod will restart and won't continue execution
+			// Mark the command complete NOW, while this pod is still alive.
+			// Kubernetes will kill us during the rolling restart before the
+			// normal updateCommandStatus at the bottom of this closure runs.
+			updateCommandStatus(config, cmd.ID, result, err)
+			return
 		case "get_pod_logs":
 			log.Printf("   → Fetching pod logs...")
 			result, err = getPodLogs(clientset, cmd.CommandParams)
