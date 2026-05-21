@@ -33,8 +33,8 @@ import (
 	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
 )
 
-// Agent version - update this when releasing new versions
-const AgentVersion = "v0.2.81"
+// AgentVersion is set at build time via -ldflags "-X main.AgentVersion=<tag>"
+var AgentVersion = "dev"
 
 // ---------------------------------------------
 // PVC USAGE VIA DF COMMAND (EXEC IN CONTAINERS)

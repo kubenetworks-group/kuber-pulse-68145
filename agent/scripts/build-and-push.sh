@@ -14,6 +14,7 @@ docker buildx create --use --name kodo-builder 2>/dev/null || docker buildx use 
 
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
+  --build-arg VERSION=${VERSION} \
   -t ${FULL_IMAGE} \
   -t ${IMAGE_NAME}:latest \
   --push \

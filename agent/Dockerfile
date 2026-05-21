@@ -3,6 +3,7 @@ FROM --platform=$BUILDPLATFORM golang:1.22-alpine AS builder
 
 ARG TARGETARCH
 ARG TARGETOS
+ARG VERSION=dev
 
 WORKDIR /app
 
@@ -12,7 +13,9 @@ RUN go mod download
 COPY . .
 
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
-    go build -a -installsuffix cgo -ldflags '-w -s' -o kodo-agent .
+    go build -a -installsuffix cgo \
+    -ldflags "-w -s -X main.AgentVersion=${VERSION}" \
+    -o kodo-agent .
 
 # Final stage
 FROM --platform=$TARGETPLATFORM alpine:latest
