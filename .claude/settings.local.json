@@ -58,7 +58,8 @@
       "Bash(command -v go)",
       "Read(//opt/homebrew/bin/**)",
       "Read(//Users/denercavalcante/**)",
-      "Bash(awk '{print $NF}')"
+      "Bash(awk '{print $NF}')",
+      "Bash(/usr/local/go/bin/go build *)"
     ]
   }
 }

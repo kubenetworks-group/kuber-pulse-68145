@@ -19,9 +19,31 @@ export function AgentUpdateBanner() {
   const [showCommand, setShowCommand] = useState(false);
 
   useEffect(() => {
-    if (selectedClusterId) {
-      checkForUpdates();
-    }
+    if (!selectedClusterId) return;
+    checkForUpdates();
+    // Reset dismiss when cluster changes so banner re-evaluates
+    setDismissed(false);
+
+    // Realtime: re-check when agent_version is updated in DB
+    const channel = supabase
+      .channel(`agent-update-banner-${selectedClusterId}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "clusters", filter: `id=eq.${selectedClusterId}` },
+        () => {
+          setDismissed(false);
+          checkForUpdates();
+        }
+      )
+      .subscribe();
+
+    // Polling fallback every 30s
+    const poll = setInterval(checkForUpdates, 30_000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(poll);
+    };
   }, [selectedClusterId]);
 
   const checkForUpdates = async () => {

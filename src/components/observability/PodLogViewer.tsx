@@ -17,6 +17,29 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
+interface ContainerInfo {
+  name: string;
+  ready: boolean;
+  restart_count: number;
+  state: { status: string; reason?: string; exit_code?: number };
+  last_state?: { status: string; reason?: string; exit_code?: number };
+  image?: string;
+  liveness_probe?: boolean;
+  readiness_probe?: boolean;
+  startup_probe?: boolean;
+  resources?: {
+    limits?: { cpu?: number; memory?: number };
+    requests?: { cpu?: number; memory?: number };
+  };
+}
+
+interface PodCondition {
+  type: string;
+  status: string;
+  reason?: string;
+  message?: string;
+}
+
 interface PodData {
   name: string;
   namespace: string;
@@ -25,6 +48,13 @@ interface PodData {
   cpu: string;
   memory: string;
   node: string;
+  controlled_by_kind?: string;
+  controlled_by_name?: string;
+  qos_class?: string;
+  labels?: Record<string, string>;
+  containers?: ContainerInfo[];
+  created_at?: string;
+  conditions?: PodCondition[];
 }
 
 interface PodLogViewerProps {
@@ -67,6 +97,33 @@ export const PodLogViewer = ({ pods: podsProp, onRefresh, loading: externalLoadi
   const [showPreviousLogs, setShowPreviousLogs] = useState(false);
   const terminalRef = useRef<HTMLDivElement>(null);
   const matchElemRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+
+  // Pod info panel state
+  const [podInfoOpen, setPodInfoOpen] = useState(false);
+  const [podInfoPod, setPodInfoPod] = useState<PodData | null>(null);
+
+  const formatAge = (createdAt?: string): string => {
+    if (!createdAt) return "—";
+    const diffMs = Date.now() - new Date(createdAt).getTime();
+    const mins = Math.floor(diffMs / 60000);
+    const hours = Math.floor(mins / 60);
+    const days = Math.floor(hours / 24);
+    if (days > 0) return `${days}d${hours % 24 > 0 ? `${hours % 24}h` : ""}`;
+    if (hours > 0) return `${hours}h${mins % 60 > 0 ? `${mins % 60}m` : ""}`;
+    return `${mins}m`;
+  };
+
+  const formatBytes = (bytes?: number): string => {
+    if (!bytes) return "—";
+    if (bytes >= 1073741824) return `${(bytes / 1073741824).toFixed(1)}Gi`;
+    if (bytes >= 1048576) return `${(bytes / 1048576).toFixed(0)}Mi`;
+    return `${Math.round(bytes / 1024)}Ki`;
+  };
+
+  const formatMillicores = (milli?: number): string => {
+    if (!milli) return "—";
+    return milli >= 1000 ? `${(milli / 1000).toFixed(1)}` : `${milli}m`;
+  };
 
   // The displayed pods: prefer fresh local data fetched on demand, fall back to prop
   const pods = localPods ?? podsProp;
@@ -455,135 +512,367 @@ export const PodLogViewer = ({ pods: podsProp, onRefresh, loading: externalLoadi
 
   return (
     <>
-      <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <CardTitle className="text-base font-semibold flex items-center gap-2 shrink-0">
-              <Terminal className="w-4 h-4 text-green-400" />
-              Logs de Containers
-            </CardTitle>
-            <div className="flex items-center gap-2 flex-wrap">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 text-xs gap-1.5"
-                onClick={handleRefresh}
-                disabled={podsLoading || externalLoading}
-                title="Atualizar lista de pods"
-              >
-                <RotateCcw className={`w-3.5 h-3.5 ${podsLoading || externalLoading ? "animate-spin" : ""}`} />
-                <span className="hidden sm:inline">Atualizar pods</span>
-              </Button>
-              <Select value={tailLines} onValueChange={setTailLines}>
-                <SelectTrigger className="w-24 sm:w-28 h-8 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="50">50 linhas</SelectItem>
-                  <SelectItem value="100">100 linhas</SelectItem>
-                  <SelectItem value="200">200 linhas</SelectItem>
-                  <SelectItem value="500">500 linhas</SelectItem>
-                  <SelectItem value="1000">1000 linhas</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+      <Card className="border-border/50 bg-card/50 backdrop-blur-sm h-full flex flex-col">
+        {/* ── Toolbar ─────────────────────────────────────────────────────────── */}
+        <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border/50 shrink-0 flex-wrap">
+          <div className="flex items-center gap-2 shrink-0">
+            <Terminal className="w-4 h-4 text-green-400" />
+            <span className="text-sm font-semibold">Pods</span>
+            {filteredPods.length > 0 && (
+              <span className="text-[11px] text-muted-foreground tabular-nums">{filteredPods.length} itens</span>
+            )}
           </div>
-        </CardHeader>
-        <CardContent>
-          {/* Restart alert banner — shown when any pod has restarts */}
+
+          {/* Restart alert inline */}
           {pods.some((p) => p.restarts > 0) && (
-            <div className="flex items-center justify-between mb-3 px-3 py-2 rounded-md bg-amber-500/10 border border-amber-500/30 text-xs text-amber-600 dark:text-amber-400">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                <span>
-                  {pods.filter((p) => p.restarts > 0).length} pod(s) com restarts detectados.
-                  O Monitor IA analisa a causa e registra o histórico automaticamente.
-                </span>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 text-[10px] gap-1 text-amber-500 hover:text-amber-400 shrink-0"
-                onClick={() => navigate("/ai-monitor")}
-              >
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-500">
+              <AlertTriangle className="w-3 h-3 shrink-0" />
+              <span>{pods.filter((p) => p.restarts > 0).length} pod(s) com restarts</span>
+              <button onClick={() => navigate("/ai-monitor")} className="underline underline-offset-2 hover:text-amber-400 transition-colors">
                 Ver Auditoria
-                <ExternalLink className="w-3 h-3" />
-              </Button>
+              </button>
             </div>
           )}
 
-          {/* Search + namespace filter row */}
-          <div className="flex flex-col sm:flex-row gap-2 mb-3">
-            <div className="relative flex-1">
-              <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-muted-foreground" />
+          <div className="flex items-center gap-2 ml-auto flex-wrap">
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2 w-3.5 h-3.5 text-muted-foreground" />
               <Input
-                placeholder="Buscar pod por nome..."
+                placeholder="Buscar pod..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="pl-8 h-9 text-sm"
+                className="pl-8 h-8 text-xs w-44 sm:w-56"
               />
             </div>
+            {/* Namespace filter */}
             {namespaces.length > 1 && (
               <Select value={namespaceFilter} onValueChange={setNamespaceFilter}>
-                <SelectTrigger className="w-full sm:w-44 h-9 text-xs gap-1.5">
-                  <Filter className="w-3.5 h-3.5 text-muted-foreground" />
+                <SelectTrigger className="h-8 text-xs w-36 gap-1.5">
+                  <Filter className="w-3 h-3 text-muted-foreground" />
                   <SelectValue placeholder="Namespace" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all" className="text-xs">Todos os namespaces</SelectItem>
                   {namespaces.map((ns) => (
-                    <SelectItem key={ns} value={ns} className="text-xs font-mono">
-                      {ns}
-                    </SelectItem>
+                    <SelectItem key={ns} value={ns} className="text-xs font-mono">{ns}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             )}
+            {/* Tail lines */}
+            <Select value={tailLines} onValueChange={setTailLines}>
+              <SelectTrigger className="w-28 h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="50">50 linhas</SelectItem>
+                <SelectItem value="100">100 linhas</SelectItem>
+                <SelectItem value="200">200 linhas</SelectItem>
+                <SelectItem value="500">500 linhas</SelectItem>
+                <SelectItem value="1000">1000 linhas</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 text-xs gap-1.5"
+              onClick={handleRefresh}
+              disabled={podsLoading || externalLoading}
+            >
+              <RotateCcw className={`w-3.5 h-3.5 ${podsLoading || externalLoading ? "animate-spin" : ""}`} />
+              <span className="hidden sm:inline">Atualizar</span>
+            </Button>
+          </div>
+        </div>
+
+        {/* ── Table ───────────────────────────────────────────────────────────── */}
+        <div className="flex-1 min-h-0 overflow-auto">
+          {/* Header row */}
+          <div
+            className="sticky top-0 z-10 grid text-[10px] font-semibold uppercase tracking-widest text-muted-foreground border-b border-border/50 px-4 py-2"
+            style={{
+              gridTemplateColumns: "minmax(180px,1fr) 110px 70px 90px 88px 72px 108px 120px 80px 82px 52px 92px",
+              columnGap: "12px",
+              background: "hsl(var(--card))",
+            }}
+          >
+            <div>Name</div>
+            <div>Namespace</div>
+            <div className="text-right">CPU</div>
+            <div className="text-right">Memory</div>
+            <div>Containers</div>
+            <div className="text-right">Restarts</div>
+            <div>Controlled By</div>
+            <div>Node</div>
+            <div>QoS</div>
+            <div>Status</div>
+            <div>Age</div>
+            <div />
           </div>
 
-          <div className="space-y-1 max-h-[300px] overflow-y-auto">
-            {filteredPods.length === 0 ? (
-              <div className="h-24 flex items-center justify-center text-muted-foreground text-sm">
-                Nenhum pod encontrado
-              </div>
-            ) : (
-              filteredPods.map((pod, i) => (
+          {/* Data rows */}
+          {filteredPods.length === 0 ? (
+            <div className="h-32 flex items-center justify-center text-muted-foreground text-sm">
+              Nenhum pod encontrado
+            </div>
+          ) : (
+            filteredPods.map((pod, i) => {
+              const containers: ContainerInfo[] = pod.containers || [];
+              const statusColor =
+                pod.status === "Running" ? "text-green-500" :
+                pod.status === "Pending" ? "text-yellow-500" :
+                pod.status === "Succeeded" ? "text-blue-400" :
+                "text-red-400";
+              const qosColor =
+                pod.qos_class === "Guaranteed" ? "text-green-400" :
+                pod.qos_class === "Burstable" ? "text-yellow-400" :
+                "text-muted-foreground";
+
+              return (
                 <div
                   key={`${pod.namespace}-${pod.name}-${i}`}
-                  className="flex items-center justify-between p-2 rounded-md hover:bg-muted/50 transition-colors cursor-pointer group"
-                  onClick={() => {
-                    setSelectedContainer("");
-                    setAvailableContainers([]);
-                    fetchLogs(pod);
+                  className="grid items-center text-xs border-b border-border/20 px-4 py-2.5 hover:bg-muted/40 cursor-pointer transition-colors group"
+                  style={{
+                    gridTemplateColumns: "minmax(180px,1fr) 110px 70px 90px 88px 72px 108px 120px 80px 82px 52px 92px",
+                    columnGap: "12px",
                   }}
+                  onClick={() => { setPodInfoPod(pod); setPodInfoOpen(true); }}
                 >
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <FileText className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
-                    <span className="text-xs font-mono truncate">{pod.name}</span>
-                    <Badge variant="outline" className="text-[10px] px-1.5 shrink-0 hidden xs:inline-flex">{pod.namespace}</Badge>
+                  {/* Name */}
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <FileText className="w-3 h-3 text-muted-foreground shrink-0" />
+                    <span className="font-mono truncate" title={pod.name}>{pod.name}</span>
                     {pod.restarts > 0 && (
-                      <Badge variant="destructive" className="text-[10px] px-1.5 shrink-0">
-                        {pod.restarts}↺
-                      </Badge>
+                      <Badge variant="destructive" className="text-[9px] px-1 py-0 h-4 shrink-0">{pod.restarts}↺</Badge>
                     )}
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <Badge
-                      variant={pod.status === "Running" ? "default" : "destructive"}
-                      className="text-[10px]"
+                  {/* Namespace */}
+                  <div className="text-blue-400 truncate text-[11px]" title={pod.namespace}>{pod.namespace}</div>
+                  {/* CPU */}
+                  <div className="text-right tabular-nums text-muted-foreground">{pod.cpu}</div>
+                  {/* Memory */}
+                  <div className="text-right tabular-nums text-muted-foreground">{pod.memory}</div>
+                  {/* Container squares */}
+                  <div className="flex items-center gap-0.5 flex-wrap">
+                    {containers.length > 0 ? (
+                      containers.map((c, ci) => {
+                        const bg =
+                          c.ready ? "#3fb950" :
+                          c.state?.status === "waiting" ? "#e3b341" :
+                          c.state?.status === "terminated" ? "#f47067" :
+                          "#484f58";
+                        return (
+                          <div
+                            key={ci}
+                            title={`${c.name}: ${c.state?.status || "unknown"}`}
+                            style={{ width: 10, height: 10, borderRadius: 2, background: bg, flexShrink: 0 }}
+                          />
+                        );
+                      })
+                    ) : (
+                      <div style={{ width: 10, height: 10, borderRadius: 2, background: "#484f58" }} />
+                    )}
+                  </div>
+                  {/* Restarts */}
+                  <div className={`text-right tabular-nums ${pod.restarts > 0 ? "text-amber-400 font-medium" : "text-muted-foreground"}`}>
+                    {pod.restarts}
+                  </div>
+                  {/* Controlled By */}
+                  <div className="truncate text-muted-foreground" title={pod.controlled_by_name || ""}>
+                    {pod.controlled_by_kind || "—"}
+                  </div>
+                  {/* Node */}
+                  <div className="truncate text-[11px] text-muted-foreground" title={pod.node}>{pod.node || "—"}</div>
+                  {/* QoS */}
+                  <div className={`truncate text-[11px] ${qosColor}`}>{pod.qos_class || "—"}</div>
+                  {/* Status */}
+                  <div className={`font-medium ${statusColor}`}>{pod.status}</div>
+                  {/* Age */}
+                  <div className="text-muted-foreground tabular-nums">{formatAge(pod.created_at)}</div>
+                  {/* Actions */}
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 text-[10px] px-2 gap-1"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedContainer("");
+                        setAvailableContainers([]);
+                        fetchLogs(pod);
+                      }}
                     >
-                      {pod.status}
-                    </Badge>
-                    <Button variant="ghost" size="sm" className="h-6 text-[10px] opacity-0 group-hover:opacity-100 transition-opacity hidden sm:flex">
+                      <Terminal className="w-3 h-3" />
                       Ver Logs
                     </Button>
                   </div>
                 </div>
-              ))
+              );
+            })
+          )}
+        </div>
+      </Card>
+
+      {/* ── Pod Info Dialog ───────────────────────────────────────────────── */}
+      <Dialog open={podInfoOpen} onOpenChange={setPodInfoOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto p-0 gap-0" style={{ background: "#161b22", border: "1px solid #30363d" }}>
+          <DialogHeader className="px-5 pt-4 pb-3 shrink-0" style={{ borderBottom: "1px solid #21262d" }}>
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5" style={{ background: "rgba(63,185,80,0.15)" }}>
+                <FileText className="w-4 h-4" style={{ color: "#3fb950" }} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <DialogTitle className="text-sm font-mono leading-tight" style={{ color: "#e6edf3" }}>
+                  {podInfoPod?.name}
+                </DialogTitle>
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  <span className="text-[11px] font-mono" style={{ color: "#58a6ff" }}>{podInfoPod?.namespace}</span>
+                  <span
+                    className="text-[11px] font-medium px-1.5 py-0.5 rounded"
+                    style={{
+                      background: podInfoPod?.status === "Running" ? "rgba(63,185,80,0.15)" : "rgba(244,112,103,0.15)",
+                      color: podInfoPod?.status === "Running" ? "#3fb950" : "#f47067",
+                    }}
+                  >
+                    {podInfoPod?.status}
+                  </span>
+                  {podInfoPod && podInfoPod.restarts > 0 && (
+                    <span className="text-[11px]" style={{ color: "#e3b341" }}>{podInfoPod.restarts} restart(s)</span>
+                  )}
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-[11px] gap-1.5 shrink-0"
+                style={{ borderColor: "#30363d", color: "#8b949e" }}
+                onClick={() => {
+                  setPodInfoOpen(false);
+                  if (podInfoPod) { setSelectedContainer(""); setAvailableContainers([]); fetchLogs(podInfoPod); }
+                }}
+              >
+                <Terminal className="w-3 h-3" />
+                Ver Logs
+              </Button>
+            </div>
+          </DialogHeader>
+
+          <div className="px-5 py-4 space-y-5" style={{ color: "#e6edf3" }}>
+            {/* Overview grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {[
+                { label: "Node", value: podInfoPod?.node || "—" },
+                { label: "QoS", value: podInfoPod?.qos_class || "—" },
+                { label: "Age", value: formatAge(podInfoPod?.created_at) },
+                { label: "Controlled By", value: podInfoPod?.controlled_by_kind || "—", sub: podInfoPod?.controlled_by_name },
+                { label: "CPU", value: podInfoPod?.cpu || "—" },
+                { label: "Memory", value: podInfoPod?.memory || "—" },
+              ].map(({ label, value, sub }) => (
+                <div key={label} className="rounded-lg px-3 py-2" style={{ background: "#0d1117", border: "1px solid #21262d" }}>
+                  <div className="text-[10px] uppercase tracking-wide mb-0.5" style={{ color: "#484f58" }}>{label}</div>
+                  <div className="text-[12px] font-mono truncate" style={{ color: "#e6edf3" }} title={sub || value}>{value}</div>
+                  {sub && <div className="text-[10px] truncate mt-0.5" style={{ color: "#8b949e" }} title={sub}>{sub}</div>}
+                </div>
+              ))}
+            </div>
+
+            {/* Labels */}
+            {podInfoPod?.labels && Object.keys(podInfoPod.labels).length > 0 && (
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: "#8b949e" }}>Labels</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {Object.entries(podInfoPod.labels).map(([k, v]) => (
+                    <span key={k} className="text-[10px] font-mono px-2 py-0.5 rounded" style={{ background: "#21262d", border: "1px solid #30363d", color: "#79c0ff" }}>
+                      {k}={v}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Conditions */}
+            {podInfoPod?.conditions && podInfoPod.conditions.length > 0 && (
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: "#8b949e" }}>Conditions</div>
+                <div className="rounded-lg overflow-hidden" style={{ border: "1px solid #21262d" }}>
+                  {podInfoPod.conditions.map((c, ci) => (
+                    <div key={ci} className="flex items-center gap-3 px-3 py-2 text-[11px]" style={{ borderTop: ci > 0 ? "1px solid #21262d" : undefined, background: "#0d1117" }}>
+                      <div className="w-2 h-2 rounded-full shrink-0" style={{ background: c.status === "True" ? "#3fb950" : "#f47067" }} />
+                      <span className="font-mono w-32 shrink-0" style={{ color: "#e6edf3" }}>{c.type}</span>
+                      <span className="shrink-0" style={{ color: c.status === "True" ? "#3fb950" : "#f47067" }}>{c.status}</span>
+                      {c.reason && <span className="text-[10px] truncate" style={{ color: "#8b949e" }}>{c.reason}</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Containers */}
+            {podInfoPod?.containers && podInfoPod.containers.length > 0 && (
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: "#8b949e" }}>
+                  Containers ({podInfoPod.containers.length})
+                </div>
+                <div className="space-y-2">
+                  {podInfoPod.containers.map((c, ci) => {
+                    const stateColor = c.ready ? "#3fb950" : c.state?.status === "waiting" ? "#e3b341" : "#f47067";
+                    return (
+                      <div key={ci} className="rounded-lg p-3" style={{ background: "#0d1117", border: "1px solid #21262d" }}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-2 h-2 rounded-full shrink-0" style={{ background: stateColor }} />
+                          <span className="text-[12px] font-mono font-semibold" style={{ color: "#e6edf3" }}>{c.name}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded ml-auto" style={{ background: "rgba(63,185,80,0.1)", color: stateColor }}>
+                            {c.state?.status || "unknown"}
+                            {c.state?.reason ? ` (${c.state.reason})` : ""}
+                          </span>
+                        </div>
+                        {c.image && (
+                          <div className="text-[10px] font-mono mb-2 truncate" style={{ color: "#8b949e" }} title={c.image}>{c.image}</div>
+                        )}
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] mb-2">
+                          <div className="flex items-center gap-1.5">
+                            <span style={{ color: "#484f58" }}>Restarts:</span>
+                            <span style={{ color: c.restart_count > 0 ? "#e3b341" : "#8b949e" }}>{c.restart_count}</span>
+                          </div>
+                          {c.resources?.requests && (
+                            <div className="flex items-center gap-1.5">
+                              <span style={{ color: "#484f58" }}>Req:</span>
+                              <span className="font-mono text-[10px]" style={{ color: "#8b949e" }}>
+                                {formatMillicores(c.resources.requests.cpu)} CPU / {formatBytes(c.resources.requests.memory)} Mem
+                              </span>
+                            </div>
+                          )}
+                          {c.resources?.limits && (
+                            <div className="flex items-center gap-1.5">
+                              <span style={{ color: "#484f58" }}>Limit:</span>
+                              <span className="font-mono text-[10px]" style={{ color: "#8b949e" }}>
+                                {formatMillicores(c.resources.limits.cpu)} CPU / {formatBytes(c.resources.limits.memory)} Mem
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 text-[10px] pt-2" style={{ borderTop: "1px solid #21262d" }}>
+                          <span style={{ color: "#484f58" }}>Probes:</span>
+                          <span style={{ color: c.liveness_probe ? "#3fb950" : "#484f58" }}>
+                            {c.liveness_probe ? "✓" : "✗"} Liveness
+                          </span>
+                          <span style={{ color: c.readiness_probe ? "#3fb950" : "#484f58" }}>
+                            {c.readiness_probe ? "✓" : "✗"} Readiness
+                          </span>
+                          <span style={{ color: c.startup_probe ? "#3fb950" : "#484f58" }}>
+                            {c.startup_probe ? "✓" : "✗"} Startup
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             )}
           </div>
-        </CardContent>
-      </Card>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setFullscreen(false); }}>
         <DialogContent

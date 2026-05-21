@@ -2,7 +2,30 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCluster } from "@/contexts/ClusterContext";
 
-interface PodData {
+export interface ContainerInfo {
+  name: string;
+  ready: boolean;
+  restart_count: number;
+  state: { status: string; reason?: string; exit_code?: number };
+  last_state?: { status: string; reason?: string; exit_code?: number };
+  image?: string;
+  liveness_probe?: boolean;
+  readiness_probe?: boolean;
+  startup_probe?: boolean;
+  resources?: {
+    limits?: { cpu?: number; memory?: number };
+    requests?: { cpu?: number; memory?: number };
+  };
+}
+
+export interface PodCondition {
+  type: string;
+  status: string;
+  reason?: string;
+  message?: string;
+}
+
+export interface PodData {
   name: string;
   namespace: string;
   status: string;
@@ -10,6 +33,13 @@ interface PodData {
   cpu: string;
   memory: string;
   node: string;
+  controlled_by_kind?: string;
+  controlled_by_name?: string;
+  qos_class?: string;
+  labels?: Record<string, string>;
+  containers?: ContainerInfo[];
+  created_at?: string;
+  conditions?: PodCondition[];
 }
 
 interface ServiceData {
@@ -154,32 +184,29 @@ export const useObservabilityData = () => {
         const data = podsMetric.metric_data as any;
         const podList: PodData[] = [];
 
+        const parsePod = (p: any, nsOverride?: string): PodData => ({
+          name: p.name || p.pod_name || "unknown",
+          namespace: nsOverride || p.namespace || "default",
+          status: p.status || p.phase || "Unknown",
+          restarts: p.restarts || p.restart_count || p.total_restarts || 0,
+          cpu: p.cpu || p.cpu_usage || "0m",
+          memory: p.memory || p.memory_usage || "0Mi",
+          node: p.node || p.node_name || "",
+          controlled_by_kind: p.controlled_by_kind || "",
+          controlled_by_name: p.controlled_by_name || "",
+          qos_class: p.qos_class || "",
+          labels: p.labels || {},
+          containers: Array.isArray(p.containers) ? p.containers : [],
+          created_at: p.created_at || "",
+          conditions: Array.isArray(p.conditions) ? p.conditions : [],
+        });
+
         if (data?.pods && Array.isArray(data.pods)) {
-          for (const p of data.pods) {
-            podList.push({
-              name: p.name || p.pod_name || "unknown",
-              namespace: p.namespace || "default",
-              status: p.status || p.phase || "Unknown",
-              restarts: p.restarts || p.restart_count || 0,
-              cpu: p.cpu || p.cpu_usage || "0m",
-              memory: p.memory || p.memory_usage || "0Mi",
-              node: p.node || p.node_name || "",
-            });
-          }
+          for (const p of data.pods) podList.push(parsePod(p));
         } else if (data?.namespaces && typeof data.namespaces === "object") {
           for (const [ns, nsData] of Object.entries(data.namespaces as Record<string, any>)) {
             if (nsData?.pods && Array.isArray(nsData.pods)) {
-              for (const p of nsData.pods) {
-                podList.push({
-                  name: p.name || "unknown",
-                  namespace: ns,
-                  status: p.status || "Unknown",
-                  restarts: p.restarts || 0,
-                  cpu: p.cpu || "0m",
-                  memory: p.memory || "0Mi",
-                  node: p.node || "",
-                });
-              }
+              for (const p of nsData.pods) podList.push(parsePod(p, ns));
             }
           }
         }

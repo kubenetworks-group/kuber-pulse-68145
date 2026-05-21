@@ -32,7 +32,7 @@ import (
 )
 
 // Agent version - update this when releasing new versions
-const AgentVersion = "v0.1.73"
+const AgentVersion = "v0.1.78"
 
 // ---------------------------------------------
 // PVC USAGE VIA DF COMMAND (EXEC IN CONTAINERS)
@@ -470,11 +470,54 @@ func main() {
 	}
 }
 
+// formatPodCPU formats millicores to human-readable CPU string
+func formatPodCPU(milli int64) string {
+	if milli == 0 {
+		return "0m"
+	}
+	if milli >= 1000 {
+		return fmt.Sprintf("%.2f", float64(milli)/1000.0)
+	}
+	return fmt.Sprintf("%dm", milli)
+}
+
+// formatPodMem formats bytes to human-readable memory string
+func formatPodMem(bytes int64) string {
+	if bytes == 0 {
+		return "0Mi"
+	}
+	if bytes >= 1073741824 {
+		return fmt.Sprintf("%.1fGi", float64(bytes)/1073741824.0)
+	}
+	if bytes >= 1048576 {
+		return fmt.Sprintf("%.1fMi", float64(bytes)/1048576.0)
+	}
+	return fmt.Sprintf("%.0fKi", float64(bytes)/1024.0)
+}
+
 // ---------------------------------------------
 // POD DETAILS COLLECTION
 // ---------------------------------------------
-func collectPodDetails(clientset *kubernetes.Clientset) []map[string]interface{} {
+func collectPodDetails(clientset *kubernetes.Clientset, metricsClient *metricsv.Clientset) []map[string]interface{} {
 	pods, _ := clientset.CoreV1().Pods("").List(context.Background(), metav1.ListOptions{})
+
+	// Build per-pod CPU/memory usage map from Metrics API
+	podUsageMap := make(map[string]map[string]int64) // key: namespace/name
+	if metricsClient != nil {
+		if pmList, err := metricsClient.MetricsV1beta1().PodMetricses("").List(context.Background(), metav1.ListOptions{}); err == nil {
+			for _, pm := range pmList.Items {
+				var cpu, mem int64
+				for _, c := range pm.Containers {
+					cpu += c.Usage.Cpu().MilliValue()
+					mem += c.Usage.Memory().Value()
+				}
+				podUsageMap[pm.Namespace+"/"+pm.Name] = map[string]int64{"cpu": cpu, "memory": mem}
+			}
+			log.Printf("✅ Fetched real metrics for %d pods from Metrics API", len(podUsageMap))
+		} else {
+			log.Printf("⚠️  Pod Metrics API unavailable: %v", err)
+		}
+	}
 
 	// Build index of spec containers by name for resource lookup
 	var podDetails []map[string]interface{}
@@ -561,16 +604,30 @@ func collectPodDetails(clientset *kubernetes.Clientset) []map[string]interface{}
 			}
 		}
 
+		// Resolve real-time CPU/memory usage from Metrics API
+		podKey := pod.Namespace + "/" + pod.Name
+		cpuStr, memStr := "0m", "0Mi"
+		if usage, ok := podUsageMap[podKey]; ok {
+			cpuStr = formatPodCPU(usage["cpu"])
+			memStr = formatPodMem(usage["memory"])
+		}
+
 		podDetails = append(podDetails, map[string]interface{}{
-			"name":           pod.Name,
-			"namespace":      pod.Namespace,
-			"phase":          string(pod.Status.Phase),
-			"total_restarts": totalRestarts,
-			"ready":          isPodReady(pod),
-			"containers":     containerStatuses,
-			"node":           pod.Spec.NodeName,
-			"created_at":     pod.CreationTimestamp.Time,
-			"conditions":     getPodConditions(pod),
+			"name":                pod.Name,
+			"namespace":           pod.Namespace,
+			"phase":               string(pod.Status.Phase),
+			"total_restarts":      totalRestarts,
+			"ready":               isPodReady(pod),
+			"containers":          containerStatuses,
+			"node":                pod.Spec.NodeName,
+			"created_at":          pod.CreationTimestamp.Time,
+			"conditions":          getPodConditions(pod),
+			"labels":              pod.Labels,
+			"qos_class":           string(pod.Status.QOSClass),
+			"controlled_by_kind":  podOwnerKind(pod.OwnerReferences),
+			"controlled_by_name":  podOwnerName(pod.OwnerReferences),
+			"cpu":                 cpuStr,
+			"memory":              memStr,
 		})
 	}
 
@@ -904,6 +961,20 @@ func getPodConditions(pod corev1.Pod) []map[string]interface{} {
 		})
 	}
 	return conditions
+}
+
+func podOwnerKind(refs []metav1.OwnerReference) string {
+	if len(refs) == 0 {
+		return ""
+	}
+	return refs[0].Kind
+}
+
+func podOwnerName(refs []metav1.OwnerReference) string {
+	if len(refs) == 0 {
+		return ""
+	}
+	return refs[0].Name
 }
 
 // ---------------------------------------------
@@ -2387,7 +2458,7 @@ func sendMetrics(clientset *kubernetes.Clientset, metricsClient *metricsv.Client
 		{
 			"type": "pod_details",
 			"data": map[string]interface{}{
-				"pods": collectPodDetails(clientset),
+				"pods": collectPodDetails(clientset, metricsClient),
 			},
 			"collected_at": time.Now().UTC().Format(time.RFC3339),
 		},

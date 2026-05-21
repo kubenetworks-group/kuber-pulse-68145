@@ -59,7 +59,26 @@ export function AgentUpdateButton() {
   const [copied, setCopied]         = useState(false);
 
   useEffect(() => {
-    if (selectedClusterId) checkForUpdates();
+    if (!selectedClusterId) return;
+    checkForUpdates();
+
+    // Realtime: re-check immediately when cluster agent_version is updated
+    const channel = supabase
+      .channel(`agent-update-btn-${selectedClusterId}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "clusters", filter: `id=eq.${selectedClusterId}` },
+        () => checkForUpdates()
+      )
+      .subscribe();
+
+    // Polling fallback every 30s (covers manual kubectl updates)
+    const poll = setInterval(checkForUpdates, 30_000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(poll);
+    };
   }, [selectedClusterId]);
 
   const checkForUpdates = async () => {

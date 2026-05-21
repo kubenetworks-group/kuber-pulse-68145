@@ -127,7 +127,7 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
             </div>
           </div>
         </div>
-        <div className="flex-1 p-3 sm:p-4 lg:p-6">
+        <div className="flex-1 flex flex-col min-h-0 p-3 sm:p-4 lg:p-6">
           {children}
         </div>
       </div>

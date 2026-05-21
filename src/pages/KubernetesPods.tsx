@@ -12,8 +12,8 @@ const KubernetesPods = () => {
 
   return (
     <DashboardLayout>
-      <div className="p-4 sm:p-6 lg:p-8 space-y-5 animate-fade-in">
-        <div className="flex items-center justify-between">
+      <div className="flex flex-col flex-1 min-h-0 gap-4 p-4 sm:p-6 lg:p-8 animate-fade-in">
+        <div className="flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
               <Box className="w-5 h-5 text-primary" />
@@ -32,7 +32,9 @@ const KubernetesPods = () => {
         {clusters.length === 0 ? (
           <ClusterOnboarding />
         ) : (
-          <PodLogViewer pods={pods} onRefresh={refetch} loading={loading} />
+          <div className="flex-1 min-h-0">
+            <PodLogViewer pods={pods} onRefresh={refetch} loading={loading} />
+          </div>
         )}
       </div>
     </DashboardLayout>
