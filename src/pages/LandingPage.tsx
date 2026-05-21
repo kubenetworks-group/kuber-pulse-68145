@@ -846,7 +846,7 @@ export default function LandingPage() {
                 Entrar
               </Button>
             </Link>
-            <Link to="/auth?tab=signup">
+            <Link to="/diagnostico">
               <Button size="sm"
                 className="text-sm px-5 font-medium text-white transition-all hover:-translate-y-0.5"
                 style={{ background: 'linear-gradient(135deg, #0891b2, #4f46e5)', boxShadow: '0 4px 20px rgba(8,145,178,0.25)' }}>
@@ -872,7 +872,7 @@ export default function LandingPage() {
               <Link to="/auth" onClick={() => setMenuOpen(false)}>
                 <Button variant="outline" size="sm" className="w-full border-slate-200 text-slate-600">Entrar</Button>
               </Link>
-              <Link to="/auth?tab=signup" onClick={() => setMenuOpen(false)}>
+              <Link to="/diagnostico" onClick={() => setMenuOpen(false)}>
                 <Button size="sm" className="w-full text-white" style={{ background: 'linear-gradient(135deg, #0891b2, #4f46e5)' }}>
                   Solicitar demo
                 </Button>
@@ -936,7 +936,7 @@ export default function LandingPage() {
 
               {/* CTAs */}
               <div className="flex flex-col sm:flex-row gap-4">
-                <Link to="/auth?tab=signup">
+                <Link to="/diagnostico">
                   <Button size="lg"
                     className="text-base px-8 py-6 font-medium rounded-xl text-white transition-all hover:-translate-y-0.5 group"
                     style={{ background: 'linear-gradient(135deg, #0891b2 0%, #4f46e5 100%)', boxShadow: '0 8px 32px rgba(8,145,178,0.3)' }}
@@ -1360,7 +1360,7 @@ export default function LandingPage() {
                   Junte-se a centenas de empresas que já automatizaram sua gestão Kubernetes com IA.
                 </p>
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2">
-                  <Link to="/auth?tab=signup">
+                  <Link to="/diagnostico">
                     <Button size="lg"
                       className="text-base px-10 py-6 rounded-xl font-medium bg-white text-slate-900 hover:bg-white/90 transition-all hover:-translate-y-0.5 group">
                       Solicitar demo

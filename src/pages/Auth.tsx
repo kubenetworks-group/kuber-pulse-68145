@@ -328,7 +328,7 @@ const Auth = () => {
         {/* Auth Card */}
         <Card className="p-6 bg-card/50 backdrop-blur-2xl border-border/50 shadow-2xl hover:shadow-primary/10 transition-all duration-500">
           <Tabs defaultValue={defaultTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className={defaultTab === 'signup' ? 'grid w-full grid-cols-2' : 'hidden'}>
               <TabsTrigger value="signin">Sign In</TabsTrigger>
               <TabsTrigger value="signup">Sign Up</TabsTrigger>
             </TabsList>

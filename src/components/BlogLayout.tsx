@@ -116,7 +116,7 @@ export function BlogLayout({ title, description, date, readTime, dateISO, slug, 
               Setup em 5 minutos. Veja auto-healing, FinOps e segurança em tempo real no seu cluster.
             </p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              <Link to="/auth?tab=signup">
+              <Link to="/diagnostico">
                 <Button className="text-white px-6"
                   style={{ background: 'linear-gradient(135deg, #0891b2, #4f46e5)' }}>
                   Solicite a demo gratuitamente

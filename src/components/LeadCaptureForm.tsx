@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
-import { ArrowRight, CheckCircle2, Loader2, Check } from 'lucide-react';
+import { CheckCircle2, Loader2, Check, ArrowRight } from 'lucide-react';
 
 const schema = z.object({
   email: z.string().email('Email inválido'),
@@ -64,20 +64,11 @@ export function LeadCaptureForm({ variant = 'a' }: LeadCaptureFormProps) {
           <CheckCircle2 className="w-8 h-8 text-emerald-500" />
         </div>
         <div>
-          <h3 className="klp-syne font-bold text-xl text-slate-900 mb-2">Pedido recebido!</h3>
+          <h3 className="klp-syne font-bold text-xl text-slate-900 mb-2">Solicitação recebida!</h3>
           <p className="text-slate-500 text-sm leading-relaxed max-w-xs mx-auto">
-            Verifique sua caixa de entrada. Nossa equipe entra em contato em até 24 horas úteis.
+            Verifique sua caixa de entrada. Nossa equipe entrará em contato em até 24h para agendar sua demo.
           </p>
         </div>
-        <a href="/auth?tab=signup">
-          <Button
-            className="mt-2 text-white"
-            style={{ background: 'linear-gradient(135deg, #0891b2, #4f46e5)' }}
-          >
-            Criar conta gratuita
-            <ArrowRight className="w-4 h-4 ml-2" />
-          </Button>
-        </a>
       </div>
     );
   }
@@ -146,14 +137,14 @@ export function LeadCaptureForm({ variant = 'a' }: LeadCaptureFormProps) {
           </>
         ) : (
           <>
-            Receber diagnóstico grátis
+            Solicitar demo gratuita
             <ArrowRight className="w-4 h-4 ml-2" />
           </>
         )}
       </Button>
 
       <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 pt-1">
-        {['Sem compromisso', 'Sem cartão de crédito', 'Resposta em 24h'].map((t) => (
+        {['Sem compromisso', 'Demo personalizada', 'Resposta em 24h'].map((t) => (
           <span key={t} className="flex items-center gap-1 text-xs text-slate-400">
             <Check className="w-3 h-3 text-emerald-500" />
             {t}
