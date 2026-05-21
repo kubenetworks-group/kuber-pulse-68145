@@ -24,6 +24,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -2831,6 +2832,9 @@ func executeCommands(clientset *kubernetes.Clientset, metricsClient *metricsv.Cl
 		case "create_network_policy":
 			log.Printf("   → Creating network policy...")
 			result, err = createNetworkPolicy(clientset, cmd.CommandParams)
+		case "patch_deployment":
+			log.Printf("   → Applying strategic merge patch to deployment...")
+			result, err = patchDeployment(clientset, cmd.CommandParams)
 		default:
 				err = fmt.Errorf("unknown command type: %s", cmd.CommandType)
 				log.Printf("   ❌ Unknown command type!")
@@ -3525,6 +3529,51 @@ func updateDeploymentResources(clientset *kubernetes.Clientset, params map[strin
 		"namespace":  namespace,
 		"container":  containerName,
 		"message":    "Deployment resources updated successfully. Kubernetes will roll out the new pods.",
+	}, nil
+}
+
+// patchDeployment applies a strategic merge patch to a deployment.
+// Params: deployment_name, namespace, patch (JSON object).
+// Used by the AI auto-heal system to fix arbitrary configuration problems detected in logs.
+func patchDeployment(clientset *kubernetes.Clientset, params map[string]interface{}) (map[string]interface{}, error) {
+	deploymentName, _ := params["deployment_name"].(string)
+	namespace, _ := params["namespace"].(string)
+	patchData, ok := params["patch"]
+
+	if deploymentName == "" {
+		return nil, fmt.Errorf("deployment_name is required")
+	}
+	if namespace == "" {
+		namespace = "default"
+	}
+	if !ok || patchData == nil {
+		return nil, fmt.Errorf("patch is required")
+	}
+
+	patchBytes, err := json.Marshal(patchData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize patch: %v", err)
+	}
+
+	log.Printf("   → Patching deployment %s/%s: %s", namespace, deploymentName, string(patchBytes))
+
+	_, err = clientset.AppsV1().Deployments(namespace).Patch(
+		context.Background(),
+		deploymentName,
+		types.StrategicMergePatchType,
+		patchBytes,
+		metav1.PatchOptions{},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to patch deployment: %v", err)
+	}
+
+	return map[string]interface{}{
+		"action":          "deployment_patched",
+		"deployment_name": deploymentName,
+		"namespace":       namespace,
+		"patch_applied":   string(patchBytes),
+		"message":         "Deployment patched successfully. Kubernetes will roll out the new pods.",
 	}, nil
 }
 

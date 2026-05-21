@@ -332,7 +332,7 @@ serve(async (req) => {
           console.log(`Processing anomaly ${anomaly.id}: type=${anomaly.anomaly_type}, pod=${namespace}/${podName}`);
 
           // Valid command types that the agent understands
-        const validCommandTypes = ['restart_pod', 'delete_pod', 'scale_deployment', 'update_deployment_image', 'update_deployment_resources'];
+        const validCommandTypes = ['restart_pod', 'delete_pod', 'scale_deployment', 'update_deployment_image', 'update_deployment_resources', 'patch_deployment'];
 
         switch (anomaly.anomaly_type) {
             case 'pod_restart_loop':

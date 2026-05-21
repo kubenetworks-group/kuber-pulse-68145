@@ -62,7 +62,6 @@ export function PodRemediationPanel() {
         .from("pod_restart_audit")
         .select("*")
         .eq("cluster_id", selectedClusterId)
-        .not("analysis_summary", "is", null)
         .order("created_at", { ascending: false })
         .limit(50);
       if (error) throw error;
@@ -144,24 +143,35 @@ export function PodRemediationPanel() {
     if (!selectedClusterId || !user) return;
     setActing((prev) => new Set(prev).add(record.id));
     try {
-      // Mark as approved + set action description
+      const proposal = record.remediation_result?.proposed ? record.remediation_result : null;
+      const fixAction = proposal?.fix_action || "delete_pod";
+      const actionLabel = proposal?.fix_description || `Reinício forçado do pod ${record.pod_name}`;
+
       await supabase
         .from("pod_restart_audit")
         .update({
           remediation_status: "executing",
-          remediation_action: `Reinício forçado do pod ${record.pod_name} no namespace ${record.namespace}`,
+          remediation_action: actionLabel,
           remediation_approved_by: user.id,
         })
         .eq("id", record.id);
 
-      // Send delete_pod command (k8s will recreate it from deployment)
+      // Build command params based on the AI-proposed fix action
+      let commandType = "delete_pod";
+      let commandParams: Record<string, any> = { namespace: record.namespace, pod: record.pod_name };
+
+      if (proposal?.fix_params && fixAction !== "delete_pod") {
+        commandType = fixAction;
+        commandParams = proposal.fix_params;
+      }
+
       const { data: cmd, error: cmdError } = await supabase
         .from("agent_commands")
         .insert({
           cluster_id: selectedClusterId,
           user_id: user.id,
-          command_type: "delete_pod",
-          command_params: { namespace: record.namespace, pod: record.pod_name },
+          command_type: commandType,
+          command_params: commandParams,
           status: "pending",
         })
         .select()
@@ -174,11 +184,11 @@ export function PodRemediationPanel() {
         .update({ remediation_command_id: cmd.id })
         .eq("id", record.id);
 
-      const toastId = toast.loading(`Reiniciando ${record.pod_name}...`);
+      const toastId = toast.loading(`Aplicando correção em ${record.pod_name}...`);
 
       const ok = await pollCommandResult(cmd.id, record.id);
       if (ok) {
-        toast.success(`Pod ${record.pod_name} reiniciado com sucesso`, { id: toastId });
+        toast.success(`Correção aplicada com sucesso em ${record.pod_name}`, { id: toastId });
       } else {
         toast.dismiss(toastId);
       }
@@ -403,10 +413,15 @@ function RemediationCard({
       </div>
 
       {/* AI analysis */}
-      {record.analysis_summary && (
+      {record.analysis_summary ? (
         <div className="flex items-start gap-2 p-2.5 rounded-lg bg-primary/5 border border-primary/10">
           <Bot className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" />
           <p className="text-[12px] text-foreground/80 leading-relaxed">{record.analysis_summary}</p>
+        </div>
+      ) : (
+        <div className="flex items-start gap-2 p-2.5 rounded-lg bg-muted/30 border border-border/40">
+          <Loader2 className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0 animate-spin" />
+          <p className="text-[12px] text-muted-foreground">Analisando causa do problema com IA...</p>
         </div>
       )}
 
@@ -431,12 +446,34 @@ function RemediationCard({
       )}
 
       {/* Proposed action */}
-      <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/40 border border-border/60">
-        <Zap className="h-3.5 w-3.5 text-blue-400 shrink-0" />
-        <p className="text-[11px] text-muted-foreground">
-          <span className="font-medium text-foreground">Ação proposta:</span> Deletar pod para forçar recriação pelo deployment (equivalente a <code className="font-mono bg-muted px-1 rounded">kubectl delete pod {record.pod_name} -n {record.namespace}</code>)
-        </p>
-      </div>
+      {(() => {
+        const proposal = record.remediation_result?.proposed ? record.remediation_result : null;
+        const fixAction = proposal?.fix_action || "delete_pod";
+        const fixDesc = proposal?.fix_description;
+        const isPatch = fixAction === "patch_deployment";
+        const isRestart = fixAction === "delete_pod";
+        return (
+          <div className="flex items-start gap-2 p-2 rounded-lg bg-muted/40 border border-border/60">
+            <Zap className="h-3.5 w-3.5 text-blue-400 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="text-[11px] text-muted-foreground">
+                <span className="font-medium text-foreground">Ação proposta:</span>{" "}
+                {fixDesc || (isRestart ? "Reiniciar pod" : fixAction)}
+              </p>
+              {isPatch && proposal?.fix_params?.patch && (
+                <code className="block text-[10px] font-mono bg-muted/60 px-2 py-1 rounded text-muted-foreground break-all">
+                  kubectl patch deployment {proposal.fix_params.deployment_name} -n {proposal.fix_params.namespace} --patch '...'
+                </code>
+              )}
+              {isRestart && (
+                <code className="text-[10px] font-mono bg-muted/60 px-1.5 py-0.5 rounded text-muted-foreground">
+                  kubectl delete pod {record.pod_name} -n {record.namespace}
+                </code>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Action buttons */}
       <div className="flex items-center gap-2 pt-1">
@@ -451,7 +488,11 @@ function RemediationCard({
           ) : (
             <RotateCcw className="h-3.5 w-3.5" />
           )}
-          {isExecuting ? "Reiniciando..." : "Aprovar reinício"}
+          {isExecuting
+            ? "Aplicando..."
+            : record.remediation_result?.fix_action === "patch_deployment"
+              ? "Aprovar correção"
+              : "Aprovar reinício"}
         </Button>
         <Button
           size="sm"
@@ -546,6 +587,15 @@ function RemediationHistoryRow({
           </CollapsibleTrigger>
           <CollapsibleContent>
             <div className="mt-2 space-y-2 text-[11px]">
+              {/* Root cause badge */}
+              {record.remediation_result?.root_cause && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Causa raiz:</span>
+                  <code className="text-[10px] font-mono bg-amber-500/10 text-amber-600 border border-amber-500/20 px-1.5 py-0.5 rounded">
+                    {record.remediation_result.root_cause}
+                  </code>
+                </div>
+              )}
               {/* Problem */}
               <div className="p-2.5 rounded-lg bg-muted/40 border border-border/60">
                 <p className="font-semibold text-foreground/70 mb-1 uppercase tracking-wide text-[10px]">Diagnóstico da IA</p>
@@ -556,6 +606,17 @@ function RemediationHistoryRow({
                 <div className="p-2.5 rounded-lg bg-blue-500/5 border border-blue-500/10">
                   <p className="font-semibold text-blue-400 mb-1 uppercase tracking-wide text-[10px]">Ação executada</p>
                   <p className="text-foreground/80">{record.remediation_action}</p>
+                </div>
+              )}
+              {/* Patch applied */}
+              {record.remediation_result?.fix_params?.patch && (
+                <div className="p-2.5 rounded-lg bg-muted/40 border border-border/60">
+                  <p className="font-semibold text-foreground/70 mb-1 uppercase tracking-wide text-[10px]">Patch aplicado</p>
+                  <ScrollArea className="max-h-28">
+                    <pre className="font-mono text-[10px] text-foreground/70 whitespace-pre-wrap break-all">
+                      {JSON.stringify(record.remediation_result.fix_params.patch, null, 2)}
+                    </pre>
+                  </ScrollArea>
                 </div>
               )}
               {/* Result */}
