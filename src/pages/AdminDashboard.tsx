@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, Server, Bot, AlertTriangle, Search, RefreshCw, Shield, Settings2, Clock, Database, FileText, ShieldAlert, Bell, Trash2, Loader2 } from "lucide-react";
+import { Users, Server, Bot, AlertTriangle, Search, RefreshCw, Shield, Settings2, Clock, Database, FileText, ShieldAlert, Bell, Trash2, Loader2, Mail, SendHorizonal, Building2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { formatDistanceToNow, format, addDays } from "date-fns";
@@ -47,6 +47,16 @@ interface UserData {
   scans_count: number;
 }
 
+interface LeadData {
+  id: string;
+  email: string;
+  company: string | null;
+  cluster_size: string | null;
+  utm_source: string | null;
+  utm_campaign: string | null;
+  created_at: string;
+}
+
 interface Totals {
   total_users: number;
   total_clusters: number;
@@ -73,6 +83,12 @@ const AdminDashboard = () => {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   
+  // Leads state
+  const [leads, setLeads] = useState<LeadData[]>([]);
+  const [leadsLoading, setLeadsLoading] = useState(false);
+  const [invitingEmail, setInvitingEmail] = useState<string | null>(null);
+  const [invitedEmails, setInvitedEmails] = useState<Set<string>>(new Set());
+
   // Form states
   const [trialDays, setTrialDays] = useState<string>("7");
   const [customClusterLimit, setCustomClusterLimit] = useState<string>("");
@@ -105,6 +121,43 @@ const AdminDashboard = () => {
       toast.error("Erro inesperado ao carregar dados");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchLeads = async () => {
+    setLeadsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('leads')
+        .select('id, email, company, cluster_size, utm_source, utm_campaign, created_at')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setLeads(data || []);
+    } catch (err) {
+      toast.error('Erro ao carregar leads');
+    } finally {
+      setLeadsLoading(false);
+    }
+  };
+
+  const inviteLead = async (email: string, company: string | null) => {
+    setInvitingEmail(email);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { toast.error('Sessão expirada'); return; }
+
+      const { error } = await supabase.functions.invoke('invite-lead', {
+        body: { email, company },
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+
+      if (error) throw error;
+      setInvitedEmails(prev => new Set(prev).add(email));
+      toast.success(`Convite enviado para ${email}`);
+    } catch (err) {
+      toast.error('Erro ao enviar convite');
+    } finally {
+      setInvitingEmail(null);
     }
   };
 
@@ -276,6 +329,10 @@ const AdminDashboard = () => {
             <TabsTrigger value="security" className="gap-2">
               <ShieldAlert className="h-4 w-4" />
               Segurança
+            </TabsTrigger>
+            <TabsTrigger value="leads" className="gap-2" onClick={fetchLeads}>
+              <Mail className="h-4 w-4" />
+              Leads
             </TabsTrigger>
           </TabsList>
 
@@ -543,6 +600,97 @@ const AdminDashboard = () => {
                     </p>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Leads Tab */}
+          <TabsContent value="leads" className="space-y-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Mail className="h-5 w-5" />
+                    Leads — Solicitações de Demo
+                  </CardTitle>
+                  <CardDescription>
+                    Usuários que solicitaram a demo. Clique em "Convidar" para liberar o acesso.
+                  </CardDescription>
+                </div>
+                <Button variant="outline" size="sm" onClick={fetchLeads} disabled={leadsLoading}>
+                  <RefreshCw className={`h-4 w-4 mr-2 ${leadsLoading ? 'animate-spin' : ''}`} />
+                  Atualizar
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {leadsLoading ? (
+                  <div className="flex items-center justify-center py-12 text-muted-foreground gap-2">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    Carregando leads...
+                  </div>
+                ) : leads.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <Mail className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                    <p>Nenhum lead ainda.</p>
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Empresa</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Cluster</TableHead>
+                        <TableHead>Origem</TableHead>
+                        <TableHead>Recebido</TableHead>
+                        <TableHead className="text-right">Ação</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {leads.map((lead) => {
+                        const alreadyInvited = invitedEmails.has(lead.email);
+                        return (
+                          <TableRow key={lead.id}>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <Building2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                <span className="font-medium">{lead.company || '—'}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">{lead.email}</TableCell>
+                            <TableCell>
+                              {lead.cluster_size ? (
+                                <Badge variant="secondary">{lead.cluster_size} nós</Badge>
+                              ) : '—'}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground text-sm">
+                              {lead.utm_source || lead.utm_campaign || '—'}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground text-sm">
+                              {formatDistanceToNow(new Date(lead.created_at), { addSuffix: true, locale: ptBR })}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                size="sm"
+                                variant={alreadyInvited ? 'outline' : 'default'}
+                                disabled={invitingEmail === lead.email || alreadyInvited}
+                                onClick={() => inviteLead(lead.email, lead.company)}
+                                className="gap-2"
+                              >
+                                {invitingEmail === lead.email ? (
+                                  <><Loader2 className="h-3.5 w-3.5 animate-spin" />Enviando...</>
+                                ) : alreadyInvited ? (
+                                  <><SendHorizonal className="h-3.5 w-3.5" />Enviado</>
+                                ) : (
+                                  <><SendHorizonal className="h-3.5 w-3.5" />Convidar</>
+                                )}
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

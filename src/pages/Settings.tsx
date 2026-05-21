@@ -304,7 +304,7 @@ const Settings = () => {
     <DashboardLayout>
       {/* ── Page header ── */}
       <div className="border-b bg-gradient-to-r from-slate-50/80 to-white dark:from-slate-900/80 dark:to-slate-800">
-        <div className="max-w-6xl mx-auto px-6 py-7 flex items-center gap-4">
+        <div className="px-6 py-7 flex items-center gap-4">
           <div className="p-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
             <User className="w-5 h-5 text-slate-500 dark:text-slate-400" />
           </div>
@@ -315,11 +315,11 @@ const Settings = () => {
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-6 py-8">
+      <div className="px-6 py-8">
         <Tabs defaultValue="profile" className="flex flex-col lg:flex-row gap-8">
 
           {/* ── Sidebar ── */}
-          <div className="lg:w-56 shrink-0 space-y-3">
+          <div className="lg:w-64 shrink-0 space-y-3">
 
             {/* Profile summary */}
             <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 shadow-sm text-center">
