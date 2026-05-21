@@ -98,7 +98,7 @@ export default function Pricing() {
             Escolha o plano ideal
           </h1>
           <p className="text-muted-foreground">
-            Comece gratuitamente e escale conforme sua necessidade. 
+            Solicite uma demo e veja o Kodo em ação no seu cluster.
             Todos os planos incluem acesso às funcionalidades básicas.
           </p>
         </div>

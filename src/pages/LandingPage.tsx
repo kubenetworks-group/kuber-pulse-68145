@@ -850,7 +850,7 @@ export default function LandingPage() {
               <Button size="sm"
                 className="text-sm px-5 font-medium text-white transition-all hover:-translate-y-0.5"
                 style={{ background: 'linear-gradient(135deg, #0891b2, #4f46e5)', boxShadow: '0 4px 20px rgba(8,145,178,0.25)' }}>
-                Começar grátis
+                Solicitar demo
                 <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
               </Button>
             </Link>
@@ -874,7 +874,7 @@ export default function LandingPage() {
               </Link>
               <Link to="/auth?tab=signup" onClick={() => setMenuOpen(false)}>
                 <Button size="sm" className="w-full text-white" style={{ background: 'linear-gradient(135deg, #0891b2, #4f46e5)' }}>
-                  Começar grátis
+                  Solicitar demo
                 </Button>
               </Link>
             </div>
@@ -941,7 +941,7 @@ export default function LandingPage() {
                     className="text-base px-8 py-6 font-medium rounded-xl text-white transition-all hover:-translate-y-0.5 group"
                     style={{ background: 'linear-gradient(135deg, #0891b2 0%, #4f46e5 100%)', boxShadow: '0 8px 32px rgba(8,145,178,0.3)' }}
                     onClick={() => (window as unknown as { gtag?: (...args: unknown[]) => void }).gtag?.('event', 'hero_cta_click', { ab_variant: abVariant })}>
-                    Começar grátis — sem cartão
+                    Solicite a demo gratuitamente
                     <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
                   </Button>
                 </Link>
@@ -1363,7 +1363,7 @@ export default function LandingPage() {
                   <Link to="/auth?tab=signup">
                     <Button size="lg"
                       className="text-base px-10 py-6 rounded-xl font-medium bg-white text-slate-900 hover:bg-white/90 transition-all hover:-translate-y-0.5 group">
-                      Começar grátis
+                      Solicitar demo
                       <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
                     </Button>
                   </Link>

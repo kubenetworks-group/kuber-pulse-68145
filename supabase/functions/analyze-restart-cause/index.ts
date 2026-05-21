@@ -67,7 +67,7 @@ serve(async (req) => {
           analysis_summary: 'Logs do container não disponíveis para análise.',
           remediation_status: 'pending_approval',
           remediation_action: 'Reiniciar o pod para obter novos logs e diagnóstico completo.',
-          remediation_result: { proposed: true, fix_action: 'delete_pod', fix_description: 'Reiniciar pod (logs indisponíveis)', fix_params: { namespace: audit.namespace, pod: audit.pod_name } },
+          remediation_result: { proposed: true, fix_action: 'delete_pod', fix_description: 'Reiniciar pod (logs indisponíveis)', fix_params: { namespace: audit.namespace, pod_name: audit.pod_name } },
         })
         .eq('id', audit_id);
 
@@ -187,7 +187,7 @@ ${audit.container_logs.substring(0, 8000)}
         root_cause: analysis.root_cause,
         fix_action: 'delete_pod',
         fix_description: 'Reiniciar pod para tentar recuperação',
-        fix_params: { namespace: audit.namespace, pod: audit.pod_name },
+        fix_params: { namespace: audit.namespace, pod_name: audit.pod_name },
       };
     }
 

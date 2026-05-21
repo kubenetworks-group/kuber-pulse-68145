@@ -141,7 +141,7 @@ export default function PlansComparison() {
                 </Button>
               </Link>
               <Link to="/auth">
-                <Button size="sm">Começar Grátis</Button>
+                <Button size="sm">Solicitar demo</Button>
               </Link>
             </div>
           </div>

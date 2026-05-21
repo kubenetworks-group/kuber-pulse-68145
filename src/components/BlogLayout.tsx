@@ -106,20 +106,20 @@ export function BlogLayout({ title, description, date, readTime, dateISO, slug, 
             style={{ background: 'linear-gradient(135deg, #f0fdff 0%, #eef2ff 100%)' }}>
             <p className="text-xs font-semibold uppercase tracking-widest mb-3"
               style={{ color: '#0891b2', fontFamily: "'JetBrains Mono', monospace" }}>
-              Teste grátis
+              Demo gratuita
             </p>
             <h2 className="text-2xl font-black text-slate-900 mb-3 tracking-tight"
               style={{ fontFamily: "'Nunito', sans-serif" }}>
               Experimente o Kodo no seu cluster
             </h2>
             <p className="text-slate-500 mb-6 max-w-md mx-auto">
-              Setup em 5 minutos. Sem cartão de crédito. Veja auto-healing, FinOps e segurança em tempo real.
+              Setup em 5 minutos. Veja auto-healing, FinOps e segurança em tempo real no seu cluster.
             </p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <Link to="/auth?tab=signup">
                 <Button className="text-white px-6"
                   style={{ background: 'linear-gradient(135deg, #0891b2, #4f46e5)' }}>
-                  Começar grátis — sem cartão
+                  Solicite a demo gratuitamente
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
               </Link>

@@ -62,7 +62,8 @@
       "Bash(/usr/local/go/bin/go build *)",
       "Bash(git -C /Users/denercavalcante/Workspace/kube/kodo diff agent/main.go)",
       "Bash(git -C /Users/denercavalcante/Workspace/kube/kodo status)",
-      "Bash(git -C /Users/denercavalcante/Workspace/kube/kodo diff HEAD agent/main.go)"
+      "Bash(git -C /Users/denercavalcante/Workspace/kube/kodo diff HEAD agent/main.go)",
+      "WebFetch(domain:api.anthropic.com)"
     ]
   }
 }

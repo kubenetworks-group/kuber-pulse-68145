@@ -53,7 +53,7 @@ export default function BlogIndex() {
               <Link to="/diagnostico" className="text-sm text-slate-500 hover:text-slate-900 transition-colors">Diagnóstico grátis</Link>
               <Link to="/auth?tab=signup" className="text-sm font-medium px-4 py-2 rounded-lg text-white transition-all"
                 style={{ background: 'linear-gradient(135deg, #0891b2, #4f46e5)' }}>
-                Começar grátis
+                Solicitar demo
               </Link>
             </nav>
           </div>
