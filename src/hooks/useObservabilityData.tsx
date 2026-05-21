@@ -590,12 +590,12 @@ export const useObservabilityData = () => {
     fetchData();
   }, [fetchData]);
 
-  // Realtime subscription
+  // Realtime subscription + polling fallback
   useEffect(() => {
     if (!selectedClusterId) return;
 
     const channel = supabase
-      .channel("observability-realtime")
+      .channel(`observability-realtime-${selectedClusterId}`)
       .on(
         "postgres_changes",
         {
@@ -610,8 +610,12 @@ export const useObservabilityData = () => {
       )
       .subscribe();
 
+    // 10s polling as safety net for missed Realtime events
+    const poll = setInterval(fetchData, 10_000);
+
     return () => {
       supabase.removeChannel(channel);
+      clearInterval(poll);
     };
   }, [selectedClusterId, fetchData]);
 

@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	watchv "k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -460,6 +461,9 @@ func main() {
 	// Report startup/restart event to backend (non-blocking)
 	go reportAgentStartup(clientset, config)
 
+	// Watch pod events to trigger near-realtime metrics sends
+	go watchPodEvents(clientset, metricsClient, kubeconfig, config)
+
 	ticker := time.NewTicker(time.Duration(config.Interval) * time.Second)
 
 	for {
@@ -468,6 +472,51 @@ func main() {
 			go sendMetrics(clientset, metricsClient, kubeconfig, config)
 			go getCommands(clientset, metricsClient, kubeconfig, config)
 		}
+	}
+}
+
+// watchPodEvents watches Kubernetes pod events and triggers an immediate metrics
+// send (debounced 2s) whenever a pod is created, updated, or deleted.
+func watchPodEvents(clientset *kubernetes.Clientset, metricsClient *metricsv.Clientset, restConfig *rest.Config, config AgentConfig) {
+	var mu sync.Mutex
+	pending := false
+
+	triggerSend := func() {
+		mu.Lock()
+		if pending {
+			mu.Unlock()
+			return
+		}
+		pending = true
+		mu.Unlock()
+		time.AfterFunc(2*time.Second, func() {
+			mu.Lock()
+			pending = false
+			mu.Unlock()
+			go sendMetrics(clientset, metricsClient, restConfig, config)
+		})
+	}
+
+	for {
+		timeout := int64(300) // reconnect every 5 minutes
+		watcher, err := clientset.CoreV1().Pods("").Watch(context.Background(), metav1.ListOptions{
+			TimeoutSeconds: &timeout,
+		})
+		if err != nil {
+			log.Printf("⚠️  Pod watch failed, retry in 10s: %v", err)
+			time.Sleep(10 * time.Second)
+			continue
+		}
+		log.Println("👁️  Pod watcher started (near-realtime updates)")
+		for event := range watcher.ResultChan() {
+			switch event.Type {
+			case watchv.Added, watchv.Modified, watchv.Deleted:
+				triggerSend()
+			}
+		}
+		watcher.Stop()
+		log.Println("🔄 Pod watch channel closed, reconnecting...")
+		time.Sleep(1 * time.Second)
 	}
 }
 
