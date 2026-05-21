@@ -198,6 +198,30 @@ ${audit.container_logs.substring(0, 8000)}
 
     console.log(`✅ Analysis complete for ${audit_id}: root_cause=${analysis.root_cause}, fix=${analysis.fix_action}`);
 
+    // Auto-apply the fix for safe, well-understood actions.
+    // image changes and unknown actions stay at pending_approval (too risky to auto-apply).
+    const autoApplyActions = ['patch_deployment', 'update_deployment_resources', 'restart_pod', 'delete_pod'];
+    if (fixAvailable && analysis.fix_params && autoApplyActions.includes(analysis.fix_action)) {
+      try {
+        await supabase.from('agent_commands').insert({
+          cluster_id:    effectiveClusterId,
+          user_id:       userId,
+          command_type:  analysis.fix_action,
+          command_params: analysis.fix_params,
+          status:        'pending',
+        });
+
+        await supabase
+          .from('pod_restart_audit')
+          .update({ remediation_status: 'applied', remediation_at: new Date().toISOString() })
+          .eq('id', audit_id);
+
+        console.log(`🔧 Auto-applied fix for ${audit_id}: ${analysis.fix_action}`);
+      } catch (applyErr: any) {
+        console.error(`Failed to auto-apply fix for ${audit_id}:`, applyErr.message);
+      }
+    }
+
     return new Response(
       JSON.stringify({ success: true, audit_id, root_cause: analysis.root_cause, fix_action: analysis.fix_action }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

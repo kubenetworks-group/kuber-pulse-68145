@@ -220,16 +220,16 @@ serve(async (req) => {
       'local-path-storage', 'default',
     ];
 
-    // Determine what to apply based on settings
-    // When force=true, it means "run now" but still respect the individual settings
-    // Only if NO settings exist yet, force=true will apply all fixes
-    const shouldApplyAnomalies = settings?.auto_apply_anomalies ?? false;
+    // Determine what to apply based on settings.
+    // auto_apply_anomalies defaults to TRUE — only skip when explicitly set to false.
+    // This ensures CrashLoopBackOff/ImagePullBackOff pods are always healed when
+    // auto-heal is enabled, even if the user never touched the granular settings.
+    const shouldApplyAnomalies = settings?.auto_apply_anomalies !== false;
     const shouldApplySecurity = settings?.auto_apply_security ?? false;
-    
-    // If force is used but user has configured settings, respect those settings
-    // If force is used and no settings configured yet, default to both true for initial run
-    const applyAnomalies = force && !settings ? true : shouldApplyAnomalies;
-    const applySecurity = force && !settings ? true : shouldApplySecurity;
+
+    // force=true always overrides everything
+    const applyAnomalies = force ? true : shouldApplyAnomalies;
+    const applySecurity = force ? true : shouldApplySecurity;
 
     console.log(`Auto-heal config: anomalies=${applyAnomalies}, security/resources=${applySecurity}, force=${force}, pending_commands=${pendingResourceKeys.size}`);
 
