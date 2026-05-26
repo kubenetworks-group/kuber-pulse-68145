@@ -437,7 +437,7 @@ function RemediationCard({
           </CollapsibleTrigger>
           <CollapsibleContent>
             <ScrollArea className="max-h-40 mt-2">
-              <pre className="text-[10px] font-mono leading-relaxed bg-black/30 p-2.5 rounded-lg whitespace-pre-wrap break-all text-green-400">
+              <pre className="text-[10px] font-mono leading-relaxed bg-slate-900 p-2.5 rounded-lg whitespace-pre-wrap break-all text-green-400">
                 {record.container_logs}
               </pre>
             </ScrollArea>
@@ -640,7 +640,7 @@ function RemediationHistoryRow({
               )}
               {/* Logs */}
               {record.container_logs && (
-                <div className="p-2.5 rounded-lg bg-black/30 border border-border/40">
+                <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-700">
                   <p className="font-semibold text-muted-foreground mb-1 uppercase tracking-wide text-[10px]">Logs do container (antes do crash)</p>
                   <ScrollArea className="max-h-32">
                     <pre className="font-mono text-[10px] text-green-400 whitespace-pre-wrap break-all leading-relaxed">

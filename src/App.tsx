@@ -17,6 +17,12 @@ import Welcome from "./pages/Welcome";
 import Clusters from "./pages/Clusters";
 import AIMonitor from "./pages/AIMonitor";
 import RiskPanel from "./pages/RiskPanel";
+import RiskThreats from "./pages/risk/RiskThreats";
+import RiskRisks from "./pages/risk/RiskRisks";
+import RiskHealth from "./pages/risk/RiskHealth";
+import RiskLoadBalancer from "./pages/risk/RiskLoadBalancer";
+import RiskObservability from "./pages/risk/RiskObservability";
+import RiskAudit from "./pages/risk/RiskAudit";
 import Costs from "./pages/Costs";
 import Storage from "./pages/Storage";
 import Settings from "./pages/Settings";
@@ -47,6 +53,7 @@ import BlogIndex from "./pages/blog/BlogIndex";
 import KubernetesIA from "./pages/blog/KubernetesIA";
 import AutoHealingKubernetes from "./pages/blog/AutoHealingKubernetes";
 import FinOpsKubernetes from "./pages/blog/FinOpsKubernetes";
+import KodoVsAlternatives from "./pages/blog/KodoVsAlternatives";
 import { CookieBanner } from "@/components/CookieBanner";
 
 const queryClient = new QueryClient();
@@ -113,14 +120,13 @@ const App = () => (
                     </ProtectedRoute>
                   }
                 />
-                <Route
-                  path="/risk"
-                  element={
-                    <ProtectedRoute>
-                      <RiskPanel />
-                    </ProtectedRoute>
-                  }
-                />
+                <Route path="/risk" element={<ProtectedRoute><RiskPanel /></ProtectedRoute>} />
+                <Route path="/risk/threats" element={<ProtectedRoute><RiskThreats /></ProtectedRoute>} />
+                <Route path="/risk/risks" element={<ProtectedRoute><RiskRisks /></ProtectedRoute>} />
+                <Route path="/risk/health" element={<ProtectedRoute><RiskHealth /></ProtectedRoute>} />
+                <Route path="/risk/loadbalancer" element={<ProtectedRoute><RiskLoadBalancer /></ProtectedRoute>} />
+                <Route path="/risk/observability" element={<ProtectedRoute><RiskObservability /></ProtectedRoute>} />
+                <Route path="/risk/audit" element={<ProtectedRoute><RiskAudit /></ProtectedRoute>} />
                 <Route
                   path="/costs"
                   element={
@@ -294,6 +300,7 @@ const App = () => (
                 <Route path="/blog/kubernetes-ia" element={<KubernetesIA />} />
                 <Route path="/blog/auto-healing-kubernetes" element={<AutoHealingKubernetes />} />
                 <Route path="/blog/finops-kubernetes" element={<FinOpsKubernetes />} />
+                <Route path="/blog/kodo-vs-k8sgpt-kubectl-ai" element={<KodoVsAlternatives />} />
                 <Route path="/plans" element={<PlansComparison />} />
                 <Route path="/terms" element={<TermsOfService />} />
                 <Route path="/privacy" element={<PrivacyPolicy />} />

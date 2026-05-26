@@ -33,7 +33,7 @@ export const Footer = () => {
         <div className="space-y-5">
           <Link to="/" className="flex items-center gap-3">
             <img src={kodoLogo} alt="Kodo" className="w-8 h-8 object-contain" />
-            <span className="text-white text-xl font-bold tracking-tight" style={{ fontFamily: "'Nunito', sans-serif" }}>
+            <span className="text-white text-xl font-bold tracking-tight" style={{ fontFamily: "'Aileron', system-ui, sans-serif" }}>
               Kodo
             </span>
           </Link>
@@ -56,7 +56,7 @@ export const Footer = () => {
         {/* Col 2 — Links Rápidos */}
         <div>
           <h4 className="text-white font-semibold text-sm mb-5 uppercase tracking-widest"
-            style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "11px" }}>
+            style={{ fontFamily: "'DM Mono', monospace", fontSize: "11px" }}>
             Links Rápidos
           </h4>
           <ul className="space-y-3">
@@ -77,7 +77,7 @@ export const Footer = () => {
         {/* Col 3 — Produto */}
         <div>
           <h4 className="text-white font-semibold text-sm mb-5 uppercase tracking-widest"
-            style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "11px" }}>
+            style={{ fontFamily: "'DM Mono', monospace", fontSize: "11px" }}>
             Produto
           </h4>
           <ul className="space-y-3">
@@ -98,7 +98,7 @@ export const Footer = () => {
         {/* Col 4 — Contato */}
         <div>
           <h4 className="text-white font-semibold text-sm mb-5 uppercase tracking-widest"
-            style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "11px" }}>
+            style={{ fontFamily: "'DM Mono', monospace", fontSize: "11px" }}>
             Contato
           </h4>
           <ul className="space-y-4">
@@ -123,14 +123,14 @@ export const Footer = () => {
 
       {/* Bottom bar */}
       <div className="max-w-7xl mx-auto px-6 py-5 flex flex-col sm:flex-row items-center justify-between gap-3">
-        <p className="text-xs" style={{ color: "rgba(255,255,255,0.25)", fontFamily: "'JetBrains Mono', monospace" }}>
+        <p className="text-xs" style={{ color: "rgba(255,255,255,0.25)", fontFamily: "'DM Mono', monospace" }}>
           © 2025 KubeNetworks. Todos os direitos reservados.
         </p>
         <div className="flex items-center gap-4">
           {["Privacidade", "Termos"].map(l => (
             <a key={l} href="#"
               className="text-xs transition-colors duration-200"
-              style={{ color: "rgba(255,255,255,0.25)", fontFamily: "'JetBrains Mono', monospace" }}
+              style={{ color: "rgba(255,255,255,0.25)", fontFamily: "'DM Mono', monospace" }}
               onMouseEnter={e => (e.currentTarget.style.color = "rgba(255,255,255,0.6)")}
               onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,255,255,0.25)")}>
               {l}

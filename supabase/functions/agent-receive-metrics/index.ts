@@ -620,12 +620,13 @@ serve(async (req) => {
         // Collect all threats
         const allThreats: any[] = [];
         
-        // High priority threats
+        // Configuration risks (is_attack=false) — show in Riscos tab
         for (const pod of threatData.privileged_containers || []) {
           allThreats.push({
             ...pod,
             threat_type: 'privilege_escalation',
             severity: 'high',
+            is_attack: false,
             title: `Container privilegiado: ${pod.container_name}`,
           });
         }
@@ -633,7 +634,8 @@ serve(async (req) => {
           allThreats.push({
             ...pod,
             threat_type: 'unauthorized_access',
-            severity: 'high',
+            severity: 'medium',
+            is_attack: false,
             title: `Pod com acesso à rede do host: ${pod.pod_name}`,
           });
         }
@@ -641,37 +643,37 @@ serve(async (req) => {
           allThreats.push({
             ...pod,
             threat_type: 'unauthorized_access',
-            severity: 'high',
+            severity: 'medium',
+            is_attack: false,
             title: `Pod com acesso ao PID do host: ${pod.pod_name}`,
           });
         }
-        
-        // Medium priority threats
         for (const pod of threatData.suspicious_pods || []) {
           allThreats.push({
             ...pod,
             threat_type: 'suspicious_process',
             severity: 'medium',
+            is_attack: false,
             title: `Pod suspeito: ${pod.pod_name}`,
           });
         }
-        
-        // Network anomalies (potential attacks)
+
+        // Real attacks (is_attack=true) — show in Ameaças tab
         for (const anomaly of threatData.network_anomalies || []) {
           allThreats.push({
             ...anomaly,
             threat_type: anomaly.type || 'ddos',
             severity: anomaly.threat_level || 'high',
+            is_attack: true,
             title: anomaly.reason || 'Anomalia de rede detectada',
           });
         }
-        
-        // Suspicious events
         for (const event of threatData.suspicious_events || []) {
           allThreats.push({
             ...event,
             threat_type: 'brute_force',
             severity: event.threat_level || 'medium',
+            is_attack: true,
             title: event.reason || 'Evento suspeito detectado',
           });
         }
@@ -703,6 +705,7 @@ serve(async (req) => {
               user_id: userId,
               threat_type: threat.threat_type,
               severity: threat.severity || 'medium',
+              is_attack: threat.is_attack ?? true,
               status: 'active',
               title: threat.title,
               description: threat.reason || `Ameaça detectada no namespace ${threat.namespace}`,

@@ -6,6 +6,14 @@ import { ArrowRight, Clock, Calendar } from "lucide-react";
 
 const POSTS = [
   {
+    slug: "/blog/kodo-vs-k8sgpt-kubectl-ai",
+    title: "Kodo vs K8sGPT vs kubectl-ai vs CAST AI: qual gerenciador Kubernetes com IA escolher?",
+    description: "Comparação completa entre as principais ferramentas de gestão Kubernetes com IA. Tabela, casos de uso e qual escolher para sua equipe em 2026.",
+    date: "22 mai 2026",
+    readTime: "10 min",
+    tag: "Comparação",
+  },
+  {
     slug: "/blog/kubernetes-ia",
     title: "Kubernetes com IA: como a inteligência artificial transforma a gestão de clusters",
     description: "Entenda como machine learning e IA estão revolucionando o gerenciamento de clusters Kubernetes — do monitoramento preditivo ao auto-healing e FinOps automático.",
@@ -40,7 +48,7 @@ export default function BlogIndex() {
         path="/blog"
       />
 
-      <div className="min-h-screen bg-white" style={{ fontFamily: "'Nunito Sans', -apple-system, sans-serif" }}>
+      <div className="min-h-screen bg-white" style={{ fontFamily: "'Aileron', system-ui, sans-serif" }}>
         {/* Header */}
         <header className="px-6 py-5 border-b border-slate-100">
           <div className="max-w-4xl mx-auto flex items-center justify-between">
@@ -52,7 +60,7 @@ export default function BlogIndex() {
               <Link to="/" className="text-sm text-slate-500 hover:text-slate-900 transition-colors">Home</Link>
               <Link to="/diagnostico" className="text-sm text-slate-500 hover:text-slate-900 transition-colors">Diagnóstico grátis</Link>
               <Link to="/diagnostico" className="text-sm font-medium px-4 py-2 rounded-lg text-white transition-all"
-                style={{ background: 'linear-gradient(135deg, #0891b2, #4f46e5)' }}>
+                style={{ background: '#0F3CA5' }}>
                 Solicitar demo
               </Link>
             </nav>
@@ -64,11 +72,11 @@ export default function BlogIndex() {
             {/* Header */}
             <div className="mb-12">
               <p className="text-xs font-semibold uppercase tracking-widest mb-4"
-                style={{ color: '#0891b2', fontFamily: "'JetBrains Mono', monospace" }}>
+                style={{ color: '#0F3CA5', fontFamily: "'DM Mono', monospace" }}>
                 Blog
               </p>
               <h1 className="text-4xl font-black text-slate-900 mb-4 tracking-tight"
-                style={{ fontFamily: "'Nunito', sans-serif" }}>
+                style={{ fontFamily: "'Aileron', system-ui, sans-serif" }}>
                 Kubernetes, IA e DevOps
               </h1>
               <p className="text-slate-500 text-lg max-w-xl">
@@ -84,12 +92,13 @@ export default function BlogIndex() {
                   className="group block rounded-2xl border border-slate-200 p-7 hover:border-slate-300 hover:shadow-sm transition-all">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
-                      <span className="inline-block text-xs font-semibold uppercase tracking-widest mb-3 px-2.5 py-1 rounded-full bg-cyan-50 border border-cyan-100"
-                        style={{ color: '#0891b2', fontFamily: "'JetBrains Mono', monospace" }}>
+                      <span className="inline-block text-xs font-semibold uppercase tracking-widest mb-3 px-2.5 py-1 rounded-full border"
+                        style={{ background: "#E6EEF8", borderColor: "rgba(15,60,165,0.15)" }}
+                        style={{ color: '#0F3CA5', fontFamily: "'DM Mono', monospace" }}>
                         {post.tag}
                       </span>
                       <h2 className="text-xl font-bold text-slate-900 mb-2 group-hover:text-cyan-700 transition-colors leading-tight"
-                        style={{ fontFamily: "'Nunito', sans-serif" }}>
+                        style={{ fontFamily: "'Aileron', system-ui, sans-serif" }}>
                         {post.title}
                       </h2>
                       <p className="text-slate-500 leading-relaxed text-sm mb-4">{post.description}</p>

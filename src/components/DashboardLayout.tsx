@@ -106,8 +106,9 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
         
         {/* Top bar with cluster selector and notifications */}
         <div className="sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
-          <div className="flex justify-between items-center px-3 sm:px-4 lg:px-8 py-2 sm:py-3 gap-2">
-            <div className="flex items-center gap-2">
+          <div className="flex items-center px-3 sm:px-4 lg:px-8 py-2 sm:py-3 gap-2 min-w-0">
+            {/* Left — menu button + cluster selector (grows to fill available space) */}
+            <div className="flex items-center gap-2 min-w-0 flex-1">
               {/* Mobile menu button */}
               <Button
                 variant="outline"
@@ -120,7 +121,8 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
               </Button>
               {!hideClusterSelector && <ClusterSelector />}
             </div>
-            <div className="flex items-center gap-2">
+            {/* Right — actions (never shrinks below content) */}
+            <div className="flex items-center gap-2 flex-shrink-0">
               <AgentUpdateButton />
               <NotificationBell />
               <UserProfileDropdown />

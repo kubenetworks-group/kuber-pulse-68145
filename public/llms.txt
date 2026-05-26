@@ -54,6 +54,21 @@ AWS EKS, Google GKE, Azure AKS, DigitalOcean Kubernetes, Rancher, OpenShift, Hel
 - **Site**: https://kodo.kubenetworks.com.br
 - **Contato**: suporte@kubenetworks.com.br
 
+## Comparação com concorrentes
+
+Kodo vs K8sGPT: K8sGPT é uma ferramenta de diagnóstico CLI (open-source), não possui auto-healing nem dashboard. Kodo oferece monitoramento contínuo + auto-healing automático + FinOps + dashboard web completo.
+
+Kodo vs kubectl-ai: kubectl-ai traduz linguagem natural em comandos kubectl (ferramenta de produtividade CLI). Não monitora clusters. Kodo é uma plataforma de monitoramento e auto-healing, não substituta de kubectl.
+
+Kodo vs CAST AI: CAST AI foca em otimização de custo em clouds públicas (AWS/GCP/Azure), envia dados para infra externa. Kodo oferece FinOps + saúde + segurança multi-cloud, com dados no ambiente do cliente, suporte PT-BR e plano gratuito.
+
+## Artigos do blog
+
+- [Kodo vs K8sGPT vs kubectl-ai vs CAST AI: comparação completa 2026](https://kodo.kubenetworks.com.br/blog/kodo-vs-k8sgpt-kubectl-ai)
+- [Kubernetes com IA: como a inteligência artificial transforma a gestão de clusters](https://kodo.kubenetworks.com.br/blog/kubernetes-ia)
+- [Auto-Healing Kubernetes: o que é, como funciona e como implementar](https://kodo.kubenetworks.com.br/blog/auto-healing-kubernetes)
+- [FinOps Kubernetes: como reduzir custos de infraestrutura cloud em até 40%](https://kodo.kubenetworks.com.br/blog/finops-kubernetes)
+
 ## Links importantes
 
 - [Landing page](https://kodo.kubenetworks.com.br/)

@@ -224,92 +224,126 @@ export const AIInsightsWidget = ({ recentIncidents }: AIInsightsWidgetProps) => 
     }
   };
 
+  const severityColor = (s: string) => {
+    if (s === "critical") return "var(--kodo-crit)";
+    if (s === "high") return "var(--kodo-warn)";
+    return "#6366f1";
+  };
+
   return (
-    <Card className="group relative overflow-hidden p-6 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border-primary/30 hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary/20">
-      {/* Animated background effect */}
-      <div className="absolute -top-24 -right-24 w-48 h-48 bg-primary/10 rounded-full blur-3xl group-hover:scale-150 transition-transform duration-700" />
-      
-      <div className="relative">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-3 rounded-xl bg-gradient-to-br from-primary/20 to-primary/10 group-hover:scale-110 transition-transform duration-300">
-            <Bot className="h-6 w-6 text-primary" />
+    <Card className="overflow-hidden bg-card border-border/60 shadow-sm dark:bg-card/40 dark:shadow-none dark:backdrop-blur-sm">
+      {/* Header */}
+      <div className="px-5 pt-5 pb-4 border-b border-border/40">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div
+              className="p-2.5 rounded-xl shrink-0"
+              style={{ background: "var(--kodo-brand-muted)", border: "1px solid var(--kodo-brand-border)" }}
+            >
+              <Bot className="h-4 w-4" style={{ color: "var(--kodo-brand)" }} />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-sm font-semibold text-foreground leading-none">AI Insights</h3>
+              <p className="text-[11px] font-mono text-muted-foreground/60 mt-0.5 flex items-center gap-1.5">
+                <span
+                  className="size-1.5 rounded-full inline-block animate-pulse"
+                  style={{ background: "var(--kodo-brand)" }}
+                />
+                {actionsToday} auto-healing hoje
+              </p>
+            </div>
           </div>
-          <div className="flex-1">
-            <h3 className="font-bold text-xl bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
-              AI Insights
-            </h3>
-            <p className="text-sm text-muted-foreground flex items-center gap-2">
-              <span className="inline-block w-2 h-2 rounded-full bg-success animate-pulse" />
-              {actionsToday} auto-healing actions today
+
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={generatePDFReport}
+              disabled={generating}
+              className="gap-1.5 text-xs h-8 border-border/60 hover:border-border font-mono"
+            >
+              {generating ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <FileDown className="h-3.5 w-3.5" />
+              )}
+              <span className="hidden sm:inline">PDF</span>
+            </Button>
+            <Sparkles className="h-4 w-4 text-muted-foreground/40 animate-pulse" />
+          </div>
+        </div>
+      </div>
+
+      <div className="p-5">
+        {topIncidents.length === 0 ? (
+          <div
+            className="flex flex-col items-center justify-center py-8 rounded-xl border"
+            style={{ borderColor: "var(--kodo-brand-border)", background: "var(--kodo-brand-muted)" }}
+          >
+            <span
+              className="size-2 rounded-full mb-3 animate-pulse"
+              style={{ background: "var(--kodo-brand)" }}
+            />
+            <p className="text-sm font-mono font-medium" style={{ color: "var(--kodo-brand)" }}>
+              Todos os sistemas saudáveis
+            </p>
+            <p className="text-[11px] font-mono text-muted-foreground/50 mt-1">
+              Nenhum incidente detectado
             </p>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={generatePDFReport}
-            disabled={generating}
-            className="gap-2 hover:bg-primary/10 hover:border-primary/50"
-          >
-            {generating ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <FileDown className="h-4 w-4" />
-            )}
-            <span className="hidden sm:inline">Relatório PDF</span>
-          </Button>
-          <Sparkles className="h-5 w-5 text-primary animate-pulse" />
-        </div>
-
-        {topIncidents.length === 0 ? (
-          <div className="text-center py-8 px-4 rounded-lg bg-gradient-to-br from-success/5 to-success/10 border border-success/20">
-            <div className="w-12 h-12 rounded-full bg-success/20 mx-auto mb-3 flex items-center justify-center">
-              <Sparkles className="h-6 w-6 text-success" />
-            </div>
-            <p className="text-sm font-medium text-foreground">All systems healthy!</p>
-            <p className="text-xs text-muted-foreground mt-1">No incidents detected</p>
-          </div>
         ) : (
-          <div className="space-y-3 mb-4">
-            {topIncidents.map((incident, index) => (
-              <div
-                key={incident.id}
-                className="p-4 rounded-xl bg-card/80 backdrop-blur-sm border border-border/50 hover:bg-card hover:border-border transition-all duration-200 hover:scale-[1.02] cursor-pointer"
-                style={{ animationDelay: `${index * 100}ms` }}
-              >
-                <div className="flex items-start gap-3">
-                  <Badge
-                    variant="outline"
-                    className={`
-                      ${incident.severity === 'critical' ? 'bg-destructive/20 text-destructive border-destructive/30' : ''}
-                      ${incident.severity === 'high' ? 'bg-warning/20 text-warning border-warning/30' : ''}
-                      ${incident.severity === 'medium' ? 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 border-yellow-500/30' : ''}
-                      font-semibold
-                    `}
-                  >
-                    {incident.severity}
-                  </Badge>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-foreground leading-tight">{incident.title}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {new Date(incident.created_at).toLocaleString()}
-                    </p>
+          <div className="space-y-2 mb-4">
+            {topIncidents.map((incident) => {
+              const col = severityColor(incident.severity);
+              return (
+                <div
+                  key={incident.id}
+                  className="bg-muted/30 border border-border/40 rounded-lg p-3 hover:bg-muted/50 hover:border-border/60 transition-all dark:bg-card/30 dark:hover:bg-card/50"
+                  style={{ borderLeftColor: col, borderLeftWidth: "3px" }}
+                >
+                  <div className="flex items-start gap-2.5">
+                    <span
+                      className="text-[10px] font-mono px-1.5 py-0.5 rounded border shrink-0 mt-0.5"
+                      style={{
+                        color: col,
+                        borderColor: `${col}40`,
+                        background: `${col}10`,
+                      }}
+                    >
+                      {incident.severity}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-foreground leading-snug">
+                        {incident.title}
+                      </p>
+                      <p className="text-[10px] font-mono text-muted-foreground/50 mt-1">
+                        {new Date(incident.created_at).toLocaleString("pt-BR")}
+                      </p>
+                    </div>
+                    {incident.action_taken && (
+                      <span
+                        className="text-[10px] font-mono px-1.5 py-0.5 rounded border shrink-0"
+                        style={{
+                          color: "var(--kodo-brand)",
+                          borderColor: "#00E5A030",
+                          background: "var(--kodo-brand-muted)",
+                        }}
+                      >
+                        ✓ fixed
+                      </span>
+                    )}
                   </div>
-                  {incident.action_taken && (
-                    <Badge className="bg-success/20 text-success border-success/30 text-xs font-semibold">
-                      ✓ Fixed
-                    </Badge>
-                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
         <Link to="/ai-monitor">
-          <Button variant="outline" className="w-full gap-2 group/btn hover:bg-primary/10 hover:border-primary/50">
-            <span>View All Incidents</span>
-            <ArrowRight className="h-4 w-4 group-hover/btn:translate-x-1 transition-transform" />
-          </Button>
+          <button className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-border/50 text-xs font-mono text-muted-foreground hover:text-foreground hover:border-border hover:bg-muted/30 transition-all group">
+            Ver todos os incidentes
+            <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
+          </button>
         </Link>
       </div>
     </Card>

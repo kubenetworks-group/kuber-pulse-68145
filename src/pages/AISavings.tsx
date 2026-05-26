@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { PodRightsizingRecommendations } from "@/components/PodRightsizingRecommendations";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -654,6 +655,9 @@ const FinOps = () => {
             </div>
           )}
         </div>
+
+        {/* Pod Rightsizing */}
+        <PodRightsizingRecommendations />
 
         {/* AI Savings events */}
         {aiSavingsEvents.length > 0 && (

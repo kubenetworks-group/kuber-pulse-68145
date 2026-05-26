@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { useRiskAnalysis } from "@/hooks/useRiskAnalysis";
 import { useCluster } from "@/contexts/ClusterContext";
@@ -24,7 +25,8 @@ import {
   extractNamespaces,
 } from "@/components/risk/RiskPanelFilters";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertTriangle, Activity, Globe, ShieldAlert, Shield, FileText, RefreshCw } from "lucide-react";
+import { AlertTriangle, Activity, Globe, ShieldAlert, Shield, FileText, RefreshCw, GitBranch } from "lucide-react";
+import { ObservabilityTab } from "@/components/observability/ObservabilityTab";
 import { SecurityReportModal } from "@/components/risk/SecurityReportModal";
 import { cn } from "@/lib/utils";
 
@@ -143,8 +145,10 @@ export default function RiskPanel() {
     runSecurityScan, mitigateThreat, markAsFalsePositive, updateThreatStatus,
   } = useSecurityThreats();
 
+  const [searchParams, setSearchParams] = useSearchParams();
   const [filters, setFilters] = useState<RiskFilters>({ severity: "all", status: "all", namespace: "all", period: "all" });
-  const [activeTab, setActiveTab] = useState("threats");
+  const activeTab = searchParams.get("tab") ?? "threats";
+  const setActiveTab = (tab: string) => setSearchParams({ tab }, { replace: true });
   const [showReport, setShowReport] = useState(false);
 
   const cluster    = clusters.find(c => c.id === selectedClusterId);
@@ -203,11 +207,12 @@ export default function RiskPanel() {
   ), [threats]);
 
   const tabs: Tab[] = [
-    { id: "threats",      label: "Ameaças",     Icon: ShieldAlert,   badge: attacks.length || undefined,              badgeColor: attacks.length ? STATUS.critical : undefined },
-    { id: "risks",        label: "Riscos",       Icon: AlertTriangle, badge: configRisks.length || undefined,          badgeColor: configRisks.length ? STATUS.high : undefined },
-    { id: "loadbalancer", label: "LoadBalancers",Icon: Globe },
-    { id: "health",       label: "Health",       Icon: Activity },
-    { id: "audit",        label: "Auditoria IA", Icon: FileText,      badge: suspiciousBehaviors.length || undefined,  badgeColor: suspiciousBehaviors.length ? STATUS.medium : undefined },
+    { id: "threats",        label: "Ameaças",        Icon: ShieldAlert,   badge: attacks.length || undefined,             badgeColor: attacks.length ? STATUS.critical : undefined },
+    { id: "risks",          label: "Riscos",          Icon: AlertTriangle, badge: configRisks.length || undefined,         badgeColor: configRisks.length ? STATUS.high : undefined },
+    { id: "loadbalancer",   label: "LoadBalancers",   Icon: Globe },
+    { id: "health",         label: "Health",          Icon: Activity },
+    { id: "observability",  label: "Observabilidade", Icon: GitBranch },
+    { id: "audit",          label: "Auditoria IA",    Icon: FileText,      badge: suspiciousBehaviors.length || undefined, badgeColor: suspiciousBehaviors.length ? STATUS.medium : undefined },
   ];
 
   /* ── no cluster ── */
@@ -411,6 +416,14 @@ export default function RiskPanel() {
             <ServicesWidget services={analysis.services} />
             <CertificatesWidget issues={analysis.certificateIssues} />
           </div>
+        )}
+
+        {activeTab === "observability" && (
+          <ObservabilityTab
+            changes={analysis.recentChanges}
+            unstablePods={analysis.unstablePods}
+            trends={analysis.trends}
+          />
         )}
 
         {activeTab === "audit" && (

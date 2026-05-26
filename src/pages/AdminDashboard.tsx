@@ -9,13 +9,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, Server, Bot, AlertTriangle, Search, RefreshCw, Shield, Settings2, Clock, Database, FileText, ShieldAlert, Bell, Trash2, Loader2, Mail, SendHorizonal, Building2 } from "lucide-react";
+import { Users, Server, Bot, AlertTriangle, Search, RefreshCw, Shield, Settings2, Clock, Database, FileText, ShieldAlert, Bell, Trash2, Loader2, Mail, SendHorizonal, Building2, BarChart2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { formatDistanceToNow, format, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { AuditLogsTab } from "@/components/AuditLogsTab";
 import { AdminClusterAlertsTab } from "@/components/AdminClusterAlertsTab";
+import { SaasMetricsTab } from "@/components/SaasMetricsTab";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -140,22 +141,36 @@ const AdminDashboard = () => {
     }
   };
 
-  const inviteLead = async (email: string, company: string | null) => {
+  const inviteLead = async (leadId: string, email: string) => {
     setInvitingEmail(email);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { toast.error('Sessão expirada'); return; }
 
-      const { error } = await supabase.functions.invoke('invite-lead', {
-        body: { email, company },
+      const { data, error } = await supabase.functions.invoke('invite-lead', {
+        body: { lead_id: leadId },
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
 
-      if (error) throw error;
+      if (error) {
+        let detail = error.message ?? 'Erro desconhecido';
+        try {
+          const body = await (error as any).context?.json?.();
+          if (body?.error) detail = body.error;
+        } catch { /* ignore parse errors */ }
+        toast.error(`Falha: ${detail}`);
+        return;
+      }
+
+      if (data?.error) {
+        toast.error(`Falha ao enviar convite: ${data.error}`);
+        return;
+      }
+
       setInvitedEmails(prev => new Set(prev).add(email));
       toast.success(`Convite enviado para ${email}`);
-    } catch (err) {
-      toast.error('Erro ao enviar convite');
+    } catch (err: any) {
+      toast.error(`Erro: ${err?.message ?? 'Desconhecido'}`);
     } finally {
       setInvitingEmail(null);
     }
@@ -333,6 +348,10 @@ const AdminDashboard = () => {
             <TabsTrigger value="leads" className="gap-2" onClick={fetchLeads}>
               <Mail className="h-4 w-4" />
               Leads
+            </TabsTrigger>
+            <TabsTrigger value="metrics" className="gap-2">
+              <BarChart2 className="h-4 w-4" />
+              Métricas
             </TabsTrigger>
           </TabsList>
 
@@ -673,7 +692,7 @@ const AdminDashboard = () => {
                                 size="sm"
                                 variant={alreadyInvited ? 'outline' : 'default'}
                                 disabled={invitingEmail === lead.email || alreadyInvited}
-                                onClick={() => inviteLead(lead.email, lead.company)}
+                                onClick={() => inviteLead(lead.id, lead.email)}
                                 className="gap-2"
                               >
                                 {invitingEmail === lead.email ? (
@@ -693,6 +712,10 @@ const AdminDashboard = () => {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="metrics" className="space-y-4">
+            <SaasMetricsTab />
           </TabsContent>
         </Tabs>
       </div>

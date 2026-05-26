@@ -89,4 +89,4 @@ Agent version constant is at the top of `agent/main.go`: `const AgentVersion = "
 
 ### Design System
 
-Dark-first UI. Brand accent: `#00E5A0` (terminal green). Design tokens documented in `DESIGN.md`. Components use shadcn-ui with Tailwind; custom theme overrides in `src/index.css`.
+Dark-first UI. Primary brand color: `#0F3CA5` Indigo Dusk (light mode) / `#7BB3E3` sky indigo (dark mode). Background: `#F0F4FA`. Status: success `#16A34A`, warn `#92400e`, crit `#DC2626`. Brand book: `kodo-brandbook-coral-v2.html`. Design tokens in `src/index.css` via `--kodo-brand`, `--kodo-warn`, `--kodo-crit` CSS vars. Components use shadcn-ui with Tailwind.

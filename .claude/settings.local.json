@@ -63,7 +63,14 @@
       "Bash(git -C /Users/denercavalcante/Workspace/kube/kodo diff agent/main.go)",
       "Bash(git -C /Users/denercavalcante/Workspace/kube/kodo status)",
       "Bash(git -C /Users/denercavalcante/Workspace/kube/kodo diff HEAD agent/main.go)",
-      "WebFetch(domain:api.anthropic.com)"
+      "WebFetch(domain:api.anthropic.com)",
+      "Bash(git *)",
+      "Bash(npm list *)",
+      "Bash(mdfind \"kMDItemCFBundleIdentifier == 'com.google.Chrome'\")",
+      "Bash(mdfind \"kMDItemCFBundleIdentifier == 'org.chromium.Chromium'\")",
+      "Bash(mkdir -p /tmp/kodo-ad-shots)",
+      "Read(//tmp/**)",
+      "Bash(npm init *)"
     ]
   }
 }

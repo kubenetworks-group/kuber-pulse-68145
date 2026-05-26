@@ -120,48 +120,61 @@ export function AgentUpdateBanner() {
   if (!updateInfo?.update_available || dismissed) return null;
 
   return (
-    <div className="mb-4 rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-3 relative">
-      {/* Dismiss */}
+    <div
+      className="rounded-xl border px-4 py-3 relative"
+      style={{
+        borderColor: "#6366f130",
+        borderLeftColor: "#6366f1",
+        borderLeftWidth: "3px",
+        background: "#6366f108",
+      }}
+    >
       <button
-        className="absolute top-2 right-2 h-6 w-6 flex items-center justify-center rounded hover:bg-blue-500/20 transition-colors"
+        className="absolute top-2.5 right-2.5 h-6 w-6 flex items-center justify-center rounded-md hover:bg-white/10 transition-colors"
         onClick={() => setDismissed(true)}
         aria-label="Dispensar"
       >
-        <X className="h-3 w-3 text-blue-400" />
+        <X className="h-3 w-3 text-muted-foreground/60" />
       </button>
 
-      {/* Header row */}
-      <div className="flex items-start gap-2 pr-6">
-        <ArrowUpCircle className="h-4 w-4 text-blue-400 shrink-0 mt-0.5" />
+      <div className="flex items-start gap-2.5 pr-8">
+        <ArrowUpCircle className="h-4 w-4 shrink-0 mt-0.5" style={{ color: "#6366f1" }} />
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-sm font-semibold text-blue-400">Atualização Disponível</span>
-            <span className="text-[11px] font-mono bg-blue-500/20 px-1.5 py-0.5 rounded text-blue-300 whitespace-nowrap">
+            <span className="text-xs font-mono font-semibold" style={{ color: "#6366f1" }}>
+              Atualização Disponível
+            </span>
+            <span
+              className="text-[10px] font-mono px-1.5 py-0.5 rounded border"
+              style={{ color: "#6366f1", borderColor: "#6366f130", background: "#6366f110" }}
+            >
               {updateInfo.current_version} → {updateInfo.latest_version}
             </span>
           </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            Nova versão do agente Kodo disponível.
+          <p className="text-[11px] text-muted-foreground/60 mt-0.5 font-mono">
+            Nova versão do agente Kodo disponível
           </p>
         </div>
       </div>
 
-      {/* Command area */}
       <div className="mt-3 ml-6">
         {showCommand ? (
           <div className="space-y-1.5">
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <div className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground/50">
               <Terminal className="h-3 w-3 shrink-0" />
-              <span>Execute no seu cluster:</span>
+              Execute no seu cluster:
             </div>
-            <div className="relative bg-muted/50 rounded-md">
-              <pre className="text-[10px] p-2 pr-8 font-mono overflow-x-auto" style={{ wordBreak: "break-all", whiteSpace: "pre-wrap" }}>
+            <div className="relative bg-muted/30 rounded-lg border border-border/40">
+              <pre
+                className="text-[10px] p-2.5 pr-9 font-mono overflow-x-auto text-muted-foreground/80"
+                style={{ wordBreak: "break-all", whiteSpace: "pre-wrap" }}
+              >
                 {updateCommand}
               </pre>
               <Button
                 variant="ghost"
                 size="icon"
-                className="absolute top-1 right-1 h-6 w-6 hover:bg-blue-500/20"
+                className="absolute top-1.5 right-1.5 h-6 w-6 hover:bg-white/10"
                 onClick={copyCommand}
               >
                 <Copy className="h-3 w-3" />
@@ -169,15 +182,13 @@ export function AgentUpdateBanner() {
             </div>
           </div>
         ) : (
-          <Button
-            variant="outline"
-            size="sm"
-            className="border-blue-500/40 hover:bg-blue-500/20 text-xs h-7"
+          <button
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border/50 text-[11px] font-mono text-muted-foreground hover:text-foreground hover:border-border hover:bg-muted/30 transition-all"
             onClick={() => setShowCommand(true)}
           >
-            <Terminal className="h-3 w-3 mr-1.5" />
+            <Terminal className="h-3 w-3" />
             Ver Comando
-          </Button>
+          </button>
         )}
       </div>
     </div>

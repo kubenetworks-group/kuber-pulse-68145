@@ -192,14 +192,13 @@ serve(async (req) => {
       }
     );
 
-    const token = authHeader.replace('Bearer ', '');
-    const { data, error: claimsError } = await supabaseClient.auth.getClaims(token);
-    if (claimsError || !data?.claims?.sub) {
-      console.error('Claims error:', claimsError);
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+    if (userError || !user) {
+      console.error('Auth error:', userError);
       throw new Error('Unauthorized');
     }
-    
-    const userId = data.claims.sub;
+
+    const userId = user.id;
 
     const { cluster_id, silent = false } = await req.json();
 
@@ -492,26 +491,39 @@ Retorne JSON (sem markdown):
       });
 
       if (newThreats.length > 0) {
-        const threatsToInsert = newThreats.map((threat: any) => ({
-          cluster_id,
-          user_id: userId,
-          threat_type: threat.threat_type,
-          severity: threat.severity,
-          is_attack: threat.is_attack ?? true,
-          title: threat.title,
-          description: threat.description,
-          container_name: threat.container_name,
-          pod_name: threat.pod_name,
-          namespace: threat.namespace,
-          node_name: threat.node_name,
-          suspicious_command: threat.suspicious_command,
-          ai_analysis: threat.ai_analysis,
-          evidence: threat.evidence,
-          raw_data: allThreats.find(t =>
-            t.pod_name === threat.pod_name &&
-            t.namespace === threat.namespace
-          ),
-        }));
+        const threatsToInsert = newThreats.map((threat: any) => {
+          const rawMatch = allThreats.find(t =>
+            t.pod_name === threat.pod_name && t.namespace === threat.namespace
+          );
+          const affectedResources = [];
+          if (threat.pod_name || threat.namespace) {
+            affectedResources.push({
+              pod: threat.pod_name || null,
+              namespace: threat.namespace || null,
+              container: threat.container_name || null,
+              node: threat.node_name || null,
+            });
+          }
+          return {
+            cluster_id,
+            user_id: userId,
+            threat_type: threat.threat_type,
+            severity: threat.severity,
+            is_attack: threat.is_attack ?? true,
+            title: threat.title,
+            description: threat.description,
+            container_name: threat.container_name,
+            pod_name: threat.pod_name,
+            namespace: threat.namespace,
+            node_name: threat.node_name,
+            suspicious_command: threat.suspicious_command,
+            ai_analysis: threat.ai_analysis,
+            ai_recommendation: threat.ai_analysis?.recommendation ?? null,
+            affected_resources: affectedResources,
+            evidence: threat.evidence,
+            raw_data: rawMatch ?? null,
+          };
+        });
 
         const { error: insertError } = await supabaseClient
           .from('security_threats')

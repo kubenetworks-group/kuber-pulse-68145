@@ -27,16 +27,17 @@ export const ClusterSelector = () => {
   }
 
   return (
-    <div className="flex items-center gap-2 min-w-0">
+    <div className="flex items-center gap-2 min-w-0 flex-1">
       <Server className="w-4 h-4 text-muted-foreground shrink-0" />
       <Select value={selectedClusterId || undefined} onValueChange={setSelectedClusterId}>
-        <SelectTrigger className="w-[160px] xs:w-[200px] sm:w-[280px]">
+        {/* width grows with content; capped so right-side buttons always stay visible */}
+        <SelectTrigger className="w-auto min-w-[120px] max-w-[calc(100vw-120px)] sm:max-w-[360px] md:max-w-[480px] lg:max-w-none [&>span]:line-clamp-none [&>span]:overflow-visible [&>span]:whitespace-nowrap">
           <SelectValue placeholder={t('clusters.selectCluster')} />
         </SelectTrigger>
         <SelectContent>
           {clusters.map((cluster) => (
             <SelectItem key={cluster.id} value={cluster.id}>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-medium">{cluster.name}</span>
                 <span className="text-xs text-muted-foreground">
                   ({cluster.provider} - {cluster.environment})

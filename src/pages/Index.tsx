@@ -129,6 +129,13 @@ const Index = () => {
   const liveCpuUsage    = clusterData?.cpu_usage    ?? nodeMetrics.cpuUsage;
   const liveMemoryUsage = clusterData?.memory_usage ?? nodeMetrics.memoryUsage;
 
+  const totalNodes = nodeMetrics.nodes?.length ?? 0;
+  const readyNodes = nodeMetrics.nodes?.filter((n: any) =>
+    n.status === "Ready" ||
+    n.ready === true ||
+    (Array.isArray(n.conditions) && n.conditions.some((c: any) => c.type === "Ready" && c.status === "True"))
+  ).length ?? 0;
+
   return (
     <DashboardLayout>
       {/* Floating Security Alert */}
@@ -153,6 +160,8 @@ const Index = () => {
               clusterData={clusterData}
               cpuUsage={liveCpuUsage}
               memoryUsage={liveMemoryUsage}
+              totalNodes={totalNodes}
+              readyNodes={readyNodes}
             />
 
             {/* Node infrastructure */}

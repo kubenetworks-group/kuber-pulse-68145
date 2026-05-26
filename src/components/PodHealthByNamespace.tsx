@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCluster } from "@/contexts/ClusterContext";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { useTranslation } from "react-i18next";
-import { Activity, Server, ChevronDown, ChevronUp, Circle } from "lucide-react";
+import { Layers, ChevronDown, ChevronUp, Circle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -24,82 +24,52 @@ interface NamespaceHealth {
   pods: PodInfo[];
 }
 
-// Modern tech color palette
 const NAMESPACE_COLORS = [
-  "#3b82f6", // blue-500
-  "#10b981", // emerald-500
-  "#f59e0b", // amber-500
-  "#8b5cf6", // violet-500
-  "#ef4444", // red-500
-  "#06b6d4", // cyan-500
-  "#ec4899", // pink-500
-  "#14b8a6", // teal-500
-  "#f97316", // orange-500
-  "#6366f1", // indigo-500
+  "var(--kodo-brand)", "#6366f1", "var(--kodo-warn)", "#8b5cf6",
+  "#06b6d4", "#ec4899", "#14b8a6", "#f97316",
+  "#3b82f6", "#10b981",
 ];
 
-// Pod status mapping
 const POD_STATUS_MAP: Record<string, string> = {
-  Running: 'healthy',
-  Succeeded: 'healthy',
-  Pending: 'warning',
-  Unknown: 'warning',
-  Failed: 'critical',
-  CrashLoopBackOff: 'critical',
-  Error: 'critical',
-  ImagePullBackOff: 'critical',
-  ErrImagePull: 'critical',
+  Running: "healthy", Succeeded: "healthy",
+  Pending: "warning", Unknown: "warning",
+  Failed: "critical", CrashLoopBackOff: "critical",
+  Error: "critical", ImagePullBackOff: "critical", ErrImagePull: "critical",
 };
 
 const CustomTooltip = ({ active, payload }: any) => {
-  if (active && payload && payload.length) {
-    const data = payload[0].payload;
-    return (
-      <div className="bg-popover/95 backdrop-blur-sm border border-border rounded-lg p-3 shadow-xl">
-        <p className="font-semibold text-foreground mb-1">{data.name}</p>
-        <div className="space-y-1 text-sm">
-          <p className="text-muted-foreground">
-            Total: <span className="text-foreground font-medium">{data.value} pods</span>
-          </p>
-          <p className="text-muted-foreground">
-            Participação: <span className="text-foreground font-medium">{data.percentage}%</span>
-          </p>
-          <div className="flex gap-2 mt-2 pt-2 border-t border-border">
-            <span className="text-success text-xs">● {data.healthy} healthy</span>
-            {data.warning > 0 && <span className="text-warning text-xs">● {data.warning} warning</span>}
-            {data.critical > 0 && <span className="text-destructive text-xs">● {data.critical} critical</span>}
-          </div>
-        </div>
+  if (!active || !payload?.length) return null;
+  const d = payload[0].payload;
+  return (
+    <div className="bg-card/95 backdrop-blur-sm border border-border/60 rounded-lg p-3 shadow-xl text-xs font-mono">
+      <p className="font-semibold text-foreground mb-1.5">{d.name}</p>
+      <p className="text-muted-foreground/70">
+        Total: <span className="text-foreground">{d.value} pods</span>
+      </p>
+      <p className="text-muted-foreground/70">
+        Share: <span className="text-foreground">{d.percentage}%</span>
+      </p>
+      <div className="flex gap-2 mt-2 pt-2 border-t border-border/40">
+        <span style={{ color: "var(--kodo-brand)" }}>●{d.healthy}</span>
+        {d.warning > 0 && <span style={{ color: "var(--kodo-warn)" }}>●{d.warning}</span>}
+        {d.critical > 0 && <span style={{ color: "var(--kodo-crit)" }}>●{d.critical}</span>}
       </div>
-    );
-  }
-  return null;
+    </div>
+  );
 };
 
-const getStatusColor = (status: string) => {
-  const healthStatus = POD_STATUS_MAP[status] || 'warning';
-  switch (healthStatus) {
-    case 'healthy':
-      return 'text-success';
-    case 'warning':
-      return 'text-warning';
-    case 'critical':
-      return 'text-destructive';
-    default:
-      return 'text-muted-foreground';
-  }
+const statusColor = (status: string) => {
+  const h = POD_STATUS_MAP[status] || "warning";
+  if (h === "healthy") return "var(--kodo-brand)";
+  if (h === "critical") return "var(--kodo-crit)";
+  return "var(--kodo-warn)";
 };
 
-const getStatusBadgeVariant = (status: string): "default" | "secondary" | "destructive" | "outline" => {
-  const healthStatus = POD_STATUS_MAP[status] || 'warning';
-  switch (healthStatus) {
-    case 'healthy':
-      return 'default';
-    case 'critical':
-      return 'destructive';
-    default:
-      return 'secondary';
-  }
+const statusBadgeVariant = (status: string): "default" | "secondary" | "destructive" | "outline" => {
+  const h = POD_STATUS_MAP[status] || "warning";
+  if (h === "healthy") return "default";
+  if (h === "critical") return "destructive";
+  return "secondary";
 };
 
 export const PodHealthByNamespace = () => {
@@ -111,370 +81,317 @@ export const PodHealthByNamespace = () => {
   const [expandedNamespace, setExpandedNamespace] = useState<string | null>(null);
 
   useEffect(() => {
-    if (selectedClusterId) {
-      fetchPodData();
-    }
+    if (selectedClusterId) fetchPodData();
   }, [selectedClusterId]);
 
   const fetchPodData = async () => {
     setLoading(true);
     try {
       const { data: metrics, error } = await supabase
-        .from('agent_metrics')
-        .select('*')
-        .eq('cluster_id', selectedClusterId)
-        .eq('metric_type', 'pod_details')
-        .order('created_at', { ascending: false })
+        .from("agent_metrics")
+        .select("*")
+        .eq("cluster_id", selectedClusterId)
+        .eq("metric_type", "pod_details")
+        .order("created_at", { ascending: false })
         .limit(1);
 
       if (error) throw error;
-
       if (!metrics || metrics.length === 0) {
         setNamespaceData([]);
         setLoading(false);
         return;
       }
 
-      const latestMetric = metrics[0];
-      const metricData = latestMetric.metric_data as any;
+      const metricData = metrics[0].metric_data as any;
       const pods = metricData?.pods || [];
+      const nsMap = new Map<string, NamespaceHealth>();
 
-      const namespaceMap = new Map<string, NamespaceHealth>();
-      
       pods.forEach((pod: any) => {
-        const ns = pod.namespace || 'default';
-        if (!namespaceMap.has(ns)) {
-          namespaceMap.set(ns, { namespace: ns, healthy: 0, warning: 0, critical: 0, total: 0, pods: [] });
+        const ns = pod.namespace || "default";
+        if (!nsMap.has(ns)) {
+          nsMap.set(ns, { namespace: ns, healthy: 0, warning: 0, critical: 0, total: 0, pods: [] });
         }
-        
-        const data = namespaceMap.get(ns)!;
-        data.total++;
-        
-        const status = pod.status || pod.phase || 'Unknown';
-        const healthStatus = POD_STATUS_MAP[status] || 'warning';
-        
-        // Add pod info
-        data.pods.push({
-          name: pod.name || 'unknown',
-          status: status,
-          namespace: ns,
-        });
-        
-        if (healthStatus === 'critical') {
-          data.critical++;
-        } else if (healthStatus === 'warning') {
-          data.warning++;
-        } else {
-          data.healthy++;
-        }
+        const d = nsMap.get(ns)!;
+        d.total++;
+        const status = pod.status || pod.phase || "Unknown";
+        const h = POD_STATUS_MAP[status] || "warning";
+        d.pods.push({ name: pod.name || "unknown", status, namespace: ns });
+        if (h === "critical") d.critical++;
+        else if (h === "warning") d.warning++;
+        else d.healthy++;
       });
 
-      // Sort by total pods descending
-      const sorted = Array.from(namespaceMap.values()).sort((a, b) => b.total - a.total);
-      setNamespaceData(sorted);
-    } catch (error) {
-      console.error('Error fetching pod data:', error);
+      setNamespaceData(Array.from(nsMap.values()).sort((a, b) => b.total - a.total));
+    } catch (err) {
+      console.error("Error fetching pod data:", err);
       setNamespaceData([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleNamespaceClick = (namespace: string) => {
-    setExpandedNamespace(expandedNamespace === namespace ? null : namespace);
-  };
+  const totalPods = namespaceData.reduce((s, ns) => s + ns.total, 0);
+  const healthyPods = namespaceData.reduce((s, ns) => s + ns.healthy, 0);
+  const warningPods = namespaceData.reduce((s, ns) => s + ns.warning, 0);
+  const criticalPods = namespaceData.reduce((s, ns) => s + ns.critical, 0);
 
-  const totalPods = namespaceData.reduce((sum, ns) => sum + ns.total, 0);
-
-  const pieData = namespaceData.map((ns, index) => ({
+  const pieData = namespaceData.map((ns, i) => ({
     name: ns.namespace,
     value: ns.total,
     healthy: ns.healthy,
     warning: ns.warning,
     critical: ns.critical,
     pods: ns.pods,
-    percentage: totalPods > 0 ? ((ns.total / totalPods) * 100).toFixed(0) : '0',
-    color: NAMESPACE_COLORS[index % NAMESPACE_COLORS.length],
+    percentage: totalPods > 0 ? ((ns.total / totalPods) * 100).toFixed(0) : "0",
+    color: NAMESPACE_COLORS[i % NAMESPACE_COLORS.length],
   }));
 
-  const healthyPods = namespaceData.reduce((sum, ns) => sum + ns.healthy, 0);
-  const warningPods = namespaceData.reduce((sum, ns) => sum + ns.warning, 0);
-  const criticalPods = namespaceData.reduce((sum, ns) => sum + ns.critical, 0);
-
-  if (loading) {
-    return (
-      <Card className="p-4 sm:p-6 bg-gradient-to-br from-card to-card/50 border-border/50">
-        <h3 className="text-base sm:text-lg font-semibold mb-4">{t('dashboard.podHealthByNamespace')}</h3>
-        <div className="h-[300px] sm:h-[400px] flex items-center justify-center text-muted-foreground">
-          <div className="flex flex-col items-center gap-2">
-            <Activity className="w-8 h-8 animate-pulse text-primary" />
-            {t('common.loading')}
-          </div>
-        </div>
-      </Card>
-    );
-  }
-
-  if (pieData.length === 0) {
-    return (
-      <Card className="p-4 sm:p-6 bg-gradient-to-br from-card to-card/50 border-border/50">
-        <h3 className="text-base sm:text-lg font-semibold mb-4">{t('dashboard.podHealthByNamespace')}</h3>
-        <div className="h-[300px] sm:h-[400px] flex items-center justify-center">
-          <div className="text-center">
-            <div className="w-16 h-16 rounded-full bg-muted/20 mx-auto mb-3 flex items-center justify-center">
-              <Activity className="w-8 h-8 text-muted-foreground" />
-            </div>
-            <p className="text-sm text-muted-foreground">{t('common.noData')}</p>
-          </div>
-        </div>
-      </Card>
-    );
-  }
-
   return (
-    <Card className="group relative overflow-hidden p-4 sm:p-6 bg-gradient-to-br from-card via-card to-card/80 border-border/50 hover:border-primary/30 transition-all duration-500">
-      {/* Tech background effects */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/5 via-transparent to-transparent" />
-      <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-3xl" />
-      
-      <div className="relative">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 sm:mb-6">
-          <div>
-            <h3 className="text-base sm:text-lg font-bold text-foreground flex items-center gap-2">
-              <Server className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
-              {t('dashboard.podHealthByNamespace')}
-            </h3>
-            <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-              {totalPods} pods • {namespaceData.length} namespaces
-            </p>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-success/10 border border-success/20">
-              <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
-              <span className="text-xs font-medium text-success">{healthyPods}</span>
+    <Card className="overflow-hidden bg-card border-border/60 shadow-sm dark:bg-card/40 dark:shadow-none dark:backdrop-blur-sm">
+      {/* Header */}
+      <div className="px-5 pt-5 pb-4 border-b border-border/40">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div
+              className="p-2.5 rounded-xl shrink-0"
+              style={{ background: "var(--kodo-brand-muted)", border: "1px solid var(--kodo-brand-border)" }}
+            >
+              <Layers className="w-4 h-4" style={{ color: "var(--kodo-brand)" }} />
             </div>
-            {warningPods > 0 && (
-              <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-warning/10 border border-warning/20">
-                <div className="w-2 h-2 rounded-full bg-warning" />
-                <span className="text-xs font-medium text-warning">{warningPods}</span>
-              </div>
-            )}
-            {criticalPods > 0 && (
-              <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-destructive/10 border border-destructive/20">
-                <div className="w-2 h-2 rounded-full bg-destructive" />
-                <span className="text-xs font-medium text-destructive">{criticalPods}</span>
-              </div>
-            )}
-          </div>
-        </div>
-        
-        {/* Main content: Chart + Legend */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-          {/* Donut Chart */}
-          <div className="relative flex items-center justify-center order-1 lg:order-1">
-            <ResponsiveContainer width="100%" height={220} className="sm:hidden">
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={45}
-                  outerRadius={85}
-                  fill="#8884d8"
-                  dataKey="value"
-                  animationBegin={0}
-                  animationDuration={1000}
-                  paddingAngle={2}
-                  onMouseEnter={(_, index) => setActiveIndex(index)}
-                  onMouseLeave={() => setActiveIndex(undefined)}
-                >
-                  {pieData.map((entry, index) => (
-                    <Cell 
-                      key={`cell-${index}`} 
-                      fill={entry.color}
-                      className="cursor-pointer transition-all duration-300"
-                      stroke="hsl(var(--background))"
-                      strokeWidth={activeIndex === index ? 3 : 2}
-                      style={{
-                        filter: activeIndex === index ? 'brightness(1.2) drop-shadow(0 0 8px rgba(0,0,0,0.3))' : 'brightness(1)',
-                        transform: activeIndex === index ? 'scale(1.02)' : 'scale(1)',
-                        transformOrigin: 'center',
-                      }}
-                    />
-                  ))}
-                </Pie>
-                <Tooltip content={<CustomTooltip />} />
-              </PieChart>
-            </ResponsiveContainer>
-            
-            <ResponsiveContainer width="100%" height={280} className="hidden sm:block">
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={110}
-                  fill="#8884d8"
-                  dataKey="value"
-                  animationBegin={0}
-                  animationDuration={1000}
-                  paddingAngle={2}
-                  onMouseEnter={(_, index) => setActiveIndex(index)}
-                  onMouseLeave={() => setActiveIndex(undefined)}
-                >
-                  {pieData.map((entry, index) => (
-                    <Cell 
-                      key={`cell-${index}`} 
-                      fill={entry.color}
-                      className="cursor-pointer transition-all duration-300"
-                      stroke="hsl(var(--background))"
-                      strokeWidth={activeIndex === index ? 3 : 2}
-                      style={{
-                        filter: activeIndex === index ? 'brightness(1.2) drop-shadow(0 0 8px rgba(0,0,0,0.3))' : 'brightness(1)',
-                        transform: activeIndex === index ? 'scale(1.02)' : 'scale(1)',
-                        transformOrigin: 'center',
-                      }}
-                    />
-                  ))}
-                </Pie>
-                <Tooltip content={<CustomTooltip />} />
-              </PieChart>
-            </ResponsiveContainer>
-            
-            {/* Center stats */}
-            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
-              <div className="text-2xl sm:text-3xl font-bold text-foreground">{totalPods}</div>
-              <div className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider">Total Pods</div>
+            <div className="min-w-0">
+              <h3 className="text-sm font-semibold text-foreground leading-none">
+                {t("dashboard.podHealthByNamespace")}
+              </h3>
+              {!loading && (
+                <p className="text-[11px] text-muted-foreground/60 mt-0.5 font-mono">
+                  {totalPods} pods · {namespaceData.length} namespaces
+                </p>
+              )}
             </div>
           </div>
 
-          {/* Legend - Right side with expandable pods */}
-          <div className="flex flex-col justify-start order-2 lg:order-2">
-            <ScrollArea className="h-[220px] sm:h-[280px] pr-2">
-              <div className="space-y-2">
-                {pieData.map((item, index) => (
-                  <Collapsible 
-                    key={item.name}
-                    open={expandedNamespace === item.name}
-                    onOpenChange={() => handleNamespaceClick(item.name)}
-                  >
-                    <CollapsibleTrigger asChild>
-                      <div 
-                        className={`
-                          flex items-center justify-between p-2 sm:p-3 rounded-lg border transition-all duration-300 cursor-pointer
-                          ${activeIndex === index || expandedNamespace === item.name
-                            ? 'bg-accent border-primary/50 shadow-md' 
-                            : 'bg-accent/30 border-border/50 hover:bg-accent/50 hover:border-border'
-                          }
-                        `}
-                        onMouseEnter={() => setActiveIndex(index)}
-                        onMouseLeave={() => setActiveIndex(undefined)}
-                      >
-                        <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-                          <div 
-                            className="w-3 h-3 sm:w-4 sm:h-4 rounded-md flex-shrink-0 shadow-sm"
-                            style={{ backgroundColor: item.color }}
-                          />
-                          <div className="min-w-0 flex-1">
-                            <p className="text-xs sm:text-sm font-semibold text-foreground truncate">{item.name}</p>
-                            <div className="flex items-center gap-1 sm:gap-2 mt-0.5">
-                              {item.healthy > 0 && (
-                                <span className="text-[9px] sm:text-[10px] text-success">●{item.healthy}</span>
-                              )}
-                              {item.warning > 0 && (
-                                <span className="text-[9px] sm:text-[10px] text-warning">●{item.warning}</span>
-                              )}
-                              {item.critical > 0 && (
-                                <span className="text-[9px] sm:text-[10px] text-destructive">●{item.critical}</span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <div className="text-right">
-                            <p className="text-sm sm:text-lg font-bold" style={{ color: item.color }}>{item.percentage}%</p>
-                            <p className="text-[10px] sm:text-xs text-muted-foreground">{item.value} pods</p>
-                          </div>
-                          {expandedNamespace === item.name ? (
-                            <ChevronUp className="w-4 h-4 text-muted-foreground" />
-                          ) : (
-                            <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                          )}
-                        </div>
-                      </div>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                      <div className="mt-2 ml-4 sm:ml-6 p-2 sm:p-3 rounded-lg bg-muted/30 border border-border/50 space-y-1.5">
-                        <p className="text-[10px] sm:text-xs font-medium text-muted-foreground mb-2">
-                          Pods em {item.name}:
-                        </p>
-                        <div className="space-y-1 max-h-[150px] overflow-y-auto">
-                          {item.pods.map((pod, podIndex) => (
-                            <div 
-                              key={`${pod.name}-${podIndex}`}
-                              className="flex items-center justify-between gap-2 p-1.5 sm:p-2 rounded bg-background/50 border border-border/30"
-                            >
-                              <div className="flex items-center gap-2 min-w-0 flex-1">
-                                <Circle className={`w-2 h-2 flex-shrink-0 ${getStatusColor(pod.status)}`} fill="currentColor" />
-                                <span className="text-[10px] sm:text-xs text-foreground truncate font-mono">
-                                  {pod.name}
-                                </span>
+          {/* Status pills */}
+          {!loading && totalPods > 0 && (
+            <div className="flex items-center gap-1.5 flex-wrap justify-end shrink-0">
+              <span
+                className="flex items-center gap-1 text-[10px] font-mono px-2 py-1 rounded-md border"
+                style={{ color: "var(--kodo-brand)", borderColor: "var(--kodo-brand-border)", background: "var(--kodo-brand-muted)" }}
+              >
+                <span className="size-1.5 rounded-full inline-block" style={{ background: "var(--kodo-brand)" }} />
+                {healthyPods}
+              </span>
+              {warningPods > 0 && (
+                <span
+                  className="flex items-center gap-1 text-[10px] font-mono px-2 py-1 rounded-md border"
+                  style={{ color: "var(--kodo-warn)", borderColor: "var(--kodo-warn-border)", background: "var(--kodo-warn-muted)" }}
+                >
+                  <span className="size-1.5 rounded-full inline-block" style={{ background: "var(--kodo-warn)" }} />
+                  {warningPods}
+                </span>
+              )}
+              {criticalPods > 0 && (
+                <span
+                  className="flex items-center gap-1 text-[10px] font-mono px-2 py-1 rounded-md border"
+                  style={{ color: "var(--kodo-crit)", borderColor: "var(--kodo-crit-border)", background: "var(--kodo-crit-muted)" }}
+                >
+                  <span className="size-1.5 rounded-full inline-block" style={{ background: "var(--kodo-crit)" }} />
+                  {criticalPods}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="p-4 sm:p-5">
+        {loading ? (
+          <div className="h-64 flex items-center justify-center">
+            <div
+              className="w-5 h-5 rounded-full border-2 border-t-transparent animate-spin"
+              style={{ borderColor: "var(--kodo-brand)", borderTopColor: "transparent" }}
+            />
+          </div>
+        ) : pieData.length === 0 ? (
+          <div className="h-64 flex flex-col items-center justify-center gap-3 text-muted-foreground/30">
+            <Layers className="w-8 h-8 opacity-20" />
+            <p className="text-xs font-mono">{t("common.noData")}</p>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+              {/* Donut chart */}
+              <div className="relative flex items-center justify-center">
+                <ResponsiveContainer width="100%" height={260}>
+                  <PieChart>
+                    <Pie
+                      data={pieData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={65}
+                      outerRadius={105}
+                      dataKey="value"
+                      animationBegin={0}
+                      animationDuration={800}
+                      paddingAngle={2}
+                      onMouseEnter={(_, i) => setActiveIndex(i)}
+                      onMouseLeave={() => setActiveIndex(undefined)}
+                    >
+                      {pieData.map((entry, i) => (
+                        <Cell
+                          key={`cell-${i}`}
+                          fill={entry.color}
+                          stroke="hsl(var(--background))"
+                          strokeWidth={activeIndex === i ? 3 : 1}
+                          style={{
+                            filter: activeIndex === i ? `drop-shadow(0 0 6px ${entry.color}60)` : undefined,
+                            cursor: "pointer",
+                          }}
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip content={<CustomTooltip />} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
+                  <div className="text-2xl font-mono font-bold text-foreground tabular-nums">
+                    {totalPods}
+                  </div>
+                  <div className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wider mt-0.5">
+                    Total Pods
+                  </div>
+                </div>
+              </div>
+
+              {/* Namespace list */}
+              <ScrollArea className="h-[260px] pr-1">
+                <div className="space-y-1.5">
+                  {pieData.map((item, index) => (
+                    <Collapsible
+                      key={item.name}
+                      open={expandedNamespace === item.name}
+                      onOpenChange={() =>
+                        setExpandedNamespace(expandedNamespace === item.name ? null : item.name)
+                      }
+                    >
+                      <CollapsibleTrigger asChild>
+                        <div
+                          className={`flex items-center justify-between p-2.5 rounded-lg border transition-all cursor-pointer ${
+                            activeIndex === index || expandedNamespace === item.name
+                              ? "border-border bg-muted/50 dark:bg-card/60"
+                              : "border-border/40 bg-transparent hover:bg-muted/30 hover:border-border/60 dark:bg-card/20 dark:hover:bg-card/40"
+                          }`}
+                          onMouseEnter={() => setActiveIndex(index)}
+                          onMouseLeave={() => setActiveIndex(undefined)}
+                        >
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <div
+                              className="w-2.5 h-2.5 rounded shrink-0"
+                              style={{ background: item.color }}
+                            />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-mono font-medium text-foreground truncate">
+                                {item.name}
+                              </p>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                {item.healthy > 0 && (
+                                  <span className="text-[9px] font-mono" style={{ color: "var(--kodo-brand)" }}>
+                                    ●{item.healthy}
+                                  </span>
+                                )}
+                                {item.warning > 0 && (
+                                  <span className="text-[9px] font-mono" style={{ color: "var(--kodo-warn)" }}>
+                                    ●{item.warning}
+                                  </span>
+                                )}
+                                {item.critical > 0 && (
+                                  <span className="text-[9px] font-mono" style={{ color: "var(--kodo-crit)" }}>
+                                    ●{item.critical}
+                                  </span>
+                                )}
                               </div>
-                              <Badge 
-                                variant={getStatusBadgeVariant(pod.status)} 
-                                className="text-[9px] sm:text-[10px] px-1.5 py-0.5 flex-shrink-0"
-                              >
-                                {pod.status}
-                              </Badge>
                             </div>
-                          ))}
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <div className="text-right">
+                              <p
+                                className="text-sm font-mono font-semibold tabular-nums"
+                                style={{ color: item.color }}
+                              >
+                                {item.percentage}%
+                              </p>
+                              <p className="text-[10px] font-mono text-muted-foreground/50">
+                                {item.value} pods
+                              </p>
+                            </div>
+                            {expandedNamespace === item.name ? (
+                              <ChevronUp className="w-3.5 h-3.5 text-muted-foreground/50" />
+                            ) : (
+                              <ChevronDown className="w-3.5 h-3.5 text-muted-foreground/50" />
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    </CollapsibleContent>
-                  </Collapsible>
-                ))}
-              </div>
-            </ScrollArea>
-          </div>
-        </div>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="ml-4 mt-1.5 mb-1 p-2.5 rounded-lg bg-muted/40 border border-border/40 space-y-1 dark:bg-muted/20 dark:border-border/30">
+                          <p className="text-[10px] font-mono text-muted-foreground/50 mb-2">
+                            pods em {item.name}:
+                          </p>
+                          <div className="max-h-32 overflow-y-auto space-y-1">
+                            {item.pods.map((pod, pi) => (
+                              <div
+                                key={`${pod.name}-${pi}`}
+                                className="flex items-center justify-between gap-2 p-1.5 rounded bg-background/30 border border-border/20"
+                              >
+                                <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                  <Circle
+                                    className="w-2 h-2 shrink-0"
+                                    fill="currentColor"
+                                    style={{ color: statusColor(pod.status) }}
+                                  />
+                                  <span className="text-[10px] font-mono text-foreground/80 truncate">
+                                    {pod.name}
+                                  </span>
+                                </div>
+                                <Badge
+                                  variant={statusBadgeVariant(pod.status)}
+                                  className="text-[9px] px-1.5 py-0.5 h-auto shrink-0"
+                                >
+                                  {pod.status}
+                                </Badge>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  ))}
+                </div>
+              </ScrollArea>
+            </div>
 
-        {/* Bottom stats bar */}
-        <div className="grid grid-cols-3 gap-2 sm:gap-3 mt-4 sm:mt-6 pt-3 sm:pt-4 border-t border-border/50">
-          <div className="text-center p-1.5 sm:p-2">
-            <div className="flex items-center justify-center gap-1.5 sm:gap-2 mb-1">
-              <div className="w-2 h-2 rounded-full bg-success" />
-              <span className="text-[10px] sm:text-xs text-muted-foreground font-medium">{t('common.healthy')}</span>
+            {/* Bottom stats */}
+            <div className="grid grid-cols-3 gap-2 mt-4 pt-4 border-t border-border/40">
+              {[
+                { label: t("common.healthy"), count: healthyPods, color: "var(--kodo-brand)" },
+                { label: t("common.warning"), count: warningPods, color: "var(--kodo-warn)" },
+                { label: t("common.critical"), count: criticalPods, color: "var(--kodo-crit)" },
+              ].map(({ label, count, color }) => (
+                <div key={label} className="text-center">
+                  <div className="flex items-center justify-center gap-1.5 mb-1">
+                    <span className="size-1.5 rounded-full" style={{ background: color }} />
+                    <span className="text-[10px] font-mono text-muted-foreground/60">{label}</span>
+                  </div>
+                  <p className="text-lg font-mono font-bold tabular-nums" style={{ color }}>
+                    {count}
+                  </p>
+                  <p className="text-[10px] font-mono text-muted-foreground/40">
+                    {totalPods > 0 ? ((count / totalPods) * 100).toFixed(1) : 0}%
+                  </p>
+                </div>
+              ))}
             </div>
-            <p className="text-lg sm:text-xl font-bold text-success">{healthyPods}</p>
-            <p className="text-[10px] sm:text-xs text-muted-foreground">
-              {totalPods > 0 ? ((healthyPods / totalPods) * 100).toFixed(1) : 0}%
-            </p>
-          </div>
-          
-          <div className="text-center p-1.5 sm:p-2 border-x border-border/50">
-            <div className="flex items-center justify-center gap-1.5 sm:gap-2 mb-1">
-              <div className="w-2 h-2 rounded-full bg-warning" />
-              <span className="text-[10px] sm:text-xs text-muted-foreground font-medium">{t('common.warning')}</span>
-            </div>
-            <p className="text-lg sm:text-xl font-bold text-warning">{warningPods}</p>
-            <p className="text-[10px] sm:text-xs text-muted-foreground">
-              {totalPods > 0 ? ((warningPods / totalPods) * 100).toFixed(1) : 0}%
-            </p>
-          </div>
-          
-          <div className="text-center p-1.5 sm:p-2">
-            <div className="flex items-center justify-center gap-1.5 sm:gap-2 mb-1">
-              <div className="w-2 h-2 rounded-full bg-destructive" />
-              <span className="text-[10px] sm:text-xs text-muted-foreground font-medium">{t('common.critical')}</span>
-            </div>
-            <p className="text-lg sm:text-xl font-bold text-destructive">{criticalPods}</p>
-            <p className="text-[10px] sm:text-xs text-muted-foreground">
-              {totalPods > 0 ? ((criticalPods / totalPods) * 100).toFixed(1) : 0}%
-            </p>
-          </div>
-        </div>
+          </>
+        )}
       </div>
     </Card>
   );

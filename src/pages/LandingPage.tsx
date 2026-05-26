@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Footer } from "@/components/Footer";
 import { LeadCaptureForm } from "@/components/LeadCaptureForm";
 import kodoLogo from "@/assets/kodo-logo.png";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import {
   Shield, Zap, Brain, DollarSign, Activity, Wrench, ArrowRight, Check,
   Server, LineChart, BellRing, Upload, Settings, Cpu, AlertTriangle,
@@ -16,11 +16,10 @@ import {
 
 /* ─── CSS Injection ─────────────────────────────────────────────── */
 const STYLES = `
-  @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&family=Nunito+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400;500&display=swap');
-
-  .klp { font-family: 'Nunito Sans', -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
-  .klp-syne { font-family: 'Nunito', sans-serif; letter-spacing: -0.02em; }
-  .klp-mono { font-family: 'JetBrains Mono', monospace; }
+  /* Aileron + DM Mono loaded globally in index.html */
+  .klp { font-family: 'Aileron', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  .klp-syne { font-family: 'Aileron', system-ui, sans-serif; letter-spacing: -0.02em; }
+  .klp-mono { font-family: 'DM Mono', monospace; }
 
   .klp-grad-cyan {
     background: linear-gradient(120deg, #22d3ee 0%, #818cf8 60%, #22d3ee 120%);
@@ -108,6 +107,12 @@ const STYLES = `
     92%  { opacity: 1; }
     100% { top: calc(100% + 8px); opacity: 0; }
   }
+  @keyframes klp-rise {
+    0%   { transform: translateY(0) translateX(0);    opacity: 0; }
+    8%   { opacity: var(--p-op); }
+    92%  { opacity: var(--p-op); }
+    100% { transform: translateY(-100vh) translateX(12px); opacity: 0; }
+  }
 
   .klp-word-in { animation: klp-word-in 0.55s cubic-bezier(0.16,1,0.3,1) forwards; }
   .klp-word-out { animation: klp-word-out 0.3s ease-in forwards; }
@@ -183,7 +188,7 @@ const STYLES = `
 
 
   .klp-section-num {
-    position: absolute; font-family: 'Nunito', sans-serif; font-weight: 800;
+    position: absolute; font-family: 'Aileron', system-ui, sans-serif; font-weight: 800;
     font-size: clamp(80px, 15vw, 160px); color: rgba(0,0,0,0.025);
     line-height: 1; pointer-events: none; user-select: none;
     top: -0.2em; left: -0.1em;
@@ -672,6 +677,40 @@ const FAQS = [
 ];
 
 /* ─── Component ─────────────────────────────────────────────────── */
+/* ─── Hero Particles ─────────────────────────────────────────────── */
+function HeroParticles() {
+  const particles = useMemo(() => Array.from({ length: 45 }, (_, i) => ({
+    id: i,
+    size: 2 + (i * 7919 % 4),          // 2–5 px, deterministic
+    left: (i * 2311 % 1000) / 10,      // 0–99.9 %
+    duration: 18 + (i * 1733 % 20),    // 18–37 s
+    delay: -(i * 1031 % 15),           // stagger immediately visible
+    opacity: 0.18 + (i * 937 % 40) / 100, // 0.18–0.57
+  })), []);
+
+  return (
+    <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ zIndex: 0 }}>
+      {particles.map((p) => (
+        <div
+          key={p.id}
+          style={{
+            position: 'absolute',
+            width: p.size,
+            height: p.size,
+            borderRadius: '50%',
+            background: '#0F3CA5',
+            left: `${p.left}%`,
+            top: '100%',
+            boxShadow: `0 0 ${p.size + 2}px rgba(15,60,165,0.5)`,
+            ['--p-op' as string]: p.opacity,
+            animation: `klp-rise ${p.duration}s linear ${p.delay}s infinite`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
 export default function LandingPage() {
   const abVariant = (new URLSearchParams(window.location.search).get('variant') as 'a' | 'b' | 'c') ?? 'a';
 
@@ -811,11 +850,11 @@ export default function LandingPage() {
       {/* ── Animated Background ── */}
       <div className="fixed inset-0 -z-10 overflow-hidden">
         <div ref={orbARef} className="absolute w-[700px] h-[700px] rounded-full opacity-[0.07] blur-[140px] top-[-150px] left-[5%]"
-          style={{ background: 'radial-gradient(circle, #0891b2, transparent 70%)', animation: 'klp-orb-a 20s ease-in-out infinite' }} />
+          style={{ background: 'radial-gradient(circle, #0F3CA5, transparent 70%)', animation: 'klp-orb-a 20s ease-in-out infinite' }} />
         <div ref={orbBRef} className="absolute w-[500px] h-[500px] rounded-full opacity-[0.06] blur-[120px] top-[20%] right-[0%]"
-          style={{ background: 'radial-gradient(circle, #4f46e5, transparent 70%)', animation: 'klp-orb-b 25s ease-in-out infinite' }} />
+          style={{ background: 'radial-gradient(circle, #283D63, transparent 70%)', animation: 'klp-orb-b 25s ease-in-out infinite' }} />
         <div className="absolute w-[400px] h-[400px] rounded-full opacity-[0.05] blur-[100px] bottom-[5%] left-[25%]"
-          style={{ background: 'radial-gradient(circle, #0891b2, transparent 70%)', animation: 'klp-orb-c 18s ease-in-out infinite' }} />
+          style={{ background: 'radial-gradient(circle, #0F3CA5, transparent 70%)', animation: 'klp-orb-c 18s ease-in-out infinite' }} />
         {/* Fine grid */}
         <div className="absolute inset-0 opacity-[0.018]"
           style={{ backgroundImage: 'linear-gradient(rgba(0,0,0,1) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,1) 1px, transparent 1px)', backgroundSize: '64px 64px' }} />
@@ -900,7 +939,8 @@ export default function LandingPage() {
       <main ref={mainRef}>
         {/* ══════════════════ HERO ══════════════════ */}
         <section ref={(el) => { if (el) { (heroRef as any).current = el; sectionEls.current[0] = el; } }}
-          className="relative min-h-[92vh] flex items-center px-6 pt-16 pb-24">
+          className="relative min-h-[92vh] flex items-center px-6 pt-16 pb-24 overflow-hidden">
+          <HeroParticles />
           <div className="max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-[46fr_54fr] gap-12 items-center">
 
             {/* Left */}

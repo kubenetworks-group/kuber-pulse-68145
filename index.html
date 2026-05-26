@@ -11,6 +11,23 @@
     <meta name="author" content="Kubenetworks" />
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+
+    <!-- Brand fonts: Aileron (display/body) + DM Mono (monospace) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://unpkg.com" crossorigin="anonymous" />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <style>
+      @font-face { font-family: 'Aileron'; font-style: normal; font-weight: 300; font-display: swap;
+        src: url('https://unpkg.com/@fontsource/aileron@5.1.1/files/aileron-latin-300-normal.woff2') format('woff2'); }
+      @font-face { font-family: 'Aileron'; font-style: normal; font-weight: 400; font-display: swap;
+        src: url('https://unpkg.com/@fontsource/aileron@5.1.1/files/aileron-latin-400-normal.woff2') format('woff2'); }
+      @font-face { font-family: 'Aileron'; font-style: normal; font-weight: 600; font-display: swap;
+        src: url('https://unpkg.com/@fontsource/aileron@5.1.1/files/aileron-latin-600-normal.woff2') format('woff2'); }
+      @font-face { font-family: 'Aileron'; font-style: normal; font-weight: 700; font-display: swap;
+        src: url('https://unpkg.com/@fontsource/aileron@5.1.1/files/aileron-latin-700-normal.woff2') format('woff2'); }
+      @font-face { font-family: 'Aileron'; font-style: normal; font-weight: 900; font-display: swap;
+        src: url('https://unpkg.com/@fontsource/aileron@5.1.1/files/aileron-latin-900-normal.woff2') format('woff2'); }
+    </style>
     <meta name="google-site-verification" content="ALwIiIAged4iZvw8aX5rpmpw1odaN9_bGI0wS2KKwdM" />
 
     <!-- Open Graph / Facebook -->
@@ -177,9 +194,29 @@
     }
     </script>
 
+    <!-- WebSite Schema -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "Kodo",
+      "url": "https://kodo.kubenetworks.com.br",
+      "description": "Plataforma SaaS de gestão Kubernetes com inteligência artificial. Auto-healing, FinOps e segurança para clusters K8s.",
+      "inLanguage": "pt-BR",
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": {
+          "@type": "EntryPoint",
+          "urlTemplate": "https://kodo.kubenetworks.com.br/blog?q={search_term_string}"
+        },
+        "query-input": "required name=search_term_string"
+      }
+    }
+    </script>
+
     <!-- Theme Color -->
-    <meta name="theme-color" content="#3b82f6" />
-    <meta name="msapplication-TileColor" content="#3b82f6" />
+    <meta name="theme-color" content="#0F3CA5" />
+    <meta name="msapplication-TileColor" content="#0F3CA5" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Kodo" />
@@ -197,6 +234,17 @@
 
   <body>
     <noscript>
+      <div style="font-family:sans-serif;max-width:700px;margin:60px auto;padding:0 20px;color:#1A1A1A">
+        <h1>Kodo — Gestão Kubernetes com IA</h1>
+        <p>Kodo é uma plataforma SaaS brasileira de gestão de clusters Kubernetes com inteligência artificial.
+        Oferece auto-healing automático em menos de 30 segundos, FinOps multi-cloud com economia média de 40%,
+        análise de segurança RBAC e Pod Security Standards, e observabilidade em tempo real.</p>
+        <p>Compatível com AWS EKS, Google GKE, Azure AKS e clusters on-premises. Setup em 5 minutos via kubectl ou Helm.</p>
+        <p><a href="https://kodo.kubenetworks.com.br/diagnostico">Diagnóstico gratuito</a> |
+        <a href="https://kodo.kubenetworks.com.br/plans">Ver planos</a> |
+        <a href="https://kodo.kubenetworks.com.br/blog">Blog Kubernetes</a></p>
+        <p>Este site requer JavaScript para funcionar corretamente. Por favor, habilite o JavaScript no seu navegador.</p>
+      </div>
     </noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>

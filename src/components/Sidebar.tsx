@@ -31,6 +31,11 @@ import {
   ShieldCheck,
   HardDrive,
   Disc,
+  ShieldAlert,
+  Activity,
+  Globe,
+  FileText,
+  GitBranch,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -61,24 +66,43 @@ const K8S_STORAGE = [
   { name: "Volumes",    href: "/kubernetes/volumes",  icon: Disc },
 ];
 
+const RISK_SECURITY = [
+  { name: "Ameaças",      href: "/risk/threats", icon: ShieldAlert },
+  { name: "Auditoria IA", href: "/risk/audit",   icon: FileText },
+];
+
+const RISK_INFRA = [
+  { name: "Riscos",        href: "/risk/risks",        icon: AlertTriangle },
+  { name: "Health",        href: "/risk/health",        icon: Activity },
+  { name: "LoadBalancers", href: "/risk/loadbalancer",  icon: Globe },
+];
+
+const RISK_OBSERVABILITY = [
+  { name: "Traces & Métricas", href: "/risk/observability", icon: GitBranch },
+];
+
 interface K8sGroupProps {
   label: string;
   items: { name: string; href: string; icon: React.ElementType }[];
   collapsed: boolean;
   onNavigate?: () => void;
   onCollapse?: () => void;
+  matchFn?: (href: string) => boolean;
 }
 
-const K8sSubGroup = ({ label, items, collapsed, onNavigate, onCollapse }: K8sGroupProps) => {
+const K8sSubGroup = ({ label, items, collapsed, onNavigate, onCollapse, matchFn }: K8sGroupProps) => {
   const location = useLocation();
-  const isGroupActive = items.some((i) => location.pathname === i.href);
+  const defaultMatch = (href: string) => location.pathname === href;
+  const isMatch = matchFn ?? defaultMatch;
+  const isGroupActive = items.some((i) => isMatch(i.href));
   const [open, setOpen] = useState(isGroupActive);
 
   if (collapsed) return null;
 
   const handleClick = () => {
     onNavigate?.();
-    if (window.innerWidth >= 1024) onCollapse?.();
+    // only close mobile overlay, never collapse desktop sidebar from sub-items
+    if (window.innerWidth < 1024) onCollapse?.();
   };
 
   return (
@@ -95,7 +119,7 @@ const K8sSubGroup = ({ label, items, collapsed, onNavigate, onCollapse }: K8sGro
         <div className="space-y-0.5">
           {items.map((item) => {
             const Icon = item.icon;
-            const isActive = location.pathname === item.href;
+            const isActive = isMatch(item.href);
             return (
               <Link key={item.href} to={item.href} onClick={handleClick}>
                 <Button
@@ -124,11 +148,13 @@ export const Sidebar = ({ collapsed = false, onNavigate, onToggleCollapse, onCol
   const isKubernetesActive = location.pathname.startsWith("/kubernetes");
   const [k8sOpen, setK8sOpen] = useState(isKubernetesActive);
 
+  const isRiskActive = location.pathname.startsWith("/risk");
+  const [riskOpen, setRiskOpen] = useState(isRiskActive);
+
   const isPro = currentPlan === 'pro' && !isTrialActive;
 
   const navigationBefore = [
     { name: t('common.dashboard'), href: "/dashboard", icon: LayoutDashboard },
-    { name: "Painel de Risco",     href: "/risk",       icon: AlertTriangle },
   ];
 
   const navigationAfter = [
@@ -201,6 +227,42 @@ export const Sidebar = ({ collapsed = false, onNavigate, onToggleCollapse, onCol
 
       <nav className={`flex-1 space-y-1 overflow-y-auto ${collapsed ? 'p-2' : 'p-4'}`}>
         {navigationBefore.map(renderNavItem)}
+
+        {/* Painel de Risco group */}
+        {collapsed ? (
+          <Tooltip key="risk-group" delayDuration={0}>
+            <TooltipTrigger asChild>
+              <Link to="/risk" onClick={handleClick}>
+                <Button
+                  variant={isRiskActive ? "secondary" : "ghost"}
+                  className="w-full justify-center px-2 transition-all"
+                >
+                  <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                </Button>
+              </Link>
+            </TooltipTrigger>
+            <TooltipContent side="right">Painel de Risco</TooltipContent>
+          </Tooltip>
+        ) : (
+          <div className="space-y-0.5">
+            <Button
+              variant={isRiskActive ? "secondary" : "ghost"}
+              className="w-full justify-start gap-3 transition-all"
+              onClick={() => setRiskOpen((v) => !v)}
+            >
+              <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+              Painel de Risco
+              <ChevronDown className={`ml-auto w-3 h-3 transition-transform duration-200 ${riskOpen ? "rotate-180" : ""}`} />
+            </Button>
+            {riskOpen && (
+              <div className="ml-3 pl-3 border-l border-border/50 space-y-2 py-1">
+                <K8sSubGroup label="Segurança"       items={RISK_SECURITY}      collapsed={collapsed} onNavigate={onNavigate} />
+                <K8sSubGroup label="Infraestrutura"  items={RISK_INFRA}         collapsed={collapsed} onNavigate={onNavigate} />
+                <K8sSubGroup label="Observabilidade" items={RISK_OBSERVABILITY} collapsed={collapsed} onNavigate={onNavigate} />
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Kubernetes group */}
         {collapsed ? (

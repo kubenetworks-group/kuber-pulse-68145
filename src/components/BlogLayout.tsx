@@ -56,15 +56,17 @@ export function BlogLayout({ title, description, date, readTime, dateISO, slug, 
       <Helmet>
         <script type="application/ld+json">{JSON.stringify(articleSchema)}</script>
       </Helmet>
-    <div className="min-h-screen bg-white" style={{ fontFamily: "'Nunito Sans', -apple-system, sans-serif" }}>
+    <div className="min-h-screen" style={{ background: '#F0F4FA', fontFamily: "'Aileron', system-ui, sans-serif" }}>
       {/* Header */}
-      <header className="px-6 py-5 border-b border-slate-100 sticky top-0 bg-white/90 backdrop-blur z-10">
+      <header className="px-6 py-5 border-b sticky top-0 z-10"
+        style={{ background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(8px)', borderColor: 'rgba(0,0,0,0.08)' }}>
         <div className="max-w-3xl mx-auto flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2.5">
             <img src={kodoLogo} alt="Kodo" className="w-7 h-7" />
-            <span className="font-bold text-slate-900 text-lg tracking-tight">Kodo</span>
+            <span className="font-bold text-lg tracking-tight" style={{ color: '#1A1A1A' }}>Kodo</span>
           </Link>
-          <Link to="/blog" className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-900 transition-colors">
+          <Link to="/blog" className="flex items-center gap-1.5 text-sm transition-opacity hover:opacity-70"
+            style={{ color: '#6B6B6B' }}>
             <ArrowLeft className="w-4 h-4" />
             Blog
           </Link>
@@ -76,15 +78,15 @@ export function BlogLayout({ title, description, date, readTime, dateISO, slug, 
           {/* Article header */}
           <div className="mb-12">
             <Link to="/blog" className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest mb-6 hover:opacity-70 transition-opacity"
-              style={{ color: '#0891b2', fontFamily: "'JetBrains Mono', monospace" }}>
+              style={{ color: '#0F3CA5', fontFamily: "'DM Mono', monospace" }}>
               Blog · Kubernetes
             </Link>
-            <h1 className="text-4xl font-black leading-tight text-slate-900 mb-4 tracking-tight"
-              style={{ fontFamily: "'Nunito', sans-serif", fontSize: 'clamp(1.75rem, 3.5vw, 2.75rem)' }}>
+            <h1 className="font-black leading-tight mb-4 tracking-tight"
+              style={{ color: '#1A1A1A', fontSize: 'clamp(1.75rem, 3.5vw, 2.75rem)' }}>
               {title}
             </h1>
-            <p className="text-lg text-slate-500 leading-relaxed mb-6">{description}</p>
-            <div className="flex items-center gap-5 text-sm text-slate-400">
+            <p className="text-lg leading-relaxed mb-6" style={{ color: '#6B6B6B' }}>{description}</p>
+            <div className="flex items-center gap-5 text-sm" style={{ color: '#9B9B9B' }}>
               <span className="flex items-center gap-1.5">
                 <Calendar className="w-3.5 h-3.5" />
                 {date}
@@ -102,29 +104,29 @@ export function BlogLayout({ title, description, date, readTime, dateISO, slug, 
           </div>
 
           {/* CTA */}
-          <div className="mt-16 rounded-2xl p-8 text-center border border-slate-200"
-            style={{ background: 'linear-gradient(135deg, #f0fdff 0%, #eef2ff 100%)' }}>
+          <div className="mt-16 rounded-2xl p-8 text-center"
+            style={{ background: '#0F3CA5' }}>
             <p className="text-xs font-semibold uppercase tracking-widest mb-3"
-              style={{ color: '#0891b2', fontFamily: "'JetBrains Mono', monospace" }}>
+              style={{ color: 'rgba(255,255,255,0.65)', fontFamily: "'DM Mono', monospace" }}>
               Demo gratuita
             </p>
-            <h2 className="text-2xl font-black text-slate-900 mb-3 tracking-tight"
-              style={{ fontFamily: "'Nunito', sans-serif" }}>
+            <h2 className="text-2xl font-black mb-3 tracking-tight" style={{ color: '#fff' }}>
               Experimente o Kodo no seu cluster
             </h2>
-            <p className="text-slate-500 mb-6 max-w-md mx-auto">
+            <p className="mb-6 max-w-md mx-auto" style={{ color: 'rgba(255,255,255,0.72)' }}>
               Setup em 5 minutos. Veja auto-healing, FinOps e segurança em tempo real no seu cluster.
             </p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <Link to="/diagnostico">
-                <Button className="text-white px-6"
-                  style={{ background: 'linear-gradient(135deg, #0891b2, #4f46e5)' }}>
+                <Button className="px-6 font-semibold"
+                  style={{ background: '#fff', color: '#0F3CA5' }}>
                   Solicite a demo gratuitamente
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
               </Link>
               <Link to="/diagnostico">
-                <Button variant="outline" className="px-6 border-slate-200 text-slate-600">
+                <Button variant="outline" className="px-6"
+                  style={{ borderColor: 'rgba(255,255,255,0.3)', color: '#fff', background: 'rgba(255,255,255,0.10)' }}>
                   Receber diagnóstico gratuito
                 </Button>
               </Link>
@@ -141,21 +143,19 @@ export function BlogLayout({ title, description, date, readTime, dateISO, slug, 
 
 // Componentes de tipografia para os artigos
 export const H2 = ({ children }: { children: React.ReactNode }) => (
-  <h2 className="text-2xl font-black text-slate-900 mt-12 mb-4 tracking-tight"
-    style={{ fontFamily: "'Nunito', sans-serif" }}>
+  <h2 className="text-2xl font-black mt-12 mb-4 tracking-tight" style={{ color: '#1A1A1A' }}>
     {children}
   </h2>
 );
 
 export const H3 = ({ children }: { children: React.ReactNode }) => (
-  <h3 className="text-lg font-bold text-slate-800 mt-8 mb-3"
-    style={{ fontFamily: "'Nunito', sans-serif" }}>
+  <h3 className="text-lg font-bold mt-8 mb-3" style={{ color: '#1A1A1A' }}>
     {children}
   </h3>
 );
 
 export const P = ({ children }: { children: React.ReactNode }) => (
-  <p className="text-slate-600 leading-relaxed mb-5 text-base">{children}</p>
+  <p className="leading-relaxed mb-5 text-base" style={{ color: '#6B6B6B' }}>{children}</p>
 );
 
 export const UL = ({ children }: { children: React.ReactNode }) => (
@@ -163,24 +163,23 @@ export const UL = ({ children }: { children: React.ReactNode }) => (
 );
 
 export const LI = ({ children }: { children: React.ReactNode }) => (
-  <li className="flex items-start gap-2.5 text-slate-600 text-base leading-relaxed">
-    <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-cyan-400 shrink-0" />
+  <li className="flex items-start gap-2.5 text-base leading-relaxed" style={{ color: '#6B6B6B' }}>
+    <span className="mt-1.5 w-1.5 h-1.5 rounded-full shrink-0" style={{ background: '#0F3CA5' }} />
     <span>{children}</span>
   </li>
 );
 
 export const Highlight = ({ children }: { children: React.ReactNode }) => (
-  <div className="my-8 rounded-xl border-l-4 border-cyan-400 bg-cyan-50 px-6 py-5">
-    <p className="text-slate-700 leading-relaxed">{children}</p>
+  <div className="my-8 rounded-xl px-6 py-5" style={{ borderLeft: '4px solid #0F3CA5', background: '#E6EEF8' }}>
+    <p className="leading-relaxed" style={{ color: '#1C2F45' }}>{children}</p>
   </div>
 );
 
 export const Stat = ({ value, label }: { value: string; label: string }) => (
-  <div className="text-center p-5 rounded-xl border border-slate-200 bg-slate-50">
-    <div className="text-3xl font-black text-slate-900 mb-1"
-      style={{ fontFamily: "'Nunito', sans-serif", background: 'linear-gradient(120deg, #0891b2, #4f46e5)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+  <div className="text-center p-5 rounded-xl" style={{ border: '0.5px solid rgba(0,0,0,0.10)', background: '#fff' }}>
+    <div className="text-3xl font-black mb-1" style={{ color: '#0F3CA5' }}>
       {value}
     </div>
-    <div className="text-sm text-slate-500">{label}</div>
+    <div className="text-sm" style={{ color: '#6B6B6B' }}>{label}</div>
   </div>
 );

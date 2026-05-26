@@ -146,32 +146,46 @@ export const WeeklyReportBanner = () => {
   return (
     <>
       {/* Banner */}
-      <Card className="mb-4 p-4 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border-primary/30 animate-fade-in">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/20">
-              <FileText className="h-5 w-5 text-primary" />
+      <div
+        className="rounded-xl border px-4 py-3 flex items-center justify-between gap-3 animate-fade-in"
+        style={{
+          borderColor: "var(--kodo-brand-border)",
+          borderLeftColor: "var(--kodo-brand)",
+          borderLeftWidth: "3px",
+          background: "var(--kodo-brand-muted)",
+        }}
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <FileText className="h-4 w-4 shrink-0" style={{ color: "var(--kodo-brand)" }} />
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-mono font-semibold" style={{ color: "var(--kodo-brand)" }}>
+                Relatório Semanal
+              </span>
+              <Badge variant="secondary" className="text-[10px] h-4 px-1.5">Novo</Badge>
             </div>
-            <div>
-              <h4 className="font-semibold text-foreground flex items-center gap-2">
-                📊 Relatório Semanal Disponível
-                <Badge variant="secondary" className="text-xs">Novo</Badge>
-              </h4>
-              <p className="text-sm text-muted-foreground">
-                O resumo da semana {format(new Date(unreadReport.week_start), "dd/MM", { locale: ptBR })} - {format(new Date(unreadReport.week_end), "dd/MM", { locale: ptBR })} está pronto
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button onClick={() => setShowDialog(true)} size="sm">
-              Ver Relatório
-            </Button>
-            <Button variant="ghost" size="icon" onClick={() => setShowBanner(false)}>
-              <X className="h-4 w-4" />
-            </Button>
+            <p className="text-[11px] font-mono text-muted-foreground/60 mt-0.5">
+              Semana {format(new Date(unreadReport.week_start), "dd/MM", { locale: ptBR })} – {format(new Date(unreadReport.week_end), "dd/MM", { locale: ptBR })} disponível
+            </p>
           </div>
         </div>
-      </Card>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            className="px-3 py-1.5 rounded-lg text-[11px] font-mono border transition-all"
+            style={{
+              color: "var(--kodo-brand)",
+              borderColor: "var(--kodo-brand-border)",
+              background: "var(--kodo-brand-muted)",
+            }}
+            onClick={() => setShowDialog(true)}
+          >
+            Ver Relatório
+          </button>
+          <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-white/10" onClick={() => setShowBanner(false)}>
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
 
       {/* Full Report Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>

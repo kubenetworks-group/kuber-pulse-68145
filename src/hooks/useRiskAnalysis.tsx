@@ -358,7 +358,16 @@ export const useRiskAnalysis = () => {
           const podTotalRestarts = pod.total_restarts || pod.RestartCount || pod.restarts || 0;
           const podContainers = pod.containers || pod.Containers || [];
           
-          if (podPhase === "Running") {
+          // Agent only sends Running pods — check container state for real health signals
+          const hasCrashLoop = Array.isArray(pod.containers || pod.Containers || []) &&
+            (pod.containers || pod.Containers || []).some((c: any) =>
+              c.state?.reason === "CrashLoopBackOff" || c.state?.reason === "Error"
+            );
+
+          if (hasCrashLoop) {
+            availability.failedPods++;
+            availabilityScore += 10;
+          } else if (podPhase === "Running") {
             availability.runningPods++;
           } else if (podPhase === "Pending") {
             availability.pendingPods++;
@@ -372,17 +381,22 @@ export const useRiskAnalysis = () => {
           // Do NOT add container restart counts on top (would double-count).
           const totalRestarts = podTotalRestarts;
 
-          // Only flag as unstable if actively crashing OR restart count is very high.
-          // Running pods with moderate restarts from the past are NOT unstable.
-          const isCrashing = podPhase === "CrashLoopBackOff" || podPhase === "Error";
+          // The agent only sends pods with phase=Running (FieldSelector filter), so podPhase is
+          // always "Running". CrashLoopBackOff lives in container.state.reason (Waiting state),
+          // not in the pod phase. Check containers for the actual crash reason.
+          const crashingContainer = Array.isArray(podContainers)
+            ? podContainers.find((c: any) => c.state?.reason === "CrashLoopBackOff" || c.state?.reason === "Error")
+            : null;
+          const isCrashing = !!crashingContainer || podPhase === "CrashLoopBackOff" || podPhase === "Error";
           const isFailed   = podPhase === "Failed";
-          if (isCrashing || isFailed || (totalRestarts > 20 && podPhase !== "Running")) {
+          // Also flag high-restart pods (> 10 restarts signals instability regardless of current phase)
+          if (isCrashing || isFailed || totalRestarts > 10) {
             unstablePods.push({
               name: podName,
               namespace: podNamespace,
               restartCount: totalRestarts,
-              status: podPhase,
-              reason: pod.status_reason || pod.StatusReason,
+              status: crashingContainer ? "CrashLoopBackOff" : podPhase,
+              reason: crashingContainer?.state?.reason ?? pod.status_reason ?? pod.StatusReason,
             });
           }
 
