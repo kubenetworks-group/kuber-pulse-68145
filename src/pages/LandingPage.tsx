@@ -7,32 +7,143 @@ import kodoLogo from "@/assets/kodo-logo.png";
 import { useEffect, useState, useRef, useMemo } from "react";
 import {
   Shield, Zap, Brain, DollarSign, Activity, Wrench, ArrowRight, Check,
-  Server, LineChart, BellRing, Upload, Settings, Cpu, AlertTriangle,
-  CheckCircle2, Menu, X, Terminal,
+  Server, AlertTriangle, CheckCircle2, Menu, X, Upload,
 } from "lucide-react";
-import {
-  Accordion, AccordionContent, AccordionItem, AccordionTrigger,
-} from "@/components/ui/accordion";
 
-/* ─── CSS Injection ─────────────────────────────────────────────── */
+/* ─── CSS ────────────────────────────────────────────────────────── */
 const STYLES = `
-  /* Aileron + DM Mono loaded globally in index.html */
   .klp { font-family: 'Aileron', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
-  .klp-syne { font-family: 'Aileron', system-ui, sans-serif; letter-spacing: -0.02em; }
   .klp-mono { font-family: 'DM Mono', monospace; }
 
-  .klp-grad-cyan {
-    background: linear-gradient(120deg, #22d3ee 0%, #818cf8 60%, #22d3ee 120%);
-    background-size: 200% auto;
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-    animation: klp-shimmer 4s linear infinite;
+  /* Hero layout */
+  .kdo-hero {
+    position: relative; overflow: hidden;
+    background: transparent;
+    min-height: 760px;
+    padding-top: 96px; padding-bottom: 96px;
+    padding-left: 64px; padding-right: 64px;
   }
-  .klp-grad-emerald {
-    background: linear-gradient(120deg, #34d399, #22d3ee);
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  @media (max-width: 1024px) { .kdo-hero { padding-left: 32px; padding-right: 32px; } }
+  @media (max-width: 640px)  { .kdo-hero { padding-left: 20px; padding-right: 20px; padding-top: 72px; padding-bottom: 72px; } }
+  .kdo-hero-bg { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+  .kdo-hero-grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(to right, rgba(15,60,165,.06) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(15,60,165,.06) 1px, transparent 1px);
+    background-size: 56px 56px;
+    mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, #000 30%, transparent 90%);
+    -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, #000 30%, transparent 90%);
+  }
+  .kdo-hero-inner { position: relative; z-index: 2; width: 100%; max-width: 1440px; margin: 0 auto; }
+  .kdo-spot {
+    position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(circle 420px at var(--mx, 50%) var(--my, 40%), rgba(15,60,165,.10), transparent 70%);
+    mix-blend-mode: multiply;
   }
 
-  @keyframes klp-shimmer { to { background-position: -200% center; } }
+  /* Typography helpers */
+  .kdo-eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 10px; font-weight: 600; letter-spacing: 0.14em;
+    text-transform: uppercase; color: #0F3CA5;
+  }
+  .kdo-eyebrow::before { content: ""; width: 18px; height: 1px; background: #0F3CA5; }
+  .kdo-h2 {
+    font-family: 'Aileron', system-ui, sans-serif; font-weight: 900;
+    font-size: clamp(36px, 4.2vw, 56px); letter-spacing: -0.03em;
+    line-height: 1.02; color: #1A1A1A; margin: 18px 0 0 0;
+    text-wrap: balance;
+  }
+  .kdo-sub {
+    margin: 18px 0 0 0; font-size: 17px; line-height: 1.55;
+    color: #6B6B6B; max-width: 620px;
+  }
+  .hl {
+    background-image: linear-gradient(transparent 65%, rgba(15,60,165,.18) 65%);
+    padding: 0 .08em;
+  }
+
+  /* Rise animation */
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .rise  { animation: rise .8s cubic-bezier(.25,.46,.45,.94) both; }
+  .d1    { animation-delay: .08s; }
+  .d2    { animation-delay: .16s; }
+  .d3    { animation-delay: .24s; }
+  .d4    { animation-delay: .32s; }
+
+  /* Float */
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-6px); }
+  }
+
+  /* Pulse ring (healing) */
+  @keyframes pulse-ring {
+    0%   { transform: scale(.6); opacity: .7; }
+    100% { transform: scale(3.4); opacity: 0; }
+  }
+
+  /* Flow line */
+  @keyframes line-flow { to { stroke-dashoffset: -16; } }
+  .kdo-flow-line {
+    stroke: rgba(15,60,165,.18); stroke-width: 1; fill: none;
+    stroke-dasharray: 4 6; animation: line-flow 2.4s linear infinite;
+  }
+
+  /* Bar pulse (FinOps chart) */
+  @keyframes bar {
+    0%, 100% { transform: scaleY(.6); }
+    50%      { transform: scaleY(1); }
+  }
+
+  /* Slide in (feed items) */
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .slide-in { animation: slideIn .35s cubic-bezier(.25,.46,.45,.94) both; }
+
+  /* Live dot */
+  @keyframes live-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(22,163,74,.55); }
+    100% { box-shadow: 0 0 0 10px rgba(22,163,74,0); }
+  }
+  .live-dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 999px; background: #16A34A;
+    animation: live-pulse 1.6s ease-out infinite;
+  }
+
+  /* 3D stage transitions */
+  .kdo-stage { perspective: 1400px; perspective-origin: 50% 50%; position: relative; }
+  .kdo-stage-inner { transform-style: preserve-3d; will-change: transform, opacity; backface-visibility: hidden; }
+  @keyframes slide3dInFwd {
+    0%   { opacity: 0; transform: translate3d(38%, 0, -260px) rotateY(28deg); }
+    60%  { opacity: 1; }
+    100% { opacity: 1; transform: translate3d(0, 0, 0) rotateY(0deg); }
+  }
+  @keyframes slide3dInBack {
+    0%   { opacity: 0; transform: translate3d(-38%, 0, -260px) rotateY(-28deg); }
+    60%  { opacity: 1; }
+    100% { opacity: 1; transform: translate3d(0, 0, 0) rotateY(0deg); }
+  }
+  .kdo-slide-fwd  { animation: slide3dInFwd  640ms cubic-bezier(.2,.7,.2,1) both; }
+  .kdo-slide-back { animation: slide3dInBack 640ms cubic-bezier(.2,.7,.2,1) both; }
+
+  /* Marquee (integrations) */
+  @keyframes kdo-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+  .kdo-marquee { display: flex; gap: 48px; animation: kdo-scroll 28s linear infinite; align-items: center; white-space: nowrap; }
+  .kdo-marquee:hover { animation-play-state: paused; }
+
+  /* Ticker (integrations fallback) */
+  @keyframes klp-ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+  .klp-ticker-wrap { overflow: hidden; }
+  .klp-ticker-track { display: flex; width: max-content; animation: klp-ticker 28s linear infinite; }
+
+  /* Orb animations (hero background) */
   @keyframes klp-orb-a {
     0%,100% { transform: translate(0,0) scale(1); }
     33% { transform: translate(60px,-40px) scale(1.1); }
@@ -47,6 +158,17 @@ const STYLES = `
     0%,100% { transform: translate(0,0); }
     50% { transform: translate(30px,35px) scale(1.08); }
   }
+
+  /* Gradient shimmer text */
+  @keyframes klp-shimmer { to { background-position: -200% center; } }
+  .klp-grad-cyan {
+    background: linear-gradient(120deg, #0F3CA5 0%, #577DB2 60%, #0F3CA5 120%);
+    background-size: 200% auto;
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    animation: klp-shimmer 4s linear infinite;
+  }
+
+  /* Morphing word animations */
   @keyframes klp-word-in {
     from { opacity: 0; transform: translateY(18px) skewY(1deg); filter: blur(4px); }
     to { opacity: 1; transform: translateY(0) skewY(0); filter: blur(0); }
@@ -55,58 +177,10 @@ const STYLES = `
     from { opacity: 1; transform: translateY(0); }
     to { opacity: 0; transform: translateY(-14px); }
   }
-  @keyframes klp-fade-up {
-    from { opacity: 0; transform: translateY(24px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-  @keyframes klp-ticker {
-    from { transform: translateX(0); }
-    to { transform: translateX(-50%); }
-  }
-  @keyframes klp-bar-in {
-    from { transform: scaleY(0); }
-    to { transform: scaleY(1); }
-  }
-  @keyframes klp-pulse-ring {
-    0% { transform: scale(1); opacity: 0.6; }
-    100% { transform: scale(2.8); opacity: 0; }
-  }
-  @keyframes klp-blink {
-    0%,100% { opacity: 1; } 50% { opacity: 0; }
-  }
-  @keyframes klp-float {
-    0%,100% { transform: translateY(0); }
-    50% { transform: translateY(-8px); }
-  }
-  @keyframes klp-stat-pop {
-    0%   { opacity: 0; transform: translateY(16px) scale(0.88); }
-    65%  { transform: translateY(-2px) scale(1.03); }
-    100% { opacity: 1; transform: translateY(0) scale(1); }
-  }
-  @keyframes klp-scan {
-    0%   { transform: translateX(-100%); }
-    100% { transform: translateX(500%); }
-  }
-  @keyframes klp-grid-breathe {
-    0%, 100% { opacity: 0.5; }
-    50%       { opacity: 1; }
-  }
-  @keyframes klp-ring-out {
-    0%   { transform: scale(0.6); opacity: 0.5; }
-    100% { transform: scale(2.2); opacity: 0; }
-  }
-  @keyframes klp-flow-dot {
-    0%   { left: -8px;   opacity: 0; }
-    8%   { opacity: 1; }
-    92%  { opacity: 1; }
-    100% { left: calc(100% + 8px); opacity: 0; }
-  }
-  @keyframes klp-flow-dot-v {
-    0%   { top: -8px;   opacity: 0; }
-    8%   { opacity: 1; }
-    92%  { opacity: 1; }
-    100% { top: calc(100% + 8px); opacity: 0; }
-  }
+  .klp-word-in  { animation: klp-word-in  0.55s cubic-bezier(0.16,1,0.3,1) forwards; }
+  .klp-word-out { animation: klp-word-out 0.3s ease-in forwards; }
+
+  /* Rising particles */
   @keyframes klp-rise {
     0%   { transform: translateY(0) translateX(0);    opacity: 0; }
     8%   { opacity: var(--p-op); }
@@ -114,53 +188,10 @@ const STYLES = `
     100% { transform: translateY(-100vh) translateX(12px); opacity: 0; }
   }
 
-  .klp-word-in { animation: klp-word-in 0.55s cubic-bezier(0.16,1,0.3,1) forwards; }
-  .klp-word-out { animation: klp-word-out 0.3s ease-in forwards; }
-  .klp-bar { transform-origin: bottom; animation: klp-bar-in 0.9s cubic-bezier(0.34,1.56,0.64,1) both; }
-  .klp-float { animation: klp-float 4s ease-in-out infinite; }
-  .klp-blink { animation: klp-blink 1s step-end infinite; }
-
-  .klp-reveal {
-    opacity: 0;
-    transform: translateY(32px);
-    clip-path: inset(30px 0 0 0);
-    transition: opacity 0.9s cubic-bezier(0.16,1,0.3,1), transform 0.9s cubic-bezier(0.16,1,0.3,1), clip-path 0.9s cubic-bezier(0.16,1,0.3,1);
-  }
-  .klp-reveal.klp-in { opacity: 1; transform: translateY(0); clip-path: inset(0px 0 0 0); }
-  .klp-d1 { transition-delay: 0.07s; }
-  .klp-d2 { transition-delay: 0.14s; }
-  .klp-d3 { transition-delay: 0.21s; }
-  .klp-d4 { transition-delay: 0.28s; }
-  .klp-d5 { transition-delay: 0.35s; }
-  .klp-d6 { transition-delay: 0.42s; }
-
-  .klp-ticker-wrap { overflow: hidden; }
-  .klp-ticker-track { display: flex; width: max-content; animation: klp-ticker 28s linear infinite; }
-  .klp-ticker-track:hover { animation-play-state: paused; }
-
-  .klp-card {
-    position: relative; overflow: hidden;
-    transition: border-color 0.35s ease, transform 0.35s ease, box-shadow 0.35s ease;
-  }
-  .klp-card:hover { transform: translateY(-3px); box-shadow: 0 12px 40px rgba(8,145,178,0.08); }
-  .klp-card::after {
-    content: ''; position: absolute; inset: 0; border-radius: inherit;
-    background: radial-gradient(400px circle at var(--mx,50%) var(--my,50%), rgba(8,145,178,0.06), transparent 70%);
-    opacity: 0; transition: opacity 0.4s ease; pointer-events: none;
-  }
-  .klp-card:hover::after { opacity: 1; }
-
-  .klp-pulse::before {
-    content: ''; position: absolute; inset: -3px; border-radius: 50%;
-    background: inherit; animation: klp-pulse-ring 2.5s ease-out infinite;
-  }
-
-  .klp-dash-tilt { transition: transform 0.15s ease-out; }
-
-  /* ── Scroll progress bar ── */
+  /* Scroll progress */
   .klp-progress {
     position: fixed; top: 0; left: 0; height: 2px; z-index: 9999;
-    background: linear-gradient(90deg, #0891b2, #6366f1, #0891b2);
+    background: linear-gradient(90deg, #0F3CA5, #577DB2, #0F3CA5);
     background-size: 200% auto;
     animation: klp-shimmer 2s linear infinite;
     transition: width 0.1s linear;
@@ -168,295 +199,505 @@ const STYLES = `
     pointer-events: none;
   }
 
-  /* ── Section dots ── */
-  .klp-dots {
-    position: fixed; right: 20px; top: 50%; transform: translateY(-50%);
-    z-index: 100; display: flex; flex-direction: column; gap: 10px;
-    pointer-events: none;
+  /* Reveal on scroll */
+  .klp-reveal {
+    opacity: 0; transform: translateY(32px);
+    transition: opacity 0.9s cubic-bezier(0.16,1,0.3,1), transform 0.9s cubic-bezier(0.16,1,0.3,1);
   }
-  @media (max-width: 1023px) { .klp-dots { display: none; } }
-  .klp-dot {
-    width: 6px; height: 6px; border-radius: 9999px;
-    background: #cbd5e1; transition: all 0.4s cubic-bezier(0.16,1,0.3,1);
-    pointer-events: auto; cursor: pointer;
-  }
-  .klp-dot.klp-dot-active {
-    background: #0891b2;
-    height: 24px;
-    box-shadow: 0 0 8px rgba(8,145,178,0.5);
-  }
+  .klp-reveal.klp-in { opacity: 1; transform: translateY(0); }
+  .klp-d1 { transition-delay: 0.07s; } .klp-d2 { transition-delay: 0.14s; }
+  .klp-d3 { transition-delay: 0.21s; } .klp-d4 { transition-delay: 0.28s; }
 
-
-  .klp-section-num {
-    position: absolute; font-family: 'Aileron', system-ui, sans-serif; font-weight: 800;
-    font-size: clamp(80px, 15vw, 160px); color: rgba(0,0,0,0.025);
-    line-height: 1; pointer-events: none; user-select: none;
-    top: -0.2em; left: -0.1em;
+  /* FAQ (details/summary styling) */
+  .kdo-faq-item { border-bottom: 1px solid rgba(0,0,0,.07); padding: 22px 0; }
+  .kdo-faq-summary {
+    list-style: none; cursor: pointer; display: flex;
+    align-items: center; justify-content: space-between; gap: 24px;
+    font-size: 18px; font-weight: 600; color: #1A1A1A; letter-spacing: -0.01em;
   }
+  .kdo-faq-summary::-webkit-details-marker { display: none; }
+  .kdo-faq-plus {
+    width: 28px; height: 28px; border-radius: 999px;
+    background: #E6EEF8; color: #0F3CA5;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 16px; font-weight: 700; transition: transform 240ms ease;
+    flex-shrink: 0;
+  }
+  details[open] .kdo-faq-plus { transform: rotate(45deg); }
+  .kdo-faq-answer { margin-top: 14px; color: #6B6B6B; font-size: 15px; line-height: 1.65; max-width: 760px; }
 `;
 
-/* ─── StickyVisual (unused — kept for reference) ───────────────── */
-const _StickyVisual_unused = ({ idx, accent }: { idx: number; accent: string }) => {
-  const visuals = [
-    /* 0 — Monitor com IA */
-    <div className="w-full h-full flex flex-col gap-4 p-8">
-      <div className="flex items-center justify-between">
-        <span className="klp-mono text-xs text-slate-400 uppercase tracking-widest">Anomalias · prod-cluster</span>
-        <span className="flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-full"
-          style={{ background:'#fef2f2', color:'#ef4444', border:'1px solid #fecaca' }}>
-          <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse inline-block" />2 alertas ativos
-        </span>
-      </div>
-      <div className="flex-1 flex items-end gap-1 pb-2">
-        {[28,32,35,29,38,34,31,36,33,37,82,95,88,74,42,36,31,35,30,28,32].map((h,i)=>(
-          <div key={i} className="flex-1 rounded-t" style={{ height:`${h}%`,
-            background: h>60 ? 'linear-gradient(to top,#ef4444,#fca5a5)' : `linear-gradient(to top,${accent},${accent}44)` }} />
-        ))}
-      </div>
-      <div className="space-y-2">
-        {[{msg:'CPU spike — api-gateway · 94%',c:'#ef4444',sev:'Alta'},{msg:'Latência elevada — redis-v2 · 320ms',c:'#f59e0b',sev:'Média'}].map(({msg,c,sev})=>(
-          <div key={msg} className="flex items-center gap-3 px-4 py-3 rounded-xl border"
-            style={{ background:`${c}08`, borderColor:`${c}25` }}>
-            <AlertTriangle className="w-4 h-4 shrink-0" style={{color:c}} />
-            <span className="text-sm text-slate-700 flex-1">{msg}</span>
-            <span className="klp-mono text-[10px] px-2 py-0.5 rounded-full font-semibold"
-              style={{ background:`${c}15`, color:c }}>{sev}</span>
-          </div>
-        ))}
-      </div>
-    </div>,
-    /* 1 — Auto-Healing */
-    <div className="w-full h-full flex flex-col p-8">
-      <div className="flex items-center justify-between mb-8">
-        <span className="klp-mono text-xs text-slate-400 uppercase tracking-widest">Recovery Timeline</span>
-        <span className="flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-full"
-          style={{ background:'#f0fdf4', color:'#16a34a', border:'1px solid #bbf7d0' }}>
-          <CheckCircle2 className="w-3.5 h-3.5" />Resolvido em 12s
-        </span>
-      </div>
-      <div className="flex-1 relative pl-8">
-        <div className="absolute left-3 top-2 bottom-2 w-px bg-slate-100" />
-        {[
-          {t:'14:31:02',e:'CrashLoopBackOff detectado — api-v2',c:'#ef4444'},
-          {t:'14:31:04',e:'IA classificou padrão de falha recorrente',c:'#f59e0b'},
-          {t:'14:31:06',e:'Logs capturados automaticamente (200 linhas)',c:accent},
-          {t:'14:31:09',e:'Reinicialização automática aplicada',c:accent},
-          {t:'14:31:14',e:'Pod healthy — uptime restaurado ✓',c:'#16a34a'},
-        ].map(({t,e,c},i)=>(
-          <div key={i} className="flex items-start gap-4 mb-6 last:mb-0">
-            <div className="w-2.5 h-2.5 rounded-full shrink-0 mt-1 -ml-[18px] ring-4 ring-white" style={{background:c}} />
-            <div>
-              <p className="klp-mono text-[10px] text-slate-400 mb-1">{t}</p>
-              <p className="text-sm text-slate-700">{e}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>,
-    /* 2 — Segurança */
-    <div className="w-full h-full flex flex-col p-8">
-      <div className="flex items-center justify-between mb-6">
-        <span className="klp-mono text-xs text-slate-400 uppercase tracking-widest">Security Scan · prod-cluster</span>
-        <span className="klp-mono text-xs px-3 py-1.5 rounded-full"
-          style={{ background:`${accent}12`, color:accent, border:`1px solid ${accent}30` }}>4 findings</span>
-      </div>
-      <div className="flex-1 space-y-3">
-        {[
-          {sev:'CRITICAL',msg:'Container rodando como root',c:'#ef4444'},
-          {sev:'HIGH',msg:'RBAC excessivo — cluster-admin binding',c:accent},
-          {sev:'MEDIUM',msg:'Network Policy ausente em default namespace',c:'#f59e0b'},
-          {sev:'LOW',msg:'Secret exposto em variável de ambiente',c:'#94a3b8'},
-        ].map(({sev,msg,c})=>(
-          <div key={sev} className="flex items-center gap-4 px-4 py-3.5 rounded-xl border border-slate-100 bg-white">
-            <span className="klp-mono text-[9px] font-bold px-2.5 py-1 rounded shrink-0"
-              style={{ background:`${c}12`, color:c }}>{sev}</span>
-            <span className="text-sm text-slate-600 flex-1">{msg}</span>
-            <Zap className="w-4 h-4 shrink-0" style={{color:accent}} />
-          </div>
-        ))}
-      </div>
-      <div className="flex items-center gap-3 mt-4 px-4 py-3 rounded-xl"
-        style={{ background:`${accent}08`, border:`1px solid ${accent}20` }}>
-        <Shield className="w-5 h-5 shrink-0" style={{color:accent}} />
-        <span className="text-sm text-slate-600">Auto-fix disponível para todos os findings críticos</span>
-      </div>
-    </div>,
-    /* 3 — FinOps */
-    <div className="w-full h-full flex flex-col p-8">
-      <div className="flex items-end justify-between mb-8">
-        <div>
-          <p className="klp-mono text-xs text-slate-400 uppercase tracking-widest mb-1">Economia mensal</p>
-          <p className="klp-syne font-900 text-slate-900" style={{ fontSize:'2.8rem', lineHeight:1 }}>R$4.2k</p>
-        </div>
-        <div className="text-right">
-          <p className="klp-mono text-xs text-slate-400">de economia com IA</p>
-          <p className="klp-syne font-800 text-2xl" style={{color:accent}}>–33%</p>
-        </div>
-      </div>
-      <div className="flex-1 space-y-5">
-        {[{label:'Custo sem Kodo',v:100,amt:'R$12.800',c:'#f87171'},{label:'Custo com Kodo',v:67,amt:'R$8.600',c:accent}].map(({label,v,amt,c})=>(
-          <div key={label}>
-            <div className="flex justify-between text-sm mb-2">
-              <span className="text-slate-500">{label}</span>
-              <span className="klp-syne font-700 text-slate-800">{amt}</span>
-            </div>
-            <div className="h-4 rounded-full bg-slate-100 overflow-hidden">
-              <div className="h-full rounded-full" style={{width:`${v}%`,background:c}} />
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="grid grid-cols-3 gap-3 mt-6">
-        {[{l:'Idle cut',v:'-38%'},{l:'Right-size',v:'+22%'},{l:'Waste',v:'-61%'}].map(({l,v})=>(
-          <div key={l} className="text-center py-4 rounded-xl bg-white border border-slate-100">
-            <p className="klp-syne font-900 text-xl" style={{color:accent}}>{v}</p>
-            <p className="klp-mono text-[9px] text-slate-400 mt-1 uppercase">{l}</p>
-          </div>
-        ))}
-      </div>
-    </div>,
-    /* 4 — Observabilidade */
-    <div className="w-full h-full flex flex-col p-8">
-      <div className="flex items-center justify-between mb-6">
-        <span className="klp-mono text-xs text-slate-400 uppercase tracking-widest">Métricas · tempo real</span>
-        <span className="flex items-center gap-2 klp-mono text-xs" style={{color:accent}}>
-          <span className="w-2 h-2 rounded-full animate-pulse inline-block" style={{background:accent}} />Live
-        </span>
-      </div>
-      <div className="grid grid-cols-2 gap-4 flex-1">
-        {[{l:'CPU',v:68,u:'%',c:accent},{l:'Memória',v:54,u:'%',c:'#818cf8'},{l:'Network',v:32,u:'MB/s',c:'#34d399'},{l:'Storage',v:71,u:'%',c:'#fb923c'}].map(({l,v,u,c})=>(
-          <div key={l} className="bg-white border border-slate-100 rounded-2xl p-5 flex flex-col justify-between">
-            <div className="flex justify-between items-baseline mb-3">
-              <span className="klp-mono text-xs text-slate-400 uppercase">{l}</span>
-              <span className="klp-syne font-900 text-2xl" style={{color:c}}>{v}<span className="text-sm">{u}</span></span>
-            </div>
-            <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
-              <div className="h-full rounded-full" style={{width:`${v}%`,background:c}} />
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>,
-    /* 5 — Multi-Cluster */
-    <div className="w-full h-full flex flex-col p-8 gap-4">
-      <span className="klp-mono text-xs text-slate-400 uppercase tracking-widest">Clusters Gerenciados</span>
-      {[
-        {name:'prod-eks-us-east',cloud:'AWS EKS',nodes:12,pods:148,cpu:68,mem:54,ok:true},
-        {name:'prod-gke-europe',cloud:'Google GKE',nodes:8,pods:92,cpu:45,mem:61,ok:true},
-        {name:'staging-aks',cloud:'Azure AKS',nodes:4,pods:51,cpu:82,mem:73,ok:false},
-      ].map(({name,cloud,nodes,pods,cpu,mem,ok})=>(
-        <div key={name} className="flex-1 bg-white border border-slate-100 rounded-2xl p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2.5">
-              <div className="w-2.5 h-2.5 rounded-full shrink-0"
-                style={{background:ok?'#34d399':'#fb923c',boxShadow:ok?'0 0 8px #34d39966':'0 0 8px #fb923c66'}} />
-              <span className="klp-syne font-700 text-slate-900">{name}</span>
-            </div>
-            <span className="klp-mono text-[10px] text-slate-400 px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-100">{cloud}</span>
-          </div>
-          <div className="flex gap-3 mb-4">
-            {[{l:'Nodes',v:nodes},{l:'Pods',v:pods}].map(({l,v})=>(
-              <div key={l} className="px-4 py-2 rounded-lg bg-slate-50 border border-slate-100 text-center">
-                <p className="klp-syne font-800 text-slate-800">{v}</p>
-                <p className="klp-mono text-[9px] text-slate-400 uppercase">{l}</p>
-              </div>
-            ))}
-          </div>
-          <div className="space-y-2">
-            {[{l:'CPU',v:cpu,c:cpu>75?'#fb923c':accent},{l:'MEM',v:mem,c:'#818cf8'}].map(({l,v,c})=>(
-              <div key={l} className="flex items-center gap-3">
-                <span className="klp-mono text-[10px] text-slate-400 w-8">{l}</span>
-                <div className="flex-1 h-1.5 rounded-full bg-slate-100">
-                  <div className="h-full rounded-full" style={{width:`${v}%`,background:c}} />
-                </div>
-                <span className="klp-mono text-[10px] w-8 text-right" style={{color:c}}>{v}%</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>,
-  ];
-  return <div className="w-full h-full">{visuals[idx] ?? null}</div>;
-};
+/* ─── Primitive helpers ──────────────────────────────────────────── */
+function Pill({
+  tone = 'info',
+  children,
+  style,
+}: {
+  tone?: 'ok' | 'warn' | 'err' | 'info' | 'ink' | 'neutral';
+  children: React.ReactNode;
+  style?: React.CSSProperties;
+}) {
+  const palette = {
+    ok:      { bg: '#DCFCE7', fg: '#14532D', dot: '#16A34A' },
+    warn:    { bg: '#FEF9C3', fg: '#713F12', dot: '#CA8A04' },
+    err:     { bg: '#FEE2E2', fg: '#7F1D1D', dot: '#DC2626' },
+    info:    { bg: '#E6EEF8', fg: '#0F3CA5', dot: '#0F3CA5' },
+    ink:     { bg: '#1A1A1A', fg: '#fff',    dot: '#fff'    },
+    neutral: { bg: '#F0F4FA', fg: '#1A1A1A', dot: '#9B9B9B' },
+  }[tone];
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 6,
+      height: 24, padding: '0 10px', borderRadius: 999,
+      fontWeight: 600, fontSize: 11,
+      background: palette.bg, color: palette.fg,
+      ...style,
+    }}>
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: palette.dot, flexShrink: 0 }} />
+      {children}
+    </span>
+  );
+}
 
-/* ─── FeaturesGrid ──────────────────────────────────────────────── */
-const FeaturesGrid = ({ onRef }: { onRef?: (el: HTMLElement | null) => void }) => {
-  const gridRef = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(false);
+function Eyebrow({ children }: { children: React.ReactNode }) {
+  return <span className="kdo-eyebrow">{children}</span>;
+}
+
+/* ─── Hero Particles (rising dots — old background effect) ──────── */
+function HeroParticles() {
+  const particles = useMemo(() => Array.from({ length: 45 }, (_, i) => ({
+    id: i,
+    size: 2 + (i * 7919 % 4),
+    left: (i * 2311 % 1000) / 10,
+    duration: 18 + (i * 1733 % 20),
+    delay: -(i * 1031 % 15),
+    opacity: 0.18 + (i * 937 % 40) / 100,
+  })), []);
+  return (
+    <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ zIndex: 0 }}>
+      {particles.map((p) => (
+        <div key={p.id} style={{
+          position: 'absolute',
+          width: p.size, height: p.size,
+          borderRadius: '50%',
+          background: '#0F3CA5',
+          left: `${p.left}%`,
+          top: '100%',
+          boxShadow: `0 0 ${p.size + 2}px rgba(15,60,165,0.5)`,
+          ['--p-op' as string]: p.opacity,
+          animation: `klp-rise ${p.duration}s linear ${p.delay}s infinite`,
+        }} />
+      ))}
+    </div>
+  );
+}
+
+/* ─── HeroShowcase tab content ───────────────────────────────────── */
+function ShowcaseOverview() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+        {[
+          { l: 'PODS',    v: '248',   t: '#1A1A1A' },
+          { l: 'NODES',   v: '14',    t: '#1A1A1A' },
+          { l: 'CPU',     v: '62%',   t: '#0F3CA5' },
+          { l: 'CUSTO/D', v: 'R$ 41', t: '#16A34A' },
+        ].map(s => (
+          <div key={s.l} style={{ background: '#F0F4FA', borderRadius: 10, padding: 12 }}>
+            <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.12em', color: '#6B6B6B' }}>{s.l}</div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: s.t, letterSpacing: '-0.02em', marginTop: 4 }}>{s.v}</div>
+          </div>
+        ))}
+      </div>
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#1A1A1A' }}>Tráfego · 24h</span>
+          <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#6B6B6B' }}>12.4k req/s · p95 142ms</span>
+        </div>
+        <svg viewBox="0 0 320 100" style={{ width: '100%', height: 100 }}>
+          <defs>
+            <linearGradient id="hg2" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#0F3CA5" stopOpacity=".25" />
+              <stop offset="100%" stopColor="#0F3CA5" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <path d="M0 78 L20 72 40 76 60 60 80 65 100 50 120 56 140 38 160 44 180 28 200 36 220 22 240 32 260 18 280 26 300 14 320 22 L320 100 0 100 Z" fill="url(#hg2)" />
+          <path d="M0 78 L20 72 40 76 60 60 80 65 100 50 120 56 140 38 160 44 180 28 200 36 220 22 240 32 260 18 280 26 300 14 320 22"
+            stroke="#0F3CA5" strokeWidth="2" fill="none" strokeLinejoin="round" />
+        </svg>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        {[
+          { n: 'api-gateway',   ns: 'default',   s: 'ok'   },
+          { n: 'payments-svc',  ns: 'billing',   s: 'ok'   },
+          { n: 'analytics-job', ns: 'analytics', s: 'warn' },
+          { n: 'auth-svc',      ns: 'identity',  s: 'ok'   },
+        ].map(p => (
+          <div key={p.n} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: '#F0F4FA', borderRadius: 10 }}>
+            <Server style={{ width: 14, height: 14, color: '#0F3CA5', flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#1A1A1A', fontWeight: 500 }}>{p.n}</div>
+              <div style={{ fontSize: 10, color: '#6B6B6B' }}>{p.ns}</div>
+            </div>
+            <Pill tone={p.s as 'ok' | 'warn'}>{p.s === 'ok' ? 'Saudável' : 'Atenção'}</Pill>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ShowcaseHealing() {
+  const events = [
+    { t: '14:23:08', m: 'pod payments-7d4b reiniciado · 2.1s', tag: 'ok'   },
+    { t: '14:21:54', m: 'OOMKill detectado · cap aumentado +256Mi',  tag: 'info' },
+    { t: '14:18:30', m: 'liveness probe falhou · iniciando heal',  tag: 'warn' },
+    { t: '14:14:02', m: 'rollout analytics-job concluído',           tag: 'ok'   },
+  ];
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ background: '#DCFCE7', border: '1px solid rgba(22,163,74,.20)', borderRadius: 12, padding: 14, display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ width: 36, height: 36, borderRadius: 999, background: '#16A34A', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <Wrench style={{ width: 18, height: 18, color: '#fff' }} />
+        </span>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 700, fontSize: 14, color: '#14532D' }}>3 incidentes curados sem você</div>
+          <div style={{ fontSize: 12, color: '#14532D', opacity: .8 }}>Heal médio 2.4s · sem páginas durante o turno</div>
+        </div>
+        <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#14532D' }}>✓ today</span>
+      </div>
+      <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#6B6B6B' }}>
+        Timeline · prod-us-east-1
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {events.map((e, i) => (
+          <div key={i} className="slide-in" style={{
+            display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
+            background: '#fff', border: '1px solid rgba(0,0,0,.06)', borderRadius: 10,
+            animationDelay: `${i * 80}ms`,
+          }}>
+            <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#6B6B6B', width: 64 }}>{e.t}</span>
+            <Pill tone={e.tag as 'ok' | 'warn' | 'info'}>{e.tag.toUpperCase()}</Pill>
+            <span style={{ fontSize: 12, color: '#1A1A1A', flex: 1 }}>{e.m}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ShowcaseFinops() {
+  const rows = [
+    { ns: 'analytics-eks',  c: 'R$ 2.820', d: '+18%',  t: 'warn'    },
+    { ns: 'prod-us-east-1', c: 'R$ 1.240', d: '−12%',  t: 'ok'      },
+    { ns: 'staging-eks',    c: 'R$ 380',   d: '+2%',   t: 'neutral'  },
+    { ns: 'data-pipelines', c: 'R$ 690',   d: '−34%',  t: 'ok'       },
+  ];
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#6B6B6B' }}>Custo do mês · todos os clusters</div>
+          <div style={{ fontSize: 40, fontWeight: 800, letterSpacing: '-0.03em', color: '#1A1A1A', marginTop: 4, lineHeight: 1 }}>R$ 5.130</div>
+        </div>
+        <Pill tone="ok">−34% vs. previsto</Pill>
+      </div>
+      <svg viewBox="0 0 320 90" style={{ width: '100%', height: 90 }}>
+        {Array.from({ length: 20 }).map((_, i) => {
+          const h = 18 + (Math.sin(i * 0.7) * 14 + Math.cos(i * 1.1) * 12 + i * 1.4);
+          return <rect key={i} x={i * 16 + 2} y={90 - h} width="12" height={h} rx="2"
+            fill={i > 14 ? '#0F3CA5' : 'rgba(15,60,165,.35)'}
+            style={{ transformOrigin: `${i * 16 + 8}px 90px`, animation: `bar ${1.6 + (i % 4) * .2}s ease-in-out infinite`, animationDelay: `${i * 60}ms` }} />;
+        })}
+      </svg>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {rows.map(r => (
+          <div key={r.ns} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', background: '#F0F4FA', borderRadius: 10 }}>
+            <DollarSign style={{ width: 14, height: 14, color: '#0F3CA5', flexShrink: 0 }} />
+            <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#1A1A1A', flex: 1 }}>{r.ns}</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#1A1A1A' }}>{r.c}</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: r.t === 'ok' ? '#14532D' : r.t === 'warn' ? '#713F12' : '#6B6B6B', minWidth: 48, textAlign: 'right' }}>{r.d}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ─── HeroShowcase (floating white card with 3 tabs) ─────────────── */
+function HeroShowcase() {
+  const [tab, setTab] = useState(0);
+  const [dir, setDir] = useState(1);
 
   useEffect(() => {
-    const obs = new IntersectionObserver(([e]) => {
-      if (e.isIntersecting) { setVisible(true); obs.disconnect(); }
-    }, { threshold: 0.08 });
-    if (gridRef.current) obs.observe(gridRef.current);
-    return () => obs.disconnect();
+    const t = setInterval(() => {
+      setDir(1);
+      setTab(x => (x + 1) % 3);
+    }, 5200);
+    return () => clearInterval(t);
   }, []);
+
+  const setTabManual = (i: number) => {
+    setDir(i > tab ? 1 : -1);
+    setTab(i);
+  };
+
+  const tabs = ['Visão geral', 'Auto-healing', 'FinOps'];
+  const panels = [<ShowcaseOverview />, <ShowcaseHealing />, <ShowcaseFinops />];
 
   return (
-    <section
-      ref={(el) => onRef?.(el)}
-      id="recursos"
-      className="py-24 px-6"
-      style={{ background: '#f8fafc' }}
-    >
-      <div className="max-w-7xl mx-auto">
-        <div className="text-center mb-16">
-          <p className="klp-mono text-[11px] uppercase tracking-[0.2em] mb-5" style={{ color: '#0891b2' }}>Recursos</p>
-          <h2 className="klp-syne font-800 leading-tight text-slate-900" style={{ fontSize: 'clamp(2rem, 4vw, 3rem)' }}>
-            Tudo que você precisa,{' '}
-            <span className="klp-grad-cyan">integrado</span>
-          </h2>
+    <div style={{
+      position: 'relative', background: '#fff', borderRadius: 22,
+      border: '1px solid rgba(0,0,0,.08)',
+      boxShadow: '0 32px 80px rgba(15,60,165,.18), 0 8px 16px rgba(0,0,0,.05)',
+      overflow: 'hidden',
+      animation: 'float 6s ease-in-out infinite',
+    }}>
+      {/* Browser chrome */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderBottom: '1px solid rgba(0,0,0,.06)', background: '#FAFBFE' }}>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {['#FF5F57', '#FEBC2E', '#28C840'].map(c => <span key={c} style={{ width: 11, height: 11, borderRadius: 99, background: c }} />)}
         </div>
-        <div ref={gridRef} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {FEATURES.map((f, i) => (
-            <div key={f.title}
-              className={`klp-card rounded-2xl p-8 border border-slate-200 bg-white klp-reveal klp-d${Math.min(i + 1, 6)} ${visible ? 'klp-in' : ''}`}>
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-6"
-                style={{ background: `${f.accent}12`, border: `1.5px solid ${f.accent}25` }}>
-                <f.icon className="w-6 h-6" style={{ color: f.accent }} />
-              </div>
-              <h3 className="klp-syne font-700 text-slate-900 text-xl mb-3">{f.title}</h3>
-              <p className="text-slate-500 text-sm leading-relaxed">{f.desc}</p>
-              <div className="mt-6 inline-flex items-center gap-1.5 text-sm font-semibold group cursor-pointer"
-                style={{ color: f.accent }}>
-                <span>Saiba mais</span>
-                <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-              </div>
-            </div>
-          ))}
+        <div style={{ flex: 1, height: 24, borderRadius: 6, background: '#fff', border: '1px solid rgba(0,0,0,.08)', display: 'flex', alignItems: 'center', gap: 8, padding: '0 10px', fontFamily: 'DM Mono', fontSize: 11, color: '#6B6B6B' }}>
+          <Server style={{ width: 11, height: 11, color: '#0F3CA5', flexShrink: 0 }} />
+          app.kodo.io/<span style={{ color: '#1A1A1A' }}>clusters/prod-us-east-1</span>
+        </div>
+        <Pill tone="ok">Online</Pill>
+      </div>
+
+      {/* Tab strip */}
+      <div style={{ display: 'flex', gap: 0, padding: '0 16px', borderBottom: '1px solid rgba(0,0,0,.06)' }}>
+        {tabs.map((t, i) => (
+          <button key={t} onClick={() => setTabManual(i)} style={{
+            padding: '14px 14px', background: 'transparent', border: 'none',
+            borderBottom: `2px solid ${tab === i ? '#0F3CA5' : 'transparent'}`,
+            fontWeight: 600, fontSize: 13, color: tab === i ? '#1A1A1A' : '#6B6B6B',
+            cursor: 'pointer', marginBottom: -1, transition: 'color 200ms', fontFamily: 'Aileron, sans-serif',
+          }}>{t}</button>
+        ))}
+      </div>
+
+      {/* 3D slide stage */}
+      <div className="kdo-stage" style={{ padding: 22, minHeight: 360 }}>
+        <div className={`kdo-stage-inner ${dir === 1 ? 'kdo-slide-fwd' : 'kdo-slide-back'}`} key={`${tab}-${dir}`}>
+          {panels[tab]}
         </div>
       </div>
-    </section>
+    </div>
   );
-};
+}
 
+/* ─── Feature mini visuals (for the dark right-panel) ────────────── */
+function HealMini() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {[
+        { t: '14:23:08', m: 'pod payments-7d4b reiniciado · 2.1s',  tag: 'OK'   },
+        { t: '14:21:54', m: 'OOMKill detectado · cap +256Mi',        tag: 'INFO' },
+        { t: '14:18:30', m: 'liveness falhou · iniciando heal',      tag: 'WARN' },
+      ].map((e, i) => (
+        <div key={i} className="slide-in" style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          background: 'rgba(255,255,255,.04)', borderRadius: 10, padding: '10px 12px',
+          animationDelay: `${i * 120}ms`,
+        }}>
+          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: 'rgba(255,255,255,.5)', width: 60 }}>{e.t}</span>
+          <span style={{ fontFamily: 'DM Mono', fontSize: 10, fontWeight: 600,
+            color: e.tag === 'OK' ? '#86EFAC' : e.tag === 'WARN' ? '#FCD34D' : '#93C5FD',
+            background: 'rgba(255,255,255,.06)', padding: '2px 6px', borderRadius: 4 }}>{e.tag}</span>
+          <span style={{ fontSize: 12, color: '#fff', flex: 1, fontFamily: 'DM Mono' }}>{e.m}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FinMini() {
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 110 }}>
+        {Array.from({ length: 18 }).map((_, i) => {
+          const h = 30 + Math.sin(i * .8) * 18 + i * 1.4;
+          return (
+            <span key={i} style={{
+              flex: 1, height: `${h}%`, borderRadius: 4,
+              background: i > 12 ? '#0F3CA5' : 'rgba(255,255,255,.18)',
+              transformOrigin: 'bottom',
+              animation: `bar ${1.4 + (i % 4) * .2}s ease-in-out infinite`,
+              animationDelay: `${i * 60}ms`,
+              display: 'block',
+            }} />
+          );
+        })}
+      </div>
+      <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        {[['analytics-eks', 'R$ 2.820', '+18%'], ['prod-us-east-1', 'R$ 1.240', '−12%']].map(([n, v, d]) => (
+          <div key={n} style={{ background: 'rgba(255,255,255,.04)', borderRadius: 10, padding: 10 }}>
+            <div style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'rgba(255,255,255,.7)' }}>{n}</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 2 }}>
+              <span style={{ fontWeight: 700, fontSize: 16, color: '#fff' }}>{v}</span>
+              <span style={{ fontSize: 11, color: d.startsWith('−') ? '#86EFAC' : '#FCD34D' }}>{d}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SecMini() {
+  const rows = [
+    { name: 'nginx:1.21.6',   sev: 'CRITICAL', n: 3, c: '#FCA5A5' },
+    { name: 'redis:6.2',       sev: 'HIGH',     n: 1, c: '#FCD34D' },
+    { name: 'node:18-alpine',  sev: 'CLEAN',    n: 0, c: '#86EFAC' },
+  ];
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'rgba(255,255,255,.6)' }}>Scan · prod-us-east-1</span>
+        <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'rgba(255,255,255,.6)' }}>há 4 min</span>
+      </div>
+      {rows.map(r => (
+        <div key={r.name} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(255,255,255,.04)', borderRadius: 10, padding: '10px 12px' }}>
+          <Shield style={{ width: 14, height: 14, color: r.c, flexShrink: 0 }} />
+          <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#fff', flex: 1 }}>{r.name}</span>
+          <span style={{ fontFamily: 'DM Mono', fontSize: 10, color: r.c, fontWeight: 700 }}>{r.sev}</span>
+          <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: 'rgba(255,255,255,.6)', width: 20, textAlign: 'right' }}>{r.n}</span>
+        </div>
+      ))}
+      <div style={{ padding: '10px 12px', background: 'rgba(22,163,74,.18)', border: '1px solid rgba(22,163,74,.35)', borderRadius: 10, fontSize: 12, color: '#86EFAC', fontFamily: 'DM Mono' }}>
+        ✓ 4 imagens corrigidas automaticamente via PR
+      </div>
+    </div>
+  );
+}
+
+function ObsMini() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <svg viewBox="0 0 320 100" style={{ width: '100%', height: 90 }}>
+        <path d="M0 70 L40 64 80 70 120 50 160 56 200 36 240 44 280 26 320 32" stroke="#FCD34D" strokeWidth="1.5" fill="none" />
+        <path d="M0 80 L40 76 80 78 120 70 160 68 200 60 240 58 280 50 320 48" stroke="#0F3CA5" strokeWidth="1.5" fill="none" />
+        <path d="M0 90 L40 88 80 90 120 86 160 84 200 80 240 78 280 76 320 72" stroke="#86EFAC" strokeWidth="1.5" fill="none" />
+      </svg>
+      <div style={{ display: 'flex', justifyContent: 'space-around', fontSize: 11, fontFamily: 'DM Mono', color: 'rgba(255,255,255,.7)' }}>
+        <span><span style={{ color: '#FCD34D' }}>●</span> p95 142ms</span>
+        <span><span style={{ color: '#0F3CA5' }}>●</span> p50 38ms</span>
+        <span><span style={{ color: '#86EFAC' }}>●</span> req/s 12.4k</span>
+      </div>
+      <div style={{ marginTop: 4, fontFamily: 'DM Mono', fontSize: 11, color: 'rgba(255,255,255,.85)', background: '#000', padding: 12, borderRadius: 8, lineHeight: 1.7 }}>
+        <div style={{ color: '#6B7DAA' }}>$ kubectl top pods -n payments</div>
+        <div style={{ color: '#fff' }}>NAME             CPU    MEM</div>
+        <div style={{ color: '#fff' }}>api-gw-7d4b      <span style={{ color: '#86EFAC' }}>12m</span>   84Mi</div>
+        <div style={{ color: '#fff' }}>worker-q9        <span style={{ color: '#FCD34D' }}>340m</span>  512Mi</div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Feature Demo (dark right-panel) ───────────────────────────── */
+function FeatureDemo({ pillar }: { pillar: typeof PILLARS[0] }) {
+  const miniMap: Record<string, React.ReactNode> = {
+    heal: <HealMini />, fin: <FinMini />, sec: <SecMini />, obs: <ObsMini />,
+  };
+  return (
+    <div style={{
+      background: '#0B1733', color: '#fff', borderRadius: 20,
+      padding: 28, display: 'flex', flexDirection: 'column', gap: 18,
+      border: '1px solid rgba(255,255,255,.08)', minHeight: 460,
+      position: 'relative', overflow: 'hidden',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Pill tone="info" style={{ background: 'rgba(255,255,255,.10)', color: '#fff' }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#16A34A', animation: 'live-pulse 1.6s ease-out infinite' }} />
+          LIVE · {pillar.label}
+        </Pill>
+        <span style={{ fontFamily: 'DM Mono', fontSize: 11, opacity: .6 }}>prod-us-east-1</span>
+      </div>
+
+      <div>
+        <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', opacity: .55 }}>{pillar.label}</div>
+        <h3 style={{ margin: '6px 0 0', fontSize: 28, fontWeight: 900, letterSpacing: '-0.025em', lineHeight: 1.1, color: '#fff' }}>{pillar.h}</h3>
+        <p style={{ marginTop: 10, fontSize: 14, lineHeight: 1.6, color: 'rgba(255,255,255,.7)' }}>{pillar.sub}</p>
+      </div>
+
+      <div style={{ flex: 1, position: 'relative', marginTop: 6 }}>
+        {miniMap[pillar.id]}
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,.08)', paddingTop: 16 }}>
+        <div>
+          <div style={{ fontSize: 36, fontWeight: 900, letterSpacing: '-0.03em', lineHeight: 1, color: '#fff' }}>{pillar.stat}</div>
+          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,.55)', marginTop: 4 }}>{pillar.statL}</div>
+        </div>
+        <Link to="/auth">
+          <button style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8, height: 40, padding: '0 18px',
+            background: 'transparent', color: '#fff', border: '1px solid rgba(255,255,255,.18)',
+            borderRadius: 14, fontSize: 14, fontWeight: 600, cursor: 'pointer',
+            fontFamily: 'Aileron, sans-serif', transition: 'all 200ms ease',
+          }}>
+            Ver docs <ArrowRight style={{ width: 15, height: 15 }} />
+          </button>
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Data ───────────────────────────────────────────────────────── */
+const MORPH_WORDS = ['monitora.', 'se cura.', 'economiza.', 'protege.'];
+
+const PILLARS = [
+  {
+    id: 'heal', icon: Wrench, label: 'Auto-healing',
+    h: 'Clusters se curam sozinhos.',
+    sub: 'O agente IA identifica falhas — OOMKills, pods em CrashLoop, probes falhando — e aplica a correção antes do alerta sair.',
+    stat: '2.4s', statL: 'Heal médio',
+  },
+  {
+    id: 'fin', icon: DollarSign, label: 'FinOps',
+    h: 'Custo claro. Decisões rápidas.',
+    sub: 'Veja o gasto por namespace, time e workload. Recomendações de right-sizing aplicáveis em um clique.',
+    stat: '−34%', statL: 'Redução média',
+  },
+  {
+    id: 'sec', icon: Shield, label: 'Segurança',
+    h: 'CVE, RBAC e secrets vigiados.',
+    sub: 'Scan contínuo de imagens, políticas Kyverno/OPA prontas e alertas para drift de permissões em namespaces críticos.',
+    stat: '14k+', statL: 'CVEs cobertos',
+  },
+  {
+    id: 'obs', icon: Activity, label: 'Observabilidade',
+    h: 'Métricas, logs e traces no mesmo lugar.',
+    sub: 'Compatível com Prometheus, OpenTelemetry e Loki — sem precisar reescrever a stack que você já tem.',
+    stat: '99.8%', statL: 'Uptime SLO',
+  },
+];
+
+const HOW_STEPS = [
+  { n: '01', t: 'Conecte seu cluster',          sub: 'Um único helm install. Multi-cloud, on-prem ou híbrido — o agente Kodo descobre nodes, pods e namespaces em 30 segundos.',                                              tag: 'helm install kodo/agent'  },
+  { n: '02', t: 'O agente IA aprende a baseline', sub: 'Nas primeiras 48h, o Kodo observa tráfego, custo e padrões de incidente. Sem regras escritas à mão — você só ajusta o que faz sentido.',                              tag: 'baseline · 48h'           },
+  { n: '03', t: 'Auto-healing começa a agir',    sub: 'OOMKills, probes em falha e drifts de config são corrigidos sozinhos. Você é notificado com o "antes/depois", nunca acordado às 3am.',                                 tag: 'heal médio 2.4s'          },
+  { n: '04', t: 'FinOps vira rotina',             sub: 'Recomendações de right-sizing aparecem semanalmente, com PR pronto para abrir. Pague pelo que usa, prove pra finance.',                                               tag: '−34% custo médio'         },
+];
+
+const TOOLS = [
+  'Prometheus', 'OpenTelemetry', 'Grafana', 'Helm', 'Slack',
+  'PagerDuty', 'Datadog', 'New Relic', 'GitHub Actions', 'ArgoCD',
+  'Nginx', 'Elastic', 'Redis', 'Terraform', 'Cloudflare',
+];
+
+const FAQS = [
+  { q: 'O Kodo substitui Prometheus, Grafana ou Datadog?',     a: 'Não. O Kodo se conecta às ferramentas que você já usa. Lemos métricas de Prometheus/OpenTelemetry, deploys de Argo/Flux e alertas via Slack/PagerDuty. Pense no Kodo como uma camada de inteligência por cima da sua stack — não um substituto.' },
+  { q: 'O que o agente IA realmente faz?',                     a: 'Detecta padrões de incidente (OOMKill, CrashLoopBackOff, liveness/readiness em falha, drift de config), correlaciona com tráfego e custo, e aplica correções pré-aprovadas pelo seu time. Você define o nível de autonomia.' },
+  { q: 'Funciona em cluster on-premises?',                     a: 'Sim — o agente é stateless e roda em qualquer cluster K8s ≥ 1.24. Para ambientes air-gapped, o plano Enterprise inclui uma versão do control-plane self-hosted que conversa via mTLS, sem precisar de internet de saída.' },
+  { q: 'Quais dados o Kodo guarda? E LGPD?',                   a: 'Metadados de cluster (nomes de pods, namespaces, métricas agregadas) e logs de incidentes. Nunca conteúdo de aplicação. Estamos em conformidade com LGPD e SOC2 Type II. DPA disponível para times Pro e Enterprise.' },
+  { q: 'Posso desligar o auto-healing?',                       a: 'Sim, a qualquer momento, por cluster ou por namespace. O modo padrão é "sugerir e abrir PR" — você só liga aplicação direta quando confiar nas runbooks. Reverter um heal é um clique.' },
+  { q: 'Quanto tempo leva para configurar?',                   a: 'Menos de 5 minutos. Basta instalar nosso agente usando kubectl ou Helm e conectar ao painel.' },
+];
 
 /* ─── Hooks ─────────────────────────────────────────────────────── */
-
-const useCounter = (end: number, duration = 2000, decimals = 0) => {
-  const [count, setCount] = useState(0);
-  const [started, setStarted] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) setStarted(true); }, { threshold: 0.2 });
-    if (ref.current) obs.observe(ref.current);
-    return () => obs.disconnect();
-  }, []);
-  useEffect(() => {
-    if (!started) return;
-    let start: number;
-    const tick = (now: number) => {
-      if (!start) start = now;
-      const p = Math.min((now - start) / duration, 1);
-      setCount(parseFloat(((1 - Math.pow(1 - p, 3)) * end).toFixed(decimals)));
-      if (p < 1) requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
-  }, [started, end, duration, decimals]);
-  return { count, ref };
-};
-
 const useInView = (threshold = 0.12) => {
   const ref = useRef<HTMLDivElement>(null);
   const [inView, setInView] = useState(false);
@@ -468,280 +709,25 @@ const useInView = (threshold = 0.12) => {
   return { ref, inView };
 };
 
-/* ─── UsageBar ──────────────────────────────────────────────────── */
-const UsageBar = ({ label, value, color }: { label: string; value: number; color: string }) => (
-  <div>
-    <div className="flex justify-between items-center mb-1">
-      <span className="klp-mono text-[9px] text-white/30 uppercase tracking-widest">{label}</span>
-      <span className="klp-mono text-[10px]" style={{ color }}>{value}%</span>
-    </div>
-    <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
-      <div className="h-full rounded-full klp-bar" style={{ width: `${value}%`, background: color, animationDuration: '0.8s' }} />
-    </div>
-  </div>
-);
-
-/* ─── ClusterMockCard ───────────────────────────────────────────── */
-const ClusterMockCard = ({
-  name, env, status, nodes, pods, cpu, mem, delay = 0
-}: { name: string; env: string; status: 'healthy'|'warning'; nodes: number; pods: number; cpu: number; mem: number; delay?: number }) => {
-  const isHealthy = status === 'healthy';
-  return (
-    <div className="rounded-xl border p-3 space-y-2.5"
-      style={{
-        background: 'rgba(255,255,255,0.025)',
-        borderColor: isHealthy ? 'rgba(52,211,153,0.18)' : 'rgba(251,191,36,0.18)',
-        animation: `klp-fade-up 0.5s ease ${delay}s both`,
-      }}>
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="relative w-1.5 h-1.5 rounded-full shrink-0"
-            style={{ background: isHealthy ? '#34d399' : '#fbbf24', boxShadow: isHealthy ? '0 0 6px #34d399' : '0 0 6px #fbbf24' }} />
-          <span className="klp-syne text-[11px] font-700 text-white/90 tracking-tight">{name}</span>
-        </div>
-        <span className="klp-mono text-[8px] px-1.5 py-0.5 rounded border"
-          style={{
-            color: isHealthy ? '#34d399' : '#fbbf24',
-            borderColor: isHealthy ? 'rgba(52,211,153,0.2)' : 'rgba(251,191,36,0.2)',
-            background: isHealthy ? 'rgba(52,211,153,0.06)' : 'rgba(251,191,36,0.06)',
-          }}>
-          {isHealthy ? 'Saudável' : 'Atenção'}
-        </span>
-      </div>
-      {/* Stats row */}
-      <div className="flex gap-2">
-        {[{ l: 'Nodes', v: nodes }, { l: 'Pods', v: `${pods}/${pods}` }, { l: 'Env', v: env }].map(s => (
-          <div key={s.l} className="flex-1 rounded-lg px-2 py-1.5 text-center"
-            style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
-            <p className="klp-mono text-[7px] text-white/25 uppercase tracking-widest mb-0.5">{s.l}</p>
-            <p className="klp-syne text-[10px] font-600 text-white/70">{s.v}</p>
-          </div>
-        ))}
-      </div>
-      {/* Bars */}
-      <div className="space-y-1.5">
-        <UsageBar label="CPU" value={cpu} color={cpu > 80 ? '#fb923c' : '#22d3ee'} />
-        <UsageBar label="Memória" value={mem} color={mem > 80 ? '#f472b6' : '#818cf8'} />
-      </div>
-    </div>
-  );
-};
-
-/* ─── LiveDashboard ─────────────────────────────────────────────── */
-const LiveDashboard = () => {
-  const events = [
-    { type: "heal", msg: "Auto-heal: api-gateway reiniciado",      time: "agora",  ns: "production" },
-    { type: "ok",   msg: "Anomalia de custo resolvida · R$320",     time: "2m",     ns: "finops" },
-    { type: "warn", msg: "Memória elevada — redis-v3 · 84%",        time: "7m",     ns: "staging" },
-    { type: "ok",   msg: "Security scan concluído · 0 críticos",    time: "12m",    ns: "security" },
-  ];
-  const sideItems = [
-    { icon: Server,       label: 'Clusters',  active: true  },
-    { icon: Activity,     label: 'Monitor',   active: false },
-    { icon: Shield,       label: 'Security',  active: false },
-    { icon: DollarSign,   label: 'FinOps',    active: false },
-  ];
-  return (
-    <div className="relative w-full klp-float" style={{ animationDuration: '6s' }}>
-      <div className="absolute inset-0 -z-10 blur-[70px] opacity-40 pointer-events-none"
-        style={{ background: 'radial-gradient(ellipse at 60% 40%, rgba(34,211,238,0.2), rgba(99,102,241,0.15), transparent 70%)' }} />
-      <div className="rounded-2xl overflow-hidden border border-white/10 shadow-2xl shadow-black/60"
-        style={{ background: 'rgba(8,12,20,0.97)', backdropFilter: 'blur(24px)' }}>
-
-        {/* Window chrome */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-white/[0.06]"
-          style={{ background: 'rgba(255,255,255,0.015)' }}>
-          <div className="flex gap-1.5">
-            <div className="w-2.5 h-2.5 rounded-full" style={{ background: '#ff5f57' }} />
-            <div className="w-2.5 h-2.5 rounded-full" style={{ background: '#febc2e' }} />
-            <div className="w-2.5 h-2.5 rounded-full" style={{ background: '#28c840' }} />
-          </div>
-          <div className="flex-1 flex justify-center">
-            <span className="klp-mono text-[10px] text-white/20 border border-white/[0.06] px-3 py-1 rounded-md"
-              style={{ background: 'rgba(255,255,255,0.02)' }}>
-              app.kodo.io/clusters
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="relative w-1.5 h-1.5 rounded-full bg-emerald-400 klp-pulse" />
-            <span className="klp-mono text-[10px] text-emerald-400/80">LIVE</span>
-          </div>
-        </div>
-
-        {/* App layout: sidebar + content */}
-        <div className="flex" style={{ minHeight: '380px' }}>
-
-          {/* Sidebar */}
-          <div className="flex flex-col items-center py-4 gap-1 border-r border-white/[0.04]"
-            style={{ width: '48px', background: 'rgba(255,255,255,0.01)' }}>
-            {sideItems.map(({ icon: Icon, label, active }) => (
-              <div key={label} title={label}
-                className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer transition-all"
-                style={{
-                  background: active ? 'rgba(34,211,238,0.12)' : 'transparent',
-                  color: active ? '#22d3ee' : 'rgba(255,255,255,0.2)',
-                }}>
-                <Icon className="w-3.5 h-3.5" />
-              </div>
-            ))}
-          </div>
-
-          {/* Main content */}
-          <div className="flex-1 p-3 space-y-3 overflow-hidden">
-
-            {/* Page header */}
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="klp-syne text-[11px] font-700 text-white/80">Clusters</p>
-                <p className="klp-mono text-[8px] text-white/25">3 clusters · 2 online</p>
-              </div>
-              <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-white/[0.06]"
-                style={{ background: 'rgba(52,211,153,0.06)' }}>
-                <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400" />
-                <span className="klp-mono text-[8px] text-emerald-400">Todos saudáveis</span>
-              </div>
-            </div>
-
-            {/* Cluster cards */}
-            <div className="space-y-2">
-              <ClusterMockCard name="prod-cluster" env="Produção" status="healthy"
-                nodes={3} pods={48} cpu={68} mem={54} delay={0.1} />
-              <ClusterMockCard name="staging-eks" env="Staging" status="warning"
-                nodes={2} pods={31} cpu={82} mem={71} delay={0.2} />
-            </div>
-
-            {/* Events */}
-            <div className="rounded-xl border border-white/[0.05] overflow-hidden"
-              style={{ background: 'rgba(255,255,255,0.01)' }}>
-              <div className="flex items-center justify-between px-3 py-2 border-b border-white/[0.04]">
-                <span className="klp-mono text-[8px] text-white/25 uppercase tracking-widest">Eventos Recentes</span>
-                <BellRing className="w-2.5 h-2.5 text-white/20" />
-              </div>
-              <div className="divide-y divide-white/[0.03]">
-                {events.map((e, i) => (
-                  <div key={i} className="flex items-center gap-2 px-3 py-1.5"
-                    style={{ animation: `klp-fade-up 0.35s ease ${i * 0.07 + 0.4}s both` }}>
-                    {e.type === 'ok'   && <CheckCircle2 className="w-2.5 h-2.5 shrink-0 text-emerald-400" />}
-                    {e.type === 'heal' && <Zap className="w-2.5 h-2.5 shrink-0 text-cyan-400" />}
-                    {e.type === 'warn' && <AlertTriangle className="w-2.5 h-2.5 shrink-0 text-amber-400" />}
-                    <span className="text-[9px] text-white/40 flex-1 truncate">{e.msg}</span>
-                    <span className="klp-mono text-[8px] px-1.5 py-0.5 rounded"
-                      style={{ background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.2)' }}>
-                      {e.ns}
-                    </span>
-                    <span className="klp-mono text-[8px] text-white/15 shrink-0">{e.time}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-/* ─── Data ──────────────────────────────────────────────────────── */
-const MORPH_WORDS = ["monitora.", "se cura.", "economiza.", "protege."];
-
-const FEATURES = [
-  { icon: Brain,     title: "Monitor com IA",    desc: "ML detecta anomalias e previne incidentes antes que afetem seus usuários.",                         accent: '#22d3ee' },
-  { icon: Wrench,    title: "Auto-Healing",       desc: "Correções automáticas aplicadas imediatamente — zero intervenção manual necessária.",               accent: '#34d399' },
-  { icon: Shield,    title: "Segurança",          desc: "Análise completa de RBAC, Network Policies e Pod Security. Vulnerabilidades identificadas.",         accent: '#f472b6' },
-  { icon: DollarSign,title: "FinOps",             desc: "Controle de custos multi-cloud com insights detalhados. Economize até 40% na infraestrutura.",      accent: '#fbbf24' },
-  { icon: Activity,  title: "Observabilidade",    desc: "Métricas em tempo real de CPU, memória, storage e rede com dashboards personalizados.",              accent: '#818cf8' },
-  { icon: Server,    title: "Multi-Cluster",      desc: "AWS EKS, GKE, AKS e on-premises em uma única interface unificada e inteligente.",                    accent: '#fb923c' },
-];
-
-const STEPS = [
-  { n: "01", icon: Upload,    title: "Conecte",      desc: "Instale o agente em menos de 5 minutos via kubectl ou Helm." },
-  { n: "02", icon: Settings,  title: "Configure",    desc: "Defina políticas de auto-healing e thresholds personalizados." },
-  { n: "03", icon: LineChart, title: "Monitore",     desc: "Dashboards interativos com métricas e anomalias ao vivo." },
-  { n: "04", icon: BellRing,  title: "Receba Insights", desc: "Notificações inteligentes antes que problemas impactem usuários." },
-];
-
-const INTEGRATIONS = [
-  "AWS EKS", "Google GKE", "Azure AKS", "DigitalOcean", "Rancher", "OpenShift",
-  "Helm", "ArgoCD", "Prometheus", "Grafana", "Terraform", "Cilium",
-];
-
-const FAQS = [
-  { q: "O que é o Kodo?",                  a: "Kodo é uma plataforma de gestão Kubernetes com IA: auto-healing automático, segurança, FinOps e observabilidade em tempo real." },
-  { q: "Como funciona o auto-healing?",    a: "A IA detecta anomalias e aplica correções automaticamente — reiniciando pods, escalando deployments ou ajustando recursos sem intervenção." },
-  { q: "Funciona com qualquer cloud?",     a: "Sim. Kodo é multi-cloud: AWS EKS, Google GKE, Azure AKS, DigitalOcean Kubernetes e clusters on-premises." },
-  { q: "Quanto tempo leva para configurar?", a: "Menos de 5 minutos. Basta instalar nosso agente usando kubectl ou Helm e conectar ao painel." },
-  { q: "O Kodo é seguro?",                 a: "Segurança é nossa prioridade. Coletamos apenas metadados e métricas de performance — nunca dados de aplicação ou secrets." },
-  { q: "Como faço uma demonstração?",      a: "Entre em contato conosco para agendar uma demonstração personalizada com nossa equipe técnica." },
-];
-
-/* ─── Component ─────────────────────────────────────────────────── */
-/* ─── Hero Particles ─────────────────────────────────────────────── */
-function HeroParticles() {
-  const particles = useMemo(() => Array.from({ length: 45 }, (_, i) => ({
-    id: i,
-    size: 2 + (i * 7919 % 4),          // 2–5 px, deterministic
-    left: (i * 2311 % 1000) / 10,      // 0–99.9 %
-    duration: 18 + (i * 1733 % 20),    // 18–37 s
-    delay: -(i * 1031 % 15),           // stagger immediately visible
-    opacity: 0.18 + (i * 937 % 40) / 100, // 0.18–0.57
-  })), []);
-
-  return (
-    <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ zIndex: 0 }}>
-      {particles.map((p) => (
-        <div
-          key={p.id}
-          style={{
-            position: 'absolute',
-            width: p.size,
-            height: p.size,
-            borderRadius: '50%',
-            background: '#0F3CA5',
-            left: `${p.left}%`,
-            top: '100%',
-            boxShadow: `0 0 ${p.size + 2}px rgba(15,60,165,0.5)`,
-            ['--p-op' as string]: p.opacity,
-            animation: `klp-rise ${p.duration}s linear ${p.delay}s infinite`,
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
+/* ─── Main Component ─────────────────────────────────────────────── */
 export default function LandingPage() {
   const abVariant = (new URLSearchParams(window.location.search).get('variant') as 'a' | 'b' | 'c') ?? 'a';
 
   const [menuOpen,      setMenuOpen]      = useState(false);
   const [scrolled,      setScrolled]      = useState(false);
+  const [scrollPct,     setScrollPct]     = useState(0);
+  const [activePillar,  setActivePillar]  = useState(0);
   const [morphIdx,      setMorphIdx]      = useState(0);
   const [morphState,    setMorphState]    = useState<'in' | 'out'>('in');
-  const [scrollPct,     setScrollPct]     = useState(0);
-  const [activeSection, setActiveSection] = useState(0);
 
-  const heroRef         = useRef<HTMLElement>(null);
-  const dashRef         = useRef<HTMLDivElement>(null);
-  const heroParallaxRef = useRef<HTMLDivElement>(null);
-  const dashParallaxRef = useRef<HTMLDivElement>(null);
-  const mainRef         = useRef<HTMLElement>(null);
-  const orbARef         = useRef<HTMLDivElement>(null);
-  const orbBRef         = useRef<HTMLDivElement>(null);
-  const sectionEls      = useRef<HTMLElement[]>([]);
+  const heroRef = useRef<HTMLElement>(null);
+  const orbARef = useRef<HTMLDivElement>(null);
+  const orbBRef = useRef<HTMLDivElement>(null);
+  const { ref: stepsRef,  inView: stepsIn  } = useInView();
+  const { ref: featRef,   inView: featIn   } = useInView();
+  const { ref: ctaRef,    inView: ctaIn    } = useInView();
 
-  const s1 = useCounter(99.9, 2200, 1);
-  const s2 = useCounter(40,   1900);
-  const s3 = useCounter(5,    1500);
-  const s4 = useCounter(500,  2000);
-
-  const { ref: featRef,  inView: featIn  } = useInView();
-  const { ref: stepsRef, inView: stepsIn } = useInView();
-  const { ref: statsRef, inView: statsIn } = useInView();
-  const { ref: ctaRef,   inView: ctaIn   } = useInView();
-  const { ref: faqRef,   inView: faqIn   } = useInView();
-
-  // Inject fonts + keyframes
+  // Inject CSS
   useEffect(() => {
     const style = document.createElement('style');
     style.id = 'kodo-lp-css';
@@ -750,82 +736,19 @@ export default function LandingPage() {
     return () => { document.getElementById('kodo-lp-css')?.remove(); };
   }, []);
 
-  // Unified scroll handler: navbar state + progress + velocity skew + parallax orbs + section tracking
+  // Scroll handler
   useEffect(() => {
-    let prevY    = window.scrollY;
-    let skew     = 0;
-    let decayRaf = 0;
-
-    const DOT_SECTIONS = sectionEls.current;
-
     const onScroll = () => {
       const y    = window.scrollY;
       const docH = document.documentElement.scrollHeight - window.innerHeight;
-
-      // Navbar
       setScrolled(y > 24);
-
-      // Progress bar
       setScrollPct(docH > 0 ? (y / docH) * 100 : 0);
-
-      prevY = y;
-
-      // Parallax — fundo (orbs)
       if (orbARef.current) orbARef.current.style.transform = `translateY(${y * 0.25}px)`;
       if (orbBRef.current) orbBRef.current.style.transform = `translateY(${y * -0.15}px)`;
-
-      // Parallax — hero (gated à altura do hero)
-      if (y < window.innerHeight * 1.5) {
-        if (heroParallaxRef.current) heroParallaxRef.current.style.transform = `translateY(${y * 0.14}px)`;
-        if (dashParallaxRef.current) dashParallaxRef.current.style.transform = `translateY(${y * 0.07}px)`;
-      }
-
-      // Active section dot
-      let cur = 0;
-      DOT_SECTIONS.forEach((el, i) => {
-        const rect = el.getBoundingClientRect();
-        if (rect.top <= window.innerHeight * 0.45) cur = i;
-      });
-      setActiveSection(cur);
     };
-
     window.addEventListener('scroll', onScroll, { passive: true });
-    return () => { window.removeEventListener('scroll', onScroll); cancelAnimationFrame(decayRaf); };
+    return () => window.removeEventListener('scroll', onScroll);
   }, []);
-
-  // Hero dashboard 3D tilt
-  useEffect(() => {
-    const hero = heroRef.current;
-    const dash = dashRef.current;
-    if (!hero || !dash) return;
-    const move = (e: MouseEvent) => {
-      const r = hero.getBoundingClientRect();
-      const x = (e.clientX - r.left) / r.width  - 0.5;
-      const y = (e.clientY - r.top)  / r.height - 0.5;
-      dash.style.transform = `perspective(1200px) rotateY(${x * 8}deg) rotateX(${-y * 5}deg)`;
-    };
-    const leave = () => {
-      dash.style.transition = 'transform 0.7s cubic-bezier(0.16,1,0.3,1)';
-      dash.style.transform = '';
-      setTimeout(() => { dash.style.transition = ''; }, 700);
-    };
-    hero.addEventListener('mousemove', move);
-    hero.addEventListener('mouseleave', leave);
-    return () => { hero.removeEventListener('mousemove', move); hero.removeEventListener('mouseleave', leave); };
-  }, []);
-
-  // Feature card mouse glow
-  useEffect(() => {
-    const cards = document.querySelectorAll<HTMLElement>('.klp-card');
-    const handler = (e: MouseEvent) => {
-      const t = e.currentTarget as HTMLElement;
-      const r = t.getBoundingClientRect();
-      t.style.setProperty('--mx', `${((e.clientX - r.left) / r.width) * 100}%`);
-      t.style.setProperty('--my', `${((e.clientY - r.top) / r.height) * 100}%`);
-    };
-    cards.forEach(c => c.addEventListener('mousemove', handler as EventListener));
-    return () => cards.forEach(c => c.removeEventListener('mousemove', handler as EventListener));
-  }, [featIn]);
 
   // Morphing word
   useEffect(() => {
@@ -839,584 +762,487 @@ export default function LandingPage() {
     return () => clearInterval(t);
   }, []);
 
+  // Hero cursor spotlight
+  useEffect(() => {
+    const el = heroRef.current; if (!el) return;
+    const onMove = (e: MouseEvent) => {
+      const r = el.getBoundingClientRect();
+      el.style.setProperty('--mx', `${e.clientX - r.left}px`);
+      el.style.setProperty('--my', `${e.clientY - r.top}px`);
+    };
+    el.addEventListener('mousemove', onMove);
+    return () => el.removeEventListener('mousemove', onMove);
+  }, []);
+
   return (
-    <div className="klp min-h-screen overflow-x-hidden" style={{ background: '#ffffff', color: '#0f172a' }}>
+    <div className="klp" style={{ background: '#ffffff', color: '#1A1A1A', overflowX: 'hidden' }}>
+      {/* Fixed animated orbs — appear through all sections */}
+      <div style={{ position: 'fixed', inset: 0, zIndex: -10, overflow: 'hidden', pointerEvents: 'none' }}>
+        <div ref={orbARef} style={{
+          position: 'absolute', width: 700, height: 700, borderRadius: '50%',
+          opacity: 0.07, filter: 'blur(140px)', top: -150, left: '5%',
+          background: 'radial-gradient(circle, #0F3CA5, transparent 70%)',
+          animation: 'klp-orb-a 20s ease-in-out infinite',
+        }} />
+        <div ref={orbBRef} style={{
+          position: 'absolute', width: 500, height: 500, borderRadius: '50%',
+          opacity: 0.06, filter: 'blur(120px)', top: '20%', right: 0,
+          background: 'radial-gradient(circle, #283D63, transparent 70%)',
+          animation: 'klp-orb-b 25s ease-in-out infinite',
+        }} />
+        <div style={{
+          position: 'absolute', width: 400, height: 400, borderRadius: '50%',
+          opacity: 0.05, filter: 'blur(100px)', bottom: '5%', left: '25%',
+          background: 'radial-gradient(circle, #0F3CA5, transparent 70%)',
+          animation: 'klp-orb-c 18s ease-in-out infinite',
+        }} />
+        <div style={{
+          position: 'absolute', inset: 0, opacity: 0.018,
+          backgroundImage: 'linear-gradient(rgba(0,0,0,1) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,1) 1px, transparent 1px)',
+          backgroundSize: '64px 64px',
+        }} />
+      </div>
+
       <SEO
-        title="Kodo — Plataforma de Gestão Kubernetes com IA | Auto-Healing e FinOps"
-        description="Gerencie clusters Kubernetes com inteligência artificial. Auto-healing em 30s, FinOps com economia de 40%, segurança contínua. AWS EKS, GKE e AKS. Setup em 5 minutos."
+        title="Kodo — Kubernetes sob controle. Sem ruído."
+        description="Monitore, corrija e otimize seus clusters K8s com um agente de IA dedicado. Auto-healing, FinOps e segurança — em uma plataforma que fala a língua do operador."
         path="/"
       />
 
-      {/* ── Animated Background ── */}
-      <div className="fixed inset-0 -z-10 overflow-hidden">
-        <div ref={orbARef} className="absolute w-[700px] h-[700px] rounded-full opacity-[0.07] blur-[140px] top-[-150px] left-[5%]"
-          style={{ background: 'radial-gradient(circle, #0F3CA5, transparent 70%)', animation: 'klp-orb-a 20s ease-in-out infinite' }} />
-        <div ref={orbBRef} className="absolute w-[500px] h-[500px] rounded-full opacity-[0.06] blur-[120px] top-[20%] right-[0%]"
-          style={{ background: 'radial-gradient(circle, #283D63, transparent 70%)', animation: 'klp-orb-b 25s ease-in-out infinite' }} />
-        <div className="absolute w-[400px] h-[400px] rounded-full opacity-[0.05] blur-[100px] bottom-[5%] left-[25%]"
-          style={{ background: 'radial-gradient(circle, #0F3CA5, transparent 70%)', animation: 'klp-orb-c 18s ease-in-out infinite' }} />
-        {/* Fine grid */}
-        <div className="absolute inset-0 opacity-[0.018]"
-          style={{ backgroundImage: 'linear-gradient(rgba(0,0,0,1) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,1) 1px, transparent 1px)', backgroundSize: '64px 64px' }} />
-      </div>
+      {/* ── Scroll progress ── */}
+      <div className="klp-progress" style={{ width: `${scrollPct}%` }} />
 
       {/* ── Navbar ── */}
       <header className="sticky top-0 z-50 transition-all duration-300"
-        style={ scrolled
-          ? { background: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(0,0,0,0.07)' }
-          : { background: 'transparent' } }>
-        <nav className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-3 group">
-            <img src={kodoLogo} alt="Kodo" className="w-8 h-8 object-contain" />
-            <span className="klp-syne text-xl font-700 tracking-tight text-slate-900">Kodo</span>
+        style={scrolled
+          ? { background: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(15,60,165,.1)' }
+          : { background: 'transparent' }}>
+        <nav style={{ maxWidth: 1440, margin: '0 auto', padding: '0 64px', height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <img src={kodoLogo} alt="Kodo" style={{ width: 32, height: 32, objectFit: 'contain' }} />
+            <span style={{ fontFamily: 'Aileron, sans-serif', fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em', color: '#1A1A1A' }}>Kodo</span>
           </Link>
-          <div className="hidden md:flex items-center gap-8">
-            {[{ label: 'Recursos', href: '#recursos' }, { label: 'Como Funciona', href: '#como-funciona' }, { label: 'FAQ', href: '#faq' }]
-              .map(({ label, href }) => (
-              <a key={label} href={href}
-                className="klp-mono text-xs uppercase tracking-widest text-slate-400 hover:text-slate-900 transition-colors duration-200">
-                {label}
-              </a>
-            ))}
+
+          {/* Desktop nav */}
+          <div className="hidden md:flex items-center" style={{ gap: 36 }}>
+            {[{ label: 'Produto', href: '#produto' }, { label: 'Como Funciona', href: '#como' }, { label: 'Integrações', href: '#integracoes' }, { label: 'Preços', href: '/plans' }, { label: 'FAQ', href: '#faq' }]
+              .map(({ label, href }) =>
+                href.startsWith('/') ? (
+                  <Link key={label} to={href} style={{ fontFamily: 'DM Mono, monospace', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#6B6B6B', fontWeight: 500 }} className="hover:text-slate-900 transition-colors">
+                    {label}
+                  </Link>
+                ) : (
+                  <a key={label} href={href} style={{ fontFamily: 'DM Mono, monospace', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#6B6B6B', fontWeight: 500 }} className="hover:text-slate-900 transition-colors">
+                    {label}
+                  </a>
+                )
+              )}
           </div>
-          <div className="hidden md:flex items-center gap-3">
+
+          <div className="hidden md:flex items-center" style={{ gap: 10 }}>
             <Link to="/auth">
-              <Button variant="ghost" size="sm" className="text-slate-500 hover:text-slate-900 hover:bg-slate-100 klp-mono text-xs uppercase tracking-wider">
+              <button style={{ height: 38, padding: '0 18px', background: '#fff', border: '1px solid rgba(0,0,0,.14)', borderRadius: 12, fontSize: 14, fontWeight: 600, color: '#1A1A1A', cursor: 'pointer', fontFamily: 'Aileron, sans-serif' }}>
                 Entrar
-              </Button>
+              </button>
             </Link>
             <Link to="/diagnostico">
-              <Button size="sm"
-                className="text-sm px-5 font-medium text-white transition-all hover:-translate-y-0.5"
-                style={{ background: 'linear-gradient(135deg, #0891b2, #4f46e5)', boxShadow: '0 4px 20px rgba(8,145,178,0.25)' }}>
-                Solicitar demo
-                <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
-              </Button>
+              <button style={{ height: 38, padding: '0 18px', background: '#0F3CA5', border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 600, color: '#fff', cursor: 'pointer', fontFamily: 'Aileron, sans-serif', display: 'flex', alignItems: 'center', gap: 6 }}>
+                Solicitar demo <ArrowRight style={{ width: 14, height: 14 }} />
+              </button>
             </Link>
           </div>
-          <button className="md:hidden p-2 text-slate-500 hover:text-slate-900" onClick={() => setMenuOpen(!menuOpen)}>
-            {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+
+          {/* Mobile burger */}
+          <button className="md:hidden" onClick={() => setMenuOpen(!menuOpen)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1A1A1A' }}>
+            {menuOpen ? <X style={{ width: 22, height: 22 }} /> : <Menu style={{ width: 22, height: 22 }} />}
           </button>
         </nav>
+
         {menuOpen && (
-          <div className="md:hidden border-t border-slate-100 px-6 py-5 space-y-4 bg-white">
-            {['Recursos', 'Como Funciona', 'FAQ'].map(item => (
+          <div style={{ borderTop: '1px solid rgba(0,0,0,.08)', padding: '20px 24px', background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(20px)', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {['Produto', 'Como Funciona', 'Preços', 'FAQ'].map(item => (
               <a key={item} href={`#${item.toLowerCase().replace(' ', '-')}`}
-                className="block klp-mono text-xs uppercase tracking-widest text-slate-400 hover:text-slate-900 transition-colors"
-                onClick={() => setMenuOpen(false)}>
-                {item}
-              </a>
+                style={{ fontFamily: 'DM Mono, monospace', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#6B6B6B' }}
+                onClick={() => setMenuOpen(false)}>{item}</a>
             ))}
-            <div className="pt-2 flex flex-col gap-2">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 8 }}>
               <Link to="/auth" onClick={() => setMenuOpen(false)}>
-                <Button variant="outline" size="sm" className="w-full border-slate-200 text-slate-600">Entrar</Button>
+                <Button variant="outline" size="sm" className="w-full">Entrar</Button>
               </Link>
               <Link to="/diagnostico" onClick={() => setMenuOpen(false)}>
-                <Button size="sm" className="w-full text-white" style={{ background: 'linear-gradient(135deg, #0891b2, #4f46e5)' }}>
-                  Solicitar demo
-                </Button>
+                <Button size="sm" className="w-full text-white" style={{ background: '#0F3CA5' }}>Solicitar demo</Button>
               </Link>
             </div>
           </div>
         )}
       </header>
 
-      {/* ── Scroll progress line ── */}
-      <div className="klp-progress" style={{ width: `${scrollPct}%` }} />
-
-      {/* ── Section dots nav ── */}
-      <nav className="klp-dots" aria-label="Seções">
-        {['Hero', 'Recursos', 'Como funciona', 'FAQ'].map((label, i) => (
-          <button
-            key={i}
-            aria-label={label}
-            className={`klp-dot ${activeSection === i ? 'klp-dot-active' : ''}`}
-            onClick={() => sectionEls.current[i]?.scrollIntoView({ behavior: 'smooth' })}
-          />
-        ))}
-      </nav>
-
-      <main ref={mainRef}>
+      <main>
         {/* ══════════════════ HERO ══════════════════ */}
-        <section ref={(el) => { if (el) { (heroRef as any).current = el; sectionEls.current[0] = el; } }}
-          className="relative min-h-[92vh] flex items-center px-6 pt-16 pb-24 overflow-hidden">
+        <section id="produto" ref={heroRef as React.RefObject<HTMLElement>} className="kdo-hero">
           <HeroParticles />
-          <div className="max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-[46fr_54fr] gap-12 items-center">
+          <div className="kdo-spot" />
 
+          <div className="kdo-hero-inner" style={{ display: 'grid', gridTemplateColumns: '1.05fr .95fr', gap: 64, alignItems: 'center' }}>
             {/* Left */}
-            <div ref={heroParallaxRef}>
-            <div className="space-y-8 min-w-0" style={{ animation: 'klp-fade-up 0.9s cubic-bezier(0.16,1,0.3,1) both' }}>
-              {/* Label */}
-              <div className="inline-flex items-center gap-2.5 px-3.5 py-2 rounded-full border"
-                style={{ background: 'rgba(8,145,178,0.06)', borderColor: 'rgba(8,145,178,0.2)' }}>
-                <div className="relative w-1.5 h-1.5 rounded-full klp-pulse" style={{ background: '#0891b2' }} />
-                <span className="klp-mono text-[11px] uppercase tracking-widest" style={{ color: '#0891b2' }}>Plataforma Cloud-Native · IA</span>
+            <div>
+              <div className="rise">
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, height: 32, padding: '0 14px', borderRadius: 999, background: 'rgba(255,255,255,.7)', border: '1px solid rgba(15,60,165,.18)', color: '#0F3CA5', fontSize: 12, fontWeight: 600, backdropFilter: 'blur(6px)' }}>
+                  <span className="live-dot" />
+                  Agora com agente SRE em IA
+                  <span style={{ fontFamily: 'DM Mono', fontSize: 11, color: '#6B6B6B' }}>v2.0</span>
+                </span>
               </div>
 
-              {/* Headline */}
-              <div>
-                <h1 className="klp-syne leading-[1.05] text-slate-900"
-                  style={{ fontSize: 'clamp(2.6rem, 4.5vw, 4.5rem)', fontWeight: 900 }}>
-                  Kubernetes que
-                  <br />
-                  <span className="overflow-hidden inline-block" style={{ verticalAlign: 'bottom', maxWidth: '100%' }}>
-                    <span key={`${morphIdx}-${morphState}`}
-                      className={`inline-block klp-grad-cyan ${morphState === 'in' ? 'klp-word-in' : 'klp-word-out'}`}>
-                      {MORPH_WORDS[morphIdx]}
-                    </span>
+              <h1 className="rise d1" style={{ margin: '24px 0 0', fontFamily: 'Aileron, sans-serif', fontWeight: 900, fontSize: 'clamp(2.6rem, 4.5vw, 4.5rem)', lineHeight: 1.05, letterSpacing: '-0.035em', color: '#1A1A1A' }}>
+                Kubernetes que
+                <br />
+                <span style={{ overflow: 'hidden', display: 'inline-block', verticalAlign: 'bottom' }}>
+                  <span
+                    key={`${morphIdx}-${morphState}`}
+                    className={`inline-block klp-grad-cyan ${morphState === 'in' ? 'klp-word-in' : 'klp-word-out'}`}
+                  >
+                    {MORPH_WORDS[morphIdx]}
                   </span>
-                  <br />
-                  <span className="text-slate-900">sozinho.</span>
-                </h1>
-              </div>
+                </span>
+                <br />
+                <span style={{ color: '#1a1a1a' }}>sozinho.</span>
+              </h1>
 
-              <p className="text-slate-500 leading-relaxed max-w-md" style={{ fontSize: '1.05rem' }}>
-                Plataforma cloud-native com IA que monitora, protege e otimiza seus clusters — com auto-healing e FinOps integrados.
+              <p className="rise d2" style={{ margin: '24px 0 0', maxWidth: 540, fontSize: 18, lineHeight: 1.55, color: '#1A1A1A' }}>
+                Monitore, corrija e otimize seus clusters K8s com um agente de IA dedicado.
+                Auto-healing, FinOps e segurança — em uma plataforma que fala a língua do operador.
               </p>
 
-              {/* CTAs */}
-              <div className="flex flex-col sm:flex-row gap-4">
+              <div className="rise d3" style={{ marginTop: 32, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                 <Link to="/diagnostico">
-                  <Button size="lg"
-                    className="text-base px-8 py-6 font-medium rounded-xl text-white transition-all hover:-translate-y-0.5 group"
-                    style={{ background: 'linear-gradient(135deg, #0891b2 0%, #4f46e5 100%)', boxShadow: '0 8px 32px rgba(8,145,178,0.3)' }}
-                    onClick={() => (window as unknown as { gtag?: (...args: unknown[]) => void }).gtag?.('event', 'hero_cta_click', { ab_variant: abVariant })}>
-                    Solicite a demo gratuitamente
-                    <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
-                  </Button>
+                  <button
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 8, height: 48, padding: '0 22px', background: '#0F3CA5', color: '#fff', border: 'none', borderRadius: 14, fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: 'Aileron, sans-serif', boxShadow: '0 1px 2px rgba(15,60,165,.18)' }}
+                    onClick={() => (window as unknown as { gtag?: (...a: unknown[]) => void }).gtag?.('event', 'hero_cta_click', { ab_variant: abVariant })}>
+                    Começar grátis <ArrowRight style={{ width: 15, height: 15 }} />
+                  </button>
                 </Link>
-                <a href="#como-funciona">
-                  <Button size="lg" variant="ghost"
-                    className="text-base px-8 py-6 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl gap-2">
-                    <Terminal className="w-4 h-4" />
-                    Ver demo
-                  </Button>
-                </a>
+                <Link to="/diagnostico">
+                  <button style={{ display: 'inline-flex', alignItems: 'center', gap: 8, height: 48, padding: '0 22px', background: '#fff', color: '#1A1A1A', border: '1px solid rgba(0,0,0,.14)', borderRadius: 14, fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: 'Aileron, sans-serif' }}>
+                    <Upload style={{ width: 15, height: 15 }} /> Ver demo de 2 min
+                  </button>
+                </Link>
               </div>
 
-              {/* Proof */}
-              <div className="flex flex-wrap items-center gap-5 pt-2">
-                {['Setup em 5 min', 'Multi-cloud', 'Suporte dedicado'].map(t => (
-                  <span key={t} className="flex items-center gap-1.5 text-sm text-slate-400">
-                    <Check className="w-3.5 h-3.5 text-emerald-500" />
-                    {t}
-                  </span>
-                ))}
+              {/* Social proof */}
+              <div className="rise d4" style={{ marginTop: 40, display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex' }}>
+                  {[
+                    { label: 'K8', bg: '#E6EEF8', fg: '#0F3CA5' },
+                    { label: 'D',  bg: '#1A1A1A', fg: '#FFFFFF' },
+                    { label: 'C',  bg: '#577DB2', fg: '#FFFFFF' },
+                    { label: '+',  bg: '#fff',    fg: '#0F3CA5' },
+                  ].map((a, i) => (
+                    <span key={i} style={{
+                      width: 36, height: 36, borderRadius: '50%', background: a.bg, color: a.fg,
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      fontFamily: 'Aileron, sans-serif', fontWeight: 800, fontSize: 11,
+                      border: i === 3 ? '2px solid #0F3CA5' : '2px solid #fff',
+                      marginLeft: i === 0 ? 0 : -10,
+                    }}>
+                      {a.label}
+                    </span>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ color: '#0F3CA5', fontSize: 14, letterSpacing: 1 }}>★★★★★ <span style={{ color: '#1A1A1A', fontWeight: 600 }}>4.9</span></span>
+                  <span style={{ fontSize: 13, color: '#6B6B6B' }}>+500 times de engenharia · G2 High Performer</span>
+                </div>
               </div>
             </div>
-            </div>{/* /heroParallaxRef */}
 
-            {/* Right — Dashboard */}
-            <div ref={dashParallaxRef}>
-              <div ref={dashRef} className="klp-dash-tilt"
-                style={{ animation: 'klp-fade-up 1.1s cubic-bezier(0.16,1,0.3,1) 0.15s both' }}>
-                <LiveDashboard />
-              </div>
+            {/* Right — showcase card */}
+            <div>
+              <HeroShowcase />
             </div>
           </div>
-        </section>
 
-        {/* ══════════════════ INTEGRATION BAR ══════════════════ */}
-        <div className="py-8 border-y border-slate-100" style={{ background: '#f8fafc' }}>
-          <p className="klp-mono text-[10px] uppercase tracking-[0.2em] text-slate-400 text-center mb-5">
-            Integra com as principais plataformas
-          </p>
-          <div className="klp-ticker-wrap">
-            <div className="klp-ticker-track">
-              {[...INTEGRATIONS, ...INTEGRATIONS].map((name, i) => (
-                <div key={i} className="flex items-center gap-3 mx-6 shrink-0">
-                  <span className="text-sm text-slate-400 hover:text-slate-600 transition-colors whitespace-nowrap cursor-default">
-                    {name}
-                  </span>
-                  <span className="text-slate-200">·</span>
-                </div>
+          {/* Logo strip */}
+          <div className="kdo-hero-inner" style={{ marginTop: 88 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#6B6B6B', marginBottom: 18, textAlign: 'center' }}>
+              Times que confiam no Kodo
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center', gap: 32, opacity: .85, flexWrap: 'wrap' }}>
+              {['NUBANK', 'ITAÚ', 'XP', 'MOVILE', 'iFOOD', 'PICPAY', 'MERCADO LIVRE', 'C6 BANK'].map(n => (
+                <span key={n} style={{ fontFamily: 'Aileron, sans-serif', fontWeight: 900, fontSize: 18, letterSpacing: '0.06em', color: '#6B6B6B' }}>{n}</span>
               ))}
             </div>
           </div>
-        </div>
+        </section>
 
-        {/* ══════════════════ STATS ══════════════════ */}
-        <section className="relative overflow-hidden py-20 px-6" style={{ background: '#06090f' }}>
+        {/* ══════════════════ FEATURES ══════════════════ */}
+        <section id="features" style={{ background: '#fff', padding: '120px 64px' }}>
+          <div style={{ maxWidth: 1440, margin: '0 auto' }}>
+            <Eyebrow>Os quatro pilares</Eyebrow>
+            <h2 className="kdo-h2">Tudo que um time de SRE precisa.<br /><span style={{ color: '#6B6B6B' }}>Nada do que não precisa.</span></h2>
+            <p className="kdo-sub">Quatro produtos integrados, uma única conta. Você ativa o que faz sentido para o seu cluster e desliga o resto.</p>
 
-          {/* ── Tech grid ── */}
-          <div className="absolute inset-0 pointer-events-none"
-            style={{
-              backgroundImage: 'linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px)',
-              backgroundSize: '56px 56px',
-              animation: 'klp-grid-breathe 5s ease-in-out infinite',
-            }} />
-
-          {/* ── Scan line ── */}
-          <div className="absolute inset-y-0 w-32 pointer-events-none"
-            style={{
-              background: 'linear-gradient(90deg, transparent, rgba(8,145,178,0.12), transparent)',
-              animation: 'klp-scan 5s linear infinite',
-            }} />
-
-          {/* ── Ambient glows ── */}
-          <div className="absolute top-1/2 left-1/4 -translate-x-1/2 -translate-y-1/2 w-80 h-80 rounded-full pointer-events-none blur-[100px] opacity-10"
-            style={{ background: '#0891b2' }} />
-          <div className="absolute top-1/2 right-1/4 -translate-x-1/2 -translate-y-1/2 w-80 h-80 rounded-full pointer-events-none blur-[100px] opacity-10"
-            style={{ background: '#6366f1' }} />
-
-          <div ref={statsRef}
-            className="relative max-w-5xl mx-auto grid grid-cols-2 lg:grid-cols-4 divide-x"
-            style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-            {[
-              { ...s1, suffix: '%',    label: 'Uptime garantido',    color: '#22d3ee', delay: 0    },
-              { ...s2, suffix: '%',    label: 'Economia média',       color: '#34d399', delay: 0.1  },
-              { ...s3, suffix: ' min', label: 'Setup rápido',         color: '#818cf8', delay: 0.2  },
-              { ...s4, suffix: '+',    label: 'Clusters gerenciados', color: '#fbbf24', delay: 0.3  },
-            ].map(({ count, ref: cRef, suffix, label, color, delay }, i) => (
-              <div key={label} ref={cRef}
-                className="relative flex flex-col items-center justify-center py-10 px-6 gap-3">
-
-                {/* Pulsing ring behind number */}
-                {statsIn && (
-                  <>
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                      <div className="w-28 h-28 rounded-full"
-                        style={{
-                          border: `1px solid ${color}30`,
-                          animation: `klp-ring-out 3s ease-out ${delay}s infinite`,
-                        }} />
-                    </div>
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                      <div className="w-28 h-28 rounded-full"
-                        style={{
-                          border: `1px solid ${color}20`,
-                          animation: `klp-ring-out 3s ease-out ${delay + 1.5}s infinite`,
-                        }} />
-                    </div>
-                  </>
-                )}
-
-                {/* Number */}
-                <div className="klp-syne tabular-nums leading-none relative z-10"
-                  style={{
-                    fontSize: 'clamp(2.6rem, 4.5vw, 4.2rem)',
-                    fontWeight: 700,
-                    color,
-                    letterSpacing: '-0.03em',
-                    textShadow: `0 0 40px ${color}50`,
-                    animation: statsIn ? `klp-stat-pop 0.7s cubic-bezier(0.34,1.56,0.64,1) ${delay}s both` : 'none',
-                  }}>
-                  {count}{suffix}
-                </div>
-
-                {/* Label */}
-                <div className="klp-mono text-[10px] uppercase tracking-[0.18em] text-center leading-snug relative z-10"
-                  style={{ color: 'rgba(255,255,255,0.3)' }}>
-                  {label}
-                </div>
+            <div ref={featRef} style={{ marginTop: 48, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'stretch' }}>
+              {/* Tab list */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {PILLARS.map((p, i) => {
+                  const isActive = activePillar === i;
+                  return (
+                    <button key={p.id} onClick={() => setActivePillar(i)} style={{
+                      textAlign: 'left', background: isActive ? '#0F3CA5' : '#fff',
+                      color: isActive ? '#fff' : '#1A1A1A',
+                      border: `1px solid ${isActive ? '#0F3CA5' : 'rgba(0,0,0,.08)'}`,
+                      borderRadius: 16, padding: '20px 22px', cursor: 'pointer',
+                      transition: 'all 200ms cubic-bezier(.2,.7,.2,1)',
+                      display: 'grid', gridTemplateColumns: '40px 1fr auto', gap: 16, alignItems: 'center',
+                    }}>
+                      <span style={{ width: 40, height: 40, borderRadius: 12, background: isActive ? 'rgba(255,255,255,.12)' : '#E6EEF8', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <p.icon style={{ width: 20, height: 20, color: isActive ? '#fff' : '#0F3CA5' }} />
+                      </span>
+                      <div>
+                        <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', opacity: isActive ? .85 : .6 }}>{p.label}</div>
+                        <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em', marginTop: 2 }}>{p.h}</div>
+                      </div>
+                      <ArrowRight style={{ width: 18, height: 18, color: isActive ? '#fff' : '#6B6B6B' }} />
+                    </button>
+                  );
+                })}
               </div>
-            ))}
+
+              {/* Active demo panel */}
+              <FeatureDemo pillar={PILLARS[activePillar]} />
+            </div>
           </div>
         </section>
 
-        {/* ══════════════════ FEATURES — sticky scroll ══════════════════ */}
-        <FeaturesGrid onRef={(el) => { if (el) sectionEls.current[1] = el as HTMLElement; }} />
-
         {/* ══════════════════ HOW IT WORKS ══════════════════ */}
-        <section id="como-funciona" ref={(el) => { if (el) sectionEls.current[2] = el; }}
-          className="py-24 px-6" style={{ background: '#ffffff' }}>
-          <div className="max-w-6xl mx-auto">
+        <section id="como" style={{ background: '#F0F4FA', padding: '120px 64px', position: 'relative' }}>
+          <div style={{ maxWidth: 1440, margin: '0 auto' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: 64, alignItems: 'start' }}>
+              {/* Sticky left */}
+              <div style={{ position: 'sticky', top: 100 }}>
+                <Eyebrow>Como funciona</Eyebrow>
+                <h2 className="kdo-h2">Do zero ao auto-healing.<br /><span style={{ color: '#0F3CA5' }}>Em menos de uma tarde.</span></h2>
+                <p className="kdo-sub">Sem ETL, sem reescrita de stack. O agente Kodo se instala como qualquer Helm chart e começa a entregar valor antes do café esfriar.</p>
+                <div style={{ marginTop: 28, display: 'flex', gap: 12 }}>
+                  <Link to="/diagnostico">
+                    <button style={{ display: 'inline-flex', alignItems: 'center', gap: 8, height: 48, padding: '0 22px', background: '#0F3CA5', color: '#fff', border: 'none', borderRadius: 14, fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: 'Aileron, sans-serif' }}>
+                      Ver guia de instalação <ArrowRight style={{ width: 15, height: 15 }} />
+                    </button>
+                  </Link>
+                </div>
+              </div>
 
-            {/* Header */}
-            <div className="text-center mb-20">
-              <p className="klp-mono text-[11px] uppercase tracking-[0.2em] mb-4" style={{ color: '#0891b2' }}>Como funciona</p>
-              <h2 className="klp-syne leading-tight text-slate-900" style={{ fontSize: 'clamp(2rem, 4vw, 3rem)', fontWeight: 800 }}>
-                Do cluster ao auto-healing em{' '}
-                <span className="klp-grad-cyan">tempo real</span>
-              </h2>
-              <p className="mt-4 text-slate-500 max-w-xl mx-auto text-sm leading-relaxed">
-                O Kodo Agent roda dentro do seu cluster Kubernetes e envia métricas para a plataforma, que age automaticamente — sem depender de acesso externo.
+              {/* Steps */}
+              <div ref={stepsRef}>
+                {HOW_STEPS.map((s, i) => (
+                  <div key={s.n} style={{ display: 'grid', gridTemplateColumns: '64px 1fr', gap: 24, paddingBottom: 32, position: 'relative' }}>
+                    {i < HOW_STEPS.length - 1 && (
+                      <span style={{ position: 'absolute', top: 56, bottom: 0, left: 31, width: 1, background: 'rgba(15,60,165,.18)' }} />
+                    )}
+                    <div className={`klp-reveal klp-d${i + 1} ${stepsIn ? 'klp-in' : ''}`} style={{ width: 64, height: 64, borderRadius: 18, background: '#fff', border: '1px solid rgba(0,0,0,.08)', boxShadow: '0 1px 2px rgba(15,60,165,.05)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Aileron, sans-serif', fontWeight: 900, fontSize: 22, color: '#0F3CA5', letterSpacing: '-0.02em' }}>
+                      {s.n}
+                    </div>
+                    <div className={`klp-reveal klp-d${i + 1} ${stepsIn ? 'klp-in' : ''}`} style={{ paddingTop: 6 }}>
+                      <h3 style={{ margin: 0, fontSize: 24, fontWeight: 800, letterSpacing: '-0.025em', color: '#1A1A1A' }}>{s.t}</h3>
+                      <p style={{ marginTop: 8, fontSize: 15, lineHeight: 1.6, color: '#6B6B6B', maxWidth: 540 }}>{s.sub}</p>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 12, padding: '6px 10px', background: '#fff', border: '1px solid rgba(0,0,0,.08)', borderRadius: 8, fontFamily: 'DM Mono, monospace', fontSize: 12, color: '#1A1A1A' }}>
+                        <span style={{ width: 6, height: 6, borderRadius: 99, background: '#0F3CA5' }} />
+                        {s.tag}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ══════════════════ INTEGRATIONS ══════════════════ */}
+        <section id="integracoes" style={{ background: '#fff', padding: '120px 64px' }}>
+          <div style={{ maxWidth: 1440, margin: '0 auto' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 64, alignItems: 'end' }}>
+              <div>
+                <Eyebrow>Integrações</Eyebrow>
+                <h2 className="kdo-h2">Funciona com o que você já tem.</h2>
+              </div>
+              <p className="kdo-sub" style={{ margin: 0 }}>
+                Suporte first-class para os três grandes clouds e dezenas de ferramentas do ecossistema CNCF.
+                Se já existe um operator Kubernetes, o Kodo provavelmente já fala com ele.
               </p>
             </div>
 
-            {/* Flow diagram */}
-            <div ref={stepsRef} className="relative">
-
-              {/* ── Desktop: horizontal flow ── */}
-              <div className="hidden lg:flex items-center justify-between gap-0">
-
-                {[
-                  {
-                    icon: Server,
-                    label: 'Cluster Kubernetes',
-                    color: '#0891b2',
-                    bg: 'rgba(8,145,178,0.06)',
-                    border: 'rgba(8,145,178,0.2)',
-                    tags: ['Pods', 'Nodes', 'Deployments'],
-                    desc: 'AWS EKS, GKE, AKS ou on-premise. Qualquer distribuição K8s.',
-                    delay: 0,
-                  },
-                  {
-                    icon: Upload,
-                    label: 'Kodo Agent',
-                    color: '#818cf8',
-                    bg: 'rgba(129,140,248,0.06)',
-                    border: 'rgba(129,140,248,0.2)',
-                    tags: ['kubectl apply', 'Helm chart'],
-                    desc: 'Pod leve instalado em minutos. Coleta métricas via Kubernetes API.',
-                    delay: 0.15,
-                  },
-                  {
-                    icon: Brain,
-                    label: 'IA & Análise',
-                    color: '#34d399',
-                    bg: 'rgba(52,211,153,0.06)',
-                    border: 'rgba(52,211,153,0.2)',
-                    tags: ['ML', 'RBAC scan', 'FinOps'],
-                    desc: 'Modelos de ML detectam anomalias, ameaças e desperdícios de custo.',
-                    delay: 0.3,
-                  },
-                  {
-                    icon: Zap,
-                    label: 'Ações Automáticas',
-                    color: '#fbbf24',
-                    bg: 'rgba(251,191,36,0.06)',
-                    border: 'rgba(251,191,36,0.2)',
-                    tags: ['Auto-Heal', 'Alertas', 'Relatórios'],
-                    desc: 'Correções aplicadas diretamente no cluster via comandos seguros.',
-                    delay: 0.45,
-                  },
-                ].map((node, i, arr) => (
-                  <div key={node.label} className="flex items-center flex-1 min-w-0">
-
-                    {/* Node card */}
-                    <div className={`klp-reveal klp-d${i + 1} ${stepsIn ? 'klp-in' : ''} flex-1`}>
-                      <div className="rounded-2xl p-6 border flex flex-col gap-3 h-full"
-                        style={{ background: node.bg, borderColor: node.border }}>
-                        {/* Icon + number */}
-                        <div className="flex items-center justify-between">
-                          <div className="w-10 h-10 rounded-xl flex items-center justify-center"
-                            style={{ background: `${node.color}15`, border: `1px solid ${node.color}30` }}>
-                            <node.icon className="w-5 h-5" style={{ color: node.color }} />
-                          </div>
-                          <span className="klp-mono text-[10px] font-600"
-                            style={{ color: `${node.color}80` }}>
-                            {String(i + 1).padStart(2, '0')}
-                          </span>
-                        </div>
-                        {/* Label */}
-                        <h3 className="klp-syne text-slate-900 font-700 text-sm leading-snug">{node.label}</h3>
-                        {/* Desc */}
-                        <p className="text-xs text-slate-500 leading-relaxed">{node.desc}</p>
-                        {/* Tags */}
-                        <div className="flex flex-wrap gap-1.5 mt-auto pt-1">
-                          {node.tags.map(t => (
-                            <span key={t} className="klp-mono text-[9px] px-2 py-0.5 rounded-full"
-                              style={{ background: `${node.color}12`, color: node.color, border: `1px solid ${node.color}20` }}>
-                              {t}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
+            {/* Cloud cards */}
+            <div style={{ marginTop: 48, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+              {[
+                { id: 'aws',   name: 'Amazon EKS', sub: 'us-east-1 · sa-east-1 · multi-AZ',    abbr: 'AWS'   },
+                { id: 'gcp',   name: 'Google GKE', sub: 'Autopilot · Standard · multi-region', abbr: 'GCP'   },
+                { id: 'azure', name: 'Azure AKS',  sub: 'BR-South · East-US · híbrido',         abbr: 'AZ'    },
+              ].map((c) => (
+                <div key={c.id} style={{
+                  background: '#fff', border: '1px solid rgba(0,0,0,.08)', borderRadius: 18, padding: 24,
+                  display: 'flex', flexDirection: 'column', gap: 16,
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ width: 56, height: 56, borderRadius: 14, background: '#E6EEF8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Aileron, sans-serif', fontWeight: 900, fontSize: 14, color: '#0F3CA5' }}>
+                      {c.abbr}
                     </div>
-
-                    {/* Connector arrow (not after last) */}
-                    {i < arr.length - 1 && (
-                      <div className="relative flex-shrink-0 mx-2" style={{ width: '48px', height: '2px' }}>
-                        {/* Dashed line */}
-                        <div className="absolute inset-0 rounded-full"
-                          style={{ background: 'repeating-linear-gradient(90deg, rgba(99,102,241,0.3) 0, rgba(99,102,241,0.3) 4px, transparent 4px, transparent 10px)' }} />
-                        {/* Moving dot */}
-                        {stepsIn && (
-                          <div className="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full"
-                            style={{
-                              background: '#6366f1',
-                              boxShadow: '0 0 8px #6366f1',
-                              animation: `klp-flow-dot 2s ease-in-out ${i * 0.5}s infinite`,
-                            }} />
-                        )}
-                        {/* Arrow head */}
-                        <div className="absolute right-0 top-1/2 -translate-y-1/2 -translate-x-0.5"
-                          style={{ width: 0, height: 0, borderTop: '4px solid transparent', borderBottom: '4px solid transparent', borderLeft: '6px solid rgba(99,102,241,0.4)' }} />
-                      </div>
-                    )}
+                    <Pill tone="ok">Certificado</Pill>
                   </div>
-                ))}
-              </div>
-
-              {/* ── Mobile: vertical flow ── */}
-              <div className="flex lg:hidden flex-col gap-0">
-                {[
-                  { icon: Server,  label: 'Cluster Kubernetes', color: '#0891b2', desc: 'AWS EKS, GKE, AKS ou on-premise.' },
-                  { icon: Upload,  label: 'Kodo Agent',          color: '#818cf8', desc: 'Pod leve instalado em minutos via kubectl.' },
-                  { icon: Brain,   label: 'IA & Análise',        color: '#34d399', desc: 'ML detecta anomalias, ameaças e custos.' },
-                  { icon: Zap,     label: 'Ações Automáticas',   color: '#fbbf24', desc: 'Auto-heal e alertas aplicados no cluster.' },
-                ].map((node, i, arr) => (
-                  <div key={node.label} className="flex flex-col items-center">
-                    <div className={`w-full rounded-2xl p-5 border klp-reveal klp-d${i+1} ${stepsIn ? 'klp-in' : ''}`}
-                      style={{ background: `${node.color}06`, borderColor: `${node.color}20` }}>
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-                          style={{ background: `${node.color}15` }}>
-                          <node.icon className="w-4 h-4" style={{ color: node.color }} />
-                        </div>
-                        <div>
-                          <p className="klp-syne font-700 text-sm text-slate-900">{node.label}</p>
-                          <p className="text-xs text-slate-500 mt-0.5">{node.desc}</p>
-                        </div>
-                      </div>
-                    </div>
-                    {i < arr.length - 1 && (
-                      <div className="relative w-px my-1" style={{ height: '32px', background: 'rgba(99,102,241,0.2)' }}>
-                        {stepsIn && (
-                          <div className="absolute left-1/2 -translate-x-1/2 w-2 h-2 rounded-full"
-                            style={{ background: '#6366f1', animation: `klp-flow-dot-v 2s ease-in-out ${i * 0.5}s infinite` }} />
-                        )}
-                      </div>
-                    )}
+                  <div>
+                    <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.025em', color: '#1A1A1A' }}>{c.name}</div>
+                    <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 12, color: '#6B6B6B', marginTop: 4 }}>{c.sub}</div>
                   </div>
-                ))}
-              </div>
-
-              {/* Bottom detail bar */}
-              <div className={`mt-12 rounded-2xl border border-slate-100 bg-slate-50 px-8 py-5 flex flex-wrap justify-center gap-8 klp-reveal klp-d5 ${stepsIn ? 'klp-in' : ''}`}>
-                {[
-                  { icon: CheckCircle2, text: 'Sem acesso externo ao cluster', color: '#34d399' },
-                  { icon: Zap,          text: 'Healing em menos de 30 segundos', color: '#fbbf24' },
-                  { icon: Shield,       text: 'Dados nunca saem do seu ambiente', color: '#818cf8' },
-                  { icon: Activity,     text: 'Métricas com resolução de 15s',    color: '#0891b2' },
-                ].map(({ icon: Icon, text, color }) => (
-                  <div key={text} className="flex items-center gap-2">
-                    <Icon className="w-4 h-4 shrink-0" style={{ color }} />
-                    <span className="text-xs text-slate-600">{text}</span>
+                  <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 16, borderTop: '1px solid rgba(0,0,0,.06)' }}>
+                    <span style={{ fontSize: 12, color: '#6B6B6B' }}>Conectar em ~30s</span>
+                    <ArrowRight style={{ width: 16, height: 16, color: '#0F3CA5' }} />
                   </div>
-                ))}
-              </div>
+                </div>
+              ))}
             </div>
 
-            {/* CTA */}
-            <div className="text-center mt-14">
-              <Link to="/auth">
-                <Button size="lg"
-                  className="text-base px-8 py-6 rounded-xl font-medium text-white transition-all hover:-translate-y-0.5 group"
-                  style={{ background: 'linear-gradient(135deg, #0891b2, #4f46e5)', boxShadow: '0 8px 32px rgba(8,145,178,0.25)' }}>
-                  Começar agora
-                  <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
-                </Button>
-              </Link>
-            </div>
-          </div>
-        </section>
-
-        {/* ══════════════════ FAQ ══════════════════ */}
-        <section id="faq" ref={(el) => { if (el) sectionEls.current[3] = el; }}
-          className="py-24 px-6" style={{ background: '#f8fafc' }}>
-          <div className="max-w-3xl mx-auto">
-            <div ref={faqRef} className={`klp-reveal ${faqIn ? 'klp-in' : ''}`}>
-              <p className="klp-mono text-[11px] uppercase tracking-[0.2em] mb-5" style={{ color: '#0891b2' }}>FAQ</p>
-              <h2 className="klp-syne font-800 leading-tight mb-12 text-slate-900" style={{ fontSize: 'clamp(2rem, 4vw, 3rem)' }}>
-                Perguntas{' '}
-                <span style={{ background: 'linear-gradient(120deg, #4f46e5, #0891b2)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                  frequentes
-                </span>
-              </h2>
-              <Accordion type="single" collapsible className="space-y-2">
-                {FAQS.map((faq, i) => (
-                  <AccordionItem key={i} value={`faq-${i}`}
-                    className="rounded-xl border border-slate-200 px-6 bg-white data-[state=open]:border-slate-300 transition-all">
-                    <AccordionTrigger className="text-left hover:no-underline py-5 text-sm font-medium text-slate-700 hover:text-slate-900 klp-syne">
-                      {faq.q}
-                    </AccordionTrigger>
-                    <AccordionContent className="text-sm text-slate-500 pb-5 leading-relaxed">
-                      {faq.a}
-                    </AccordionContent>
-                  </AccordionItem>
-                ))}
-              </Accordion>
+            {/* Tools marquee */}
+            <div style={{ marginTop: 32, background: '#F0F4FA', borderRadius: 24, padding: 32, border: '1px solid rgba(0,0,0,.06)' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 32, alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#0F3CA5' }}>+ 60 ferramentas</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.025em', marginTop: 4, color: '#1A1A1A' }}>Ecossistema CNCF nativo</div>
+                  <div style={{ fontSize: 14, color: '#6B6B6B', marginTop: 6, maxWidth: 280 }}>Métricas, alertas, deploys, segurança — tudo bidirecional, sem proxies.</div>
+                </div>
+                <div style={{ overflow: 'hidden', maskImage: 'linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent)', WebkitMaskImage: 'linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent)' }}>
+                  <div className="kdo-marquee">
+                    {[...TOOLS, ...TOOLS].map((t, i) => (
+                      <span key={i} style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 10,
+                        height: 44, padding: '0 18px 0 14px', background: '#fff', borderRadius: 999,
+                        border: '1px solid rgba(0,0,0,.08)', fontFamily: 'Aileron, sans-serif',
+                        fontWeight: 700, fontSize: 14, color: '#1A1A1A', letterSpacing: '-0.01em',
+                      }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#0F3CA5', flexShrink: 0 }} />
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </section>
 
         {/* ══════════════════ LEAD CAPTURE ══════════════════ */}
-        <section className="py-24 px-6 bg-white border-t border-slate-100">
-          <div className="max-w-5xl mx-auto">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center">
-
-              {/* Left — copy */}
-              <div className="space-y-6">
-                <p className="klp-mono text-[11px] uppercase tracking-[0.2em]" style={{ color: '#0891b2' }}>
-                  Diagnóstico gratuito
-                </p>
-                <h2 className="klp-syne font-extrabold leading-tight text-slate-900"
-                  style={{ fontSize: 'clamp(1.75rem, 3vw, 2.5rem)' }}>
+        <section style={{ background: '#F0F4FA', padding: '120px 64px', borderTop: '1px solid rgba(0,0,0,.06)' }}>
+          <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 64, alignItems: 'center' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                <Eyebrow>Diagnóstico gratuito</Eyebrow>
+                <h2 style={{ fontFamily: 'Aileron, sans-serif', fontWeight: 900, fontSize: 'clamp(28px, 3vw, 42px)', letterSpacing: '-0.025em', lineHeight: 1.05, color: '#1A1A1A', margin: 0 }}>
                   Descubra quanto você pode economizar no seu cluster
                 </h2>
-                <p className="text-slate-500 leading-relaxed">
+                <p style={{ fontSize: 16, lineHeight: 1.55, color: '#6B6B6B', margin: 0 }}>
                   Informe seu email e nossa equipe envia uma análise personalizada com potencial de economia e riscos de segurança — sem instalar nada.
                 </p>
-                <div className="space-y-3">
-                  {[
-                    'Análise de custo e recursos subutilizados',
-                    'Mapa de riscos de segurança (RBAC, Pod Security)',
-                    'Estimativa de economia mensal',
-                  ].map((item) => (
-                    <div key={item} className="flex items-start gap-3">
-                      <div className="mt-0.5 w-5 h-5 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center shrink-0">
-                        <Check className="w-3 h-3 text-emerald-500" />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {['Análise de custo e recursos subutilizados', 'Mapa de riscos de segurança (RBAC, Pod Security)', 'Estimativa de economia mensal'].map(item => (
+                    <div key={item} style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                      <div style={{ marginTop: 2, width: 20, height: 20, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(22,163,74,.08)', border: '1px solid rgba(22,163,74,.2)' }}>
+                        <Check style={{ width: 12, height: 12, color: '#16A34A' }} />
                       </div>
-                      <span className="text-sm text-slate-600">{item}</span>
+                      <span style={{ fontSize: 14, color: '#1A1A1A' }}>{item}</span>
                     </div>
                   ))}
                 </div>
               </div>
-
-              {/* Right — form */}
-              <div className="rounded-2xl p-8 border border-slate-200" style={{ background: '#f8fafc' }}>
+              <div style={{ background: '#fff', borderRadius: 22, padding: 32, border: '1px solid rgba(0,0,0,.08)', boxShadow: '0 1px 2px rgba(15,60,165,.05)' }}>
                 <LeadCaptureForm variant={abVariant} />
               </div>
+            </div>
+          </div>
+        </section>
 
+        {/* ══════════════════ FAQ ══════════════════ */}
+        <section id="faq" style={{ background: '#fff', padding: '120px 64px' }}>
+          <div style={{ maxWidth: 1440, margin: '0 auto' }}>
+            <div className="kdo-faq" style={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr', gap: 80, alignItems: 'start' }}>
+              <div style={{ position: 'sticky', top: 100 }}>
+                <Eyebrow>FAQ</Eyebrow>
+                <h2 className="kdo-h2">Perguntas que você ia fazer mesmo.</h2>
+                <p className="kdo-sub">Se não respondemos aqui, mande um e-mail — geralmente um engenheiro responde no mesmo dia.</p>
+                <div style={{ marginTop: 24 }}>
+                  <a href="mailto:contato@kubenetworks.com.br">
+                    <button style={{ display: 'inline-flex', alignItems: 'center', gap: 8, height: 40, padding: '0 18px', background: '#fff', border: '1px solid rgba(0,0,0,.14)', borderRadius: 12, fontSize: 14, fontWeight: 600, color: '#1A1A1A', cursor: 'pointer', fontFamily: 'Aileron, sans-serif' }}>
+                      contato@kubenetworks.com.br
+                    </button>
+                  </a>
+                </div>
+              </div>
+              <div>
+                {FAQS.map((item, i) => (
+                  <details key={i} open={i === 0}>
+                    <summary className="kdo-faq-summary">
+                      {item.q}
+                      <span className="kdo-faq-plus">+</span>
+                    </summary>
+                    <div className="kdo-faq-answer">{item.a}</div>
+                  </details>
+                ))}
+              </div>
             </div>
           </div>
         </section>
 
         {/* ══════════════════ FINAL CTA ══════════════════ */}
-        <section className="py-24 px-6 bg-white">
-          <div className="max-w-5xl mx-auto">
-            <div ref={ctaRef}
-              className={`relative rounded-3xl overflow-hidden p-16 text-center klp-reveal ${ctaIn ? 'klp-in' : ''}`}
-              style={{ background: 'linear-gradient(135deg, #0891b2 0%, #4f46e5 100%)' }}>
-              {/* Subtle grid */}
-              <div className="absolute inset-0 opacity-[0.08] pointer-events-none"
-                style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,1) 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
-              {/* Glow */}
-              <div className="absolute -top-32 -right-32 w-80 h-80 rounded-full blur-[100px] opacity-30 pointer-events-none bg-white" />
-              <div className="absolute -bottom-32 -left-32 w-80 h-80 rounded-full blur-[100px] opacity-20 pointer-events-none bg-white" />
+        <section style={{ background: '#F0F4FA', padding: '40px 64px 120px' }}>
+          <div ref={ctaRef} style={{ maxWidth: 1440, margin: '0 auto' }}>
+            <div className={`klp-reveal ${ctaIn ? 'klp-in' : ''}`} style={{
+              background: '#1A1A1A', color: '#fff', borderRadius: 28,
+              padding: '72px 64px', position: 'relative', overflow: 'hidden',
+            }}>
+              {/* Grid decoration */}
+              <svg style={{ position: 'absolute', inset: 0, opacity: .12, pointerEvents: 'none' }} width="100%" height="100%">
+                <defs>
+                  <pattern id="grid2" width="48" height="48" patternUnits="userSpaceOnUse">
+                    <path d="M 48 0 L 0 0 0 48" fill="none" stroke="#fff" strokeWidth="0.5" />
+                  </pattern>
+                </defs>
+                <rect width="100%" height="100%" fill="url(#grid2)" />
+              </svg>
 
-              <div className="relative z-10 space-y-6">
-                <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl border border-white/20 mb-2"
-                  style={{ background: 'rgba(255,255,255,0.15)' }}>
-                  <Zap className="w-7 h-7 text-white" />
+              <div style={{ position: 'relative', display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 48, alignItems: 'center' }}>
+                <div>
+                  <Pill tone="info" style={{ background: 'rgba(255,255,255,.10)', color: '#fff' }}>
+                    <span className="live-dot" />
+                    Onboarding em ~30 minutos
+                  </Pill>
+                  <h2 style={{ margin: '20px 0 0', fontFamily: 'Aileron, sans-serif', fontWeight: 900, fontSize: 'clamp(40px, 4.4vw, 64px)', letterSpacing: '-0.035em', lineHeight: 1, color: '#fff' }}>
+                    Comece a curar seus clusters <span style={{ color: '#86A8FF' }}>hoje à tarde.</span>
+                  </h2>
+                  <p style={{ marginTop: 18, fontSize: 17, lineHeight: 1.5, color: 'rgba(255,255,255,.7)', maxWidth: 520 }}>
+                    14 dias do plano Pro, sem cartão. Se o auto-healing não economizar mais que o preço do plano no primeiro mês, devolvemos.
+                  </p>
+                  <div style={{ marginTop: 28, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                    <Link to="/auth">
+                      <button style={{ display: 'inline-flex', alignItems: 'center', gap: 8, height: 48, padding: '0 22px', background: '#fff', color: '#0F3CA5', border: 'none', borderRadius: 14, fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: 'Aileron, sans-serif' }}>
+                        Começar grátis <ArrowRight style={{ width: 15, height: 15 }} />
+                      </button>
+                    </Link>
+                    <Link to="/diagnostico">
+                      <button style={{ display: 'inline-flex', alignItems: 'center', gap: 8, height: 48, padding: '0 22px', background: 'transparent', color: '#fff', border: '1px solid rgba(255,255,255,.25)', borderRadius: 14, fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: 'Aileron, sans-serif' }}>
+                        <Upload style={{ width: 15, height: 15 }} /> Agendar demo
+                      </button>
+                    </Link>
+                  </div>
                 </div>
-                <h2 className="klp-syne font-800 leading-tight text-white" style={{ fontSize: 'clamp(2rem, 4vw, 3.5rem)' }}>
-                  Pronto para transformar
-                  <br />sua operação?
-                </h2>
-                <p className="text-white/75 max-w-md mx-auto leading-relaxed">
-                  Junte-se a centenas de empresas que já automatizaram sua gestão Kubernetes com IA.
-                </p>
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2">
-                  <Link to="/diagnostico">
-                    <Button size="lg"
-                      className="text-base px-10 py-6 rounded-xl font-medium bg-white text-slate-900 hover:bg-white/90 transition-all hover:-translate-y-0.5 group">
-                      Solicitar demo
-                      <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
-                    </Button>
-                  </Link>
-                  <Link to="/auth">
-                    <Button size="lg" variant="ghost"
-                      className="text-base px-8 py-6 text-white/80 hover:text-white hover:bg-white/10 rounded-xl border border-white/20">
-                      Fazer login
-                    </Button>
-                  </Link>
+
+                {/* Helm code snippet */}
+                <div style={{ background: '#0B1733', borderRadius: 16, padding: 20, border: '1px solid rgba(255,255,255,.08)', fontFamily: 'DM Mono, monospace', fontSize: 13, lineHeight: 1.8 }}>
+                  <div style={{ color: '#6B7DAA', marginBottom: 6 }}># instalar o agente Kodo</div>
+                  <div style={{ color: '#fff' }}>$ helm repo add kodo <span style={{ color: '#86A8FF' }}>https://charts.kodo.dev</span></div>
+                  <div style={{ color: '#fff' }}>$ helm install kodo-agent kodo/agent \</div>
+                  <div style={{ color: '#fff' }}>&nbsp;&nbsp;--namespace kodo --create-namespace</div>
+                  <div style={{ color: '#6B7DAA', marginTop: 14 }}># 1 min depois...</div>
+                  <div style={{ color: '#86EFAC' }}>✓ agente conectado · 14 nodes · 248 pods</div>
+                  <div style={{ color: '#86EFAC' }}>✓ baseline iniciada · ETA 48h</div>
                 </div>
-                <p className="klp-mono text-[11px] text-white/40 uppercase tracking-widest pt-2">
-                  Setup em 5 min · Multi-cloud · Suporte dedicado
-                </p>
               </div>
             </div>
           </div>

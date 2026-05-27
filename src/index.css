@@ -1,132 +1,307 @@
+/* ============================================================
+   Kodo Design System — Indigo Dusk · Aileron + DM Mono
+   ============================================================ */
+
+/* ---------- Self-hosted fonts ---------- */
+@font-face {
+  font-family: 'Aileron';
+  src: url('/fonts/Aileron-Light.otf') format('opentype');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Aileron';
+  src: url('/fonts/Aileron-Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Aileron';
+  src: url('/fonts/Aileron-Italic.otf') format('opentype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Aileron';
+  src: url('/fonts/Aileron-SemiBold.otf') format('opentype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Aileron';
+  src: url('/fonts/Aileron-Bold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Aileron';
+  src: url('/fonts/Aileron-Heavy.otf') format('opentype');
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Aileron';
+  src: url('/fonts/Aileron-Black.otf') format('opentype');
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'DM Mono';
+  src: url('/fonts/DMMono-Light.ttf') format('truetype');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'DM Mono';
+  src: url('/fonts/DMMono-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'DM Mono';
+  src: url('/fonts/DMMono-Medium.ttf') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
-
 @layer base {
   :root {
-    /* Light Theme — Indigo Dusk brand (#0F3CA5) */
-    --background: 216 50% 96%;              /* #F0F4FA brand bg */
-    --foreground: 222 47% 11%;
+    /* ── Light theme (Indigo Dusk) ── */
+    --background:     216 50% 96%;
+    --foreground:     0 0% 10%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    --card:           0 0% 100%;
+    --card-foreground: 0 0% 10%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
+    --popover:        0 0% 100%;
+    --popover-foreground: 0 0% 10%;
 
-    --primary: 222 83% 35%;                 /* #0F3CA5 Indigo Dusk */
+    --primary:        222 83% 35%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 216 40% 93%;               /* #E6EEF8 primary-pale */
-    --secondary-foreground: 222 47% 11%;
+    --secondary:      214 56% 93%;
+    --secondary-foreground: 0 0% 10%;
 
-    --muted: 216 40% 93%;
-    --muted-foreground: 215 16% 47%;
+    --muted:          214 56% 93%;
+    --muted-foreground: 0 0% 42%;
 
-    --accent: 216 40% 93%;
-    --accent-foreground: 222 47% 11%;
+    --accent:         214 56% 93%;
+    --accent-foreground: 222 83% 35%;
 
-    --success: 142 72% 29%;                 /* #16A34A brand success */
+    --success:        142 72% 29%;
     --success-foreground: 0 0% 100%;
 
-    --warning: 38 92% 50%;
-    --warning-foreground: 222 47% 11%;
+    --warning:        45 93% 39%;
+    --warning-foreground: 0 0% 10%;
 
-    --destructive: 0 72% 51%;               /* #DC2626 brand danger */
+    --destructive:    0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 216 32% 89%;
-    --input: 216 32% 89%;
-    --ring: 222 83% 35%;
+    --border:         216 32% 89%;
+    --input:          216 32% 91%;
+    --ring:           222 83% 35%;
 
-    --chart-1: 222 83% 35%;                 /* indigo primary */
-    --chart-2: 142 72% 29%;                 /* brand success green */
-    --chart-3: 38 92% 50%;
-    --chart-4: 210 60% 55%;                 /* sky indigo #577DB2 */
-    --chart-5: 0 72% 51%;
+    --chart-1:        222 83% 35%;
+    --chart-2:        142 72% 29%;
+    --chart-3:        45 93% 39%;
+    --chart-4:        213 38% 51%;
+    --chart-5:        0 72% 51%;
 
     --radius: 0.75rem;
 
-    --gradient-primary: linear-gradient(135deg, hsl(222 83% 35%) 0%, hsl(210 60% 50%) 100%);
-    --gradient-card: linear-gradient(135deg, hsl(0 0% 100%) 0%, hsl(216 50% 98%) 100%);
-    --gradient-success: linear-gradient(135deg, hsl(142 72% 29%) 0%, hsl(158 64% 40%) 100%);
-    --shadow-glow: 0 8px 32px hsl(222 83% 35% / 0.15);
-    --shadow-card: 0 2px 8px hsl(222 47% 11% / 0.08);
+    --gradient-primary: linear-gradient(135deg, #0F3CA5 0%, #577DB2 100%);
+    --gradient-card:    linear-gradient(135deg, #ffffff 0%, #F0F4FA 100%);
+    --gradient-success: linear-gradient(135deg, #16A34A 0%, #22c55e 100%);
+    --shadow-glow:      0 8px 32px rgba(15, 60, 165, 0.15);
+    --shadow-card:      0 2px 8px rgba(0, 0, 0, 0.06);
+    --shadow-sm:        0 1px 2px rgba(15,60,165,.05), 0 1px 1px rgba(0,0,0,.04);
+    --shadow-md:        0 4px 12px rgba(15,60,165,.08), 0 1px 2px rgba(0,0,0,.04);
+    --shadow-lg:        0 16px 40px rgba(15,60,165,.12), 0 2px 6px rgba(0,0,0,.05);
+    --shadow-pop:       0 24px 60px rgba(15,60,165,.18);
 
-    /* Brand accent tokens — Indigo Dusk, WCAG AA on white */
-    --kodo-brand: #0F3CA5;                   /* Indigo Dusk, ~5.2:1 contrast */
-    --kodo-brand-muted: rgba(15, 60, 165, 0.07);
+    --kodo-brand:        #0F3CA5;
+    --kodo-brand-muted:  rgba(15, 60, 165, 0.07);
     --kodo-brand-border: rgba(15, 60, 165, 0.20);
-    --kodo-warn: #92400e;                    /* amber-800, 7.1:1 contrast */
-    --kodo-warn-muted: rgba(146, 64, 14, 0.08);
-    --kodo-warn-border: rgba(146, 64, 14, 0.22);
-    --kodo-crit: #DC2626;                    /* red-600, brand danger, 4.7:1 */
-    --kodo-crit-muted: rgba(220, 38, 38, 0.08);
-    --kodo-crit-border: rgba(220, 38, 38, 0.22);
+    --kodo-warn:         #CA8A04;
+    --kodo-warn-muted:   rgba(202, 138, 4, 0.08);
+    --kodo-warn-border:  rgba(202, 138, 4, 0.22);
+    --kodo-crit:         #DC2626;
+    --kodo-crit-muted:   rgba(220, 38, 38, 0.08);
+    --kodo-crit-border:  rgba(220, 38, 38, 0.22);
+
+    /* ── Direct design tokens (Kodo Landing parity) ── */
+    --indigo:         #0F3CA5;
+    --indigo-dark:    #0A5B93;
+    --indigo-mid:     #577DB2;
+    --indigo-pale:    #E6EEF8;
+
+    --ink:            #1A1A1A;
+    --ink-2:          #333333;
+    --ink-muted:      #6B6B6B;
+    --ink-light:      #9B9B9B;
+
+    --bg:             #F0F4FA;
+    --bg-2:           #E4EAF5;
+    --off-white:      #F5F5F5;
+    --surface:        #FFFFFF;
+
+    --border-raw:     rgba(0,0,0,.08);
+    --border-md:      rgba(0,0,0,.14);
+    --border-strong:  rgba(0,0,0,.20);
+
+    --success-raw:    #16A34A;
+    --success-bg:     #DCFCE7;
+    --success-fg:     #14532D;
+    --warn-raw:       #CA8A04;
+    --warn-bg:        #FEF9C3;
+    --warn-fg:        #713F12;
+    --danger-raw:     #DC2626;
+    --danger-bg:      #FEE2E2;
+    --danger-fg:      #7F1D1D;
+    --info-raw:       #0F3CA5;
+    --info-bg:        #E6EEF8;
+    --info-fg:        #0F3CA5;
+
+    /* Radii */
+    --r-xs:   6px;
+    --r-sm:   8px;
+    --r:      12px;
+    --r-md:   14px;
+    --r-lg:   16px;
+    --r-xl:   20px;
+    --r-pill: 999px;
+
+    /* Spacing scale */
+    --sp-xs:  4px;
+    --sp-sm:  8px;
+    --sp-md:  12px;
+    --sp-lg:  16px;
+    --sp-xl:  24px;
+    --sp-2xl: 32px;
+    --sp-3xl: 48px;
+    --sp-4xl: 64px;
+
+    /* Motion */
+    --ease:       cubic-bezier(.2,.7,.2,1);
+    --dur-fast:   120ms;
+    --dur:        200ms;
+    --dur-slow:   320ms;
+
+    /* Density (default) */
+    --d-section-y:  120px;
+    --d-section-px: 64px;
+    --d-card-pad:   28px;
+    --d-h1:         88px;
+    --d-stack:      24px;
   }
 
   .dark {
-    /* Dark Theme */
-    --background: 222 47% 11%;
-    --foreground: 210 40% 98%;
+    --background:     222 47% 8%;
+    --foreground:     214 32% 91%;
 
-    --card: 217 33% 17%;
-    --card-foreground: 210 40% 98%;
+    --card:           222 40% 12%;
+    --card-foreground: 214 32% 91%;
 
-    --popover: 222 47% 14%;
-    --popover-foreground: 210 40% 98%;
+    --popover:        222 40% 10%;
+    --popover-foreground: 214 32% 91%;
 
-    --primary: 217 91% 60%;
-    --primary-foreground: 222 47% 11%;
+    --primary:        213 65% 65%;
+    --primary-foreground: 222 47% 8%;
 
-    --secondary: 217 33% 20%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary:      222 33% 18%;
+    --secondary-foreground: 214 32% 91%;
 
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
+    --muted:          222 33% 16%;
+    --muted-foreground: 213 18% 55%;
 
-    --accent: 217 91% 60%;
-    --accent-foreground: 222 47% 11%;
+    --accent:         213 65% 65%;
+    --accent-foreground: 222 47% 8%;
 
-    --success: 142 76% 36%;
-    --success-foreground: 210 40% 98%;
+    --success:        142 76% 36%;
+    --success-foreground: 214 32% 91%;
 
-    --warning: 38 92% 50%;
-    --warning-foreground: 222 47% 11%;
+    --warning:        38 92% 50%;
+    --warning-foreground: 222 47% 8%;
 
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive:    0 84% 60%;
+    --destructive-foreground: 214 32% 91%;
 
-    --border: 217 33% 20%;
-    --input: 217 33% 20%;
-    --ring: 217 91% 60%;
+    --border:         214 20% 20%;
+    --input:          222 33% 18%;
+    --ring:           213 65% 65%;
 
-    --chart-1: 217 91% 60%;
-    --chart-2: 142 76% 36%;
-    --chart-3: 38 92% 50%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 0 84% 60%;
+    --chart-1:        213 65% 65%;
+    --chart-2:        142 76% 36%;
+    --chart-3:        38 92% 50%;
+    --chart-4:        213 38% 51%;
+    --chart-5:        0 84% 60%;
 
-    --gradient-primary: linear-gradient(135deg, hsl(217 91% 60%) 0%, hsl(265 89% 62%) 100%);
-    --gradient-card: linear-gradient(135deg, hsl(217 33% 17%) 0%, hsl(222 47% 14%) 100%);
-    --gradient-success: linear-gradient(135deg, hsl(142 76% 36%) 0%, hsl(158 64% 52%) 100%);
-    --shadow-glow: 0 8px 32px hsl(217 91% 60% / 0.2);
-    --shadow-card: 0 4px 16px hsl(222 47% 11% / 0.4);
+    --gradient-primary: linear-gradient(135deg, #7BB3E3 0%, #577DB2 100%);
+    --gradient-card:    linear-gradient(135deg, rgba(255,255,255,.05) 0%, rgba(255,255,255,.02) 100%);
+    --gradient-success: linear-gradient(135deg, #16A34A 0%, #22c55e 100%);
+    --shadow-glow:      0 8px 32px rgba(123, 179, 227, 0.2);
+    --shadow-card:      0 4px 16px rgba(0, 0, 0, 0.4);
+    --shadow-sm:        0 1px 2px rgba(0,0,0,.3);
+    --shadow-md:        0 4px 12px rgba(0,0,0,.4);
+    --shadow-lg:        0 16px 40px rgba(0,0,0,.5);
+    --shadow-pop:       0 24px 60px rgba(0,0,0,.6);
 
-    /* Brand accent tokens — dark mode: sky indigo (lightened for dark bg) */
-    --kodo-brand: #7BB3E3;                   /* #577DB2 lightened, ~4.9:1 on dark navy */
-    --kodo-brand-muted: rgba(123, 179, 227, 0.08);
+    --kodo-brand:        #7BB3E3;
+    --kodo-brand-muted:  rgba(123, 179, 227, 0.08);
     --kodo-brand-border: rgba(123, 179, 227, 0.20);
-    --kodo-warn: #fbbf24;                    /* amber-400, visible on dark */
-    --kodo-warn-muted: rgba(251, 191, 36, 0.08);
-    --kodo-warn-border: rgba(251, 191, 36, 0.22);
-    --kodo-crit: #f87171;                    /* red-400, visible on dark */
-    --kodo-crit-muted: rgba(248, 113, 113, 0.08);
-    --kodo-crit-border: rgba(248, 113, 113, 0.22);
+    --kodo-warn:         #fbbf24;
+    --kodo-warn-muted:   rgba(251, 191, 36, 0.08);
+    --kodo-warn-border:  rgba(251, 191, 36, 0.22);
+    --kodo-crit:         #f87171;
+    --kodo-crit-muted:   rgba(248, 113, 113, 0.08);
+    --kodo-crit-border:  rgba(248, 113, 113, 0.22);
+
+    /* ── Direct tokens — dark overrides ── */
+    --indigo:         #7BB3E3;
+    --indigo-dark:    #5A9CD4;
+    --indigo-mid:     #7BB3E3;
+    --indigo-pale:    rgba(123,179,227,.12);
+
+    --ink:            #E8EDF5;
+    --ink-2:          #C5D0E0;
+    --ink-muted:      #8A9BB0;
+    --ink-light:      #5A6880;
+
+    --bg:             #0D1117;
+    --bg-2:           #111827;
+    --off-white:      #161B22;
+    --surface:        #1A2235;
+
+    --border-raw:     rgba(255,255,255,.06);
+    --border-md:      rgba(255,255,255,.10);
+    --border-strong:  rgba(255,255,255,.16);
+
+    --success-raw:    #22c55e;
+    --success-bg:     rgba(22,163,74,.12);
+    --success-fg:     #86efac;
+    --warn-raw:       #fbbf24;
+    --warn-bg:        rgba(251,191,36,.10);
+    --warn-fg:        #fde68a;
+    --danger-raw:     #f87171;
+    --danger-bg:      rgba(248,113,113,.10);
+    --danger-fg:      #fca5a5;
+    --info-raw:       #7BB3E3;
+    --info-bg:        rgba(123,179,227,.10);
+    --info-fg:        #7BB3E3;
   }
 }
 
@@ -135,35 +310,50 @@ All colors MUST be HSL.
     @apply border-border;
   }
 
-  body {
-    @apply bg-background text-foreground transition-colors duration-300;
+  html, body {
+    font-family: 'Aileron', system-ui, -apple-system, Segoe UI, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 
-  /* Smooth transitions for theme switching */
-  * {
-    @apply transition-colors duration-200;
+  body {
+    @apply bg-background text-foreground;
+    transition: background-color 0.3s, color 0.3s;
   }
 
-  /* Custom scrollbar */
+  code, kbd, pre, samp {
+    font-family: 'DM Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  /* Smooth theme colour transitions */
+  *, *::before, *::after {
+    transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+  }
+
+  /* Scrollbar */
   ::-webkit-scrollbar {
     width: 10px;
     height: 10px;
   }
-
   ::-webkit-scrollbar-track {
-    @apply bg-muted/30;
+    background: transparent;
   }
-
   ::-webkit-scrollbar-thumb {
-    @apply bg-muted-foreground/30 rounded-lg;
+    background: rgba(15, 60, 165, 0.15);
+    border-radius: 999px;
   }
-
   ::-webkit-scrollbar-thumb:hover {
-    @apply bg-muted-foreground/50;
+    background: rgba(15, 60, 165, 0.28);
+  }
+  .dark ::-webkit-scrollbar-thumb {
+    background: rgba(123, 179, 227, 0.15);
+  }
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background: rgba(123, 179, 227, 0.28);
   }
 
-  /* Hide scrollbar while keeping scrollability (used for horizontal tab bars on mobile) */
+  /* Suppress scrollbar without losing scroll */
   .scrollbar-none {
     scrollbar-width: none;
     -ms-overflow-style: none;
@@ -172,284 +362,452 @@ All colors MUST be HSL.
     display: none;
   }
 
-  /* Tech grid pattern background */
+  /* Indigo grid pattern */
   .bg-grid-pattern {
-    background-image: 
-      linear-gradient(to right, hsl(var(--border)) 1px, transparent 1px),
-      linear-gradient(to bottom, hsl(var(--border)) 1px, transparent 1px);
-    background-size: 40px 40px;
+    background-image:
+      linear-gradient(to right, rgba(15,60,165,.06) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(15,60,165,.06) 1px, transparent 1px);
+    background-size: 56px 56px;
+    mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, #000 30%, transparent 90%);
+    -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, #000 30%, transparent 90%);
   }
-
-  /* Particle animations */
-  @keyframes float {
-    0% {
-      transform: translateY(0) translateX(0) scale(0);
-      opacity: 0;
-    }
-    10% {
-      opacity: 1;
-    }
-    90% {
-      opacity: 1;
-    }
-    100% {
-      transform: translateY(-100vh) translateX(20px) scale(1);
-      opacity: 0;
-    }
+  .dark .bg-grid-pattern {
+    background-image:
+      linear-gradient(to right, rgba(123,179,227,.06) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(123,179,227,.06) 1px, transparent 1px);
   }
+}
 
-  /* Tech animations for landing page */
-  @keyframes scan-line {
-    0% {
-      transform: translateY(-100%);
-    }
-    100% {
-      transform: translateY(100vh);
-    }
+/* ── Animations ── */
+@layer utilities {
+  @keyframes accordion-down {
+    from { height: 0; }
+    to   { height: var(--radix-accordion-content-height); }
   }
-
-  @keyframes glow-pulse {
-    0%, 100% {
-      box-shadow: 0 0 20px hsl(var(--primary) / 0.3), 0 0 40px hsl(var(--primary) / 0.1);
-    }
-    50% {
-      box-shadow: 0 0 40px hsl(var(--primary) / 0.5), 0 0 80px hsl(var(--primary) / 0.2);
-    }
+  @keyframes accordion-up {
+    from { height: var(--radix-accordion-content-height); }
+    to   { height: 0; }
   }
-
-  @keyframes border-glow {
-    0%, 100% {
-      border-color: hsl(var(--primary) / 0.3);
-    }
-    50% {
-      border-color: hsl(var(--primary) / 0.8);
-    }
+  @keyframes shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
   }
-
   @keyframes text-shimmer {
-    0% {
-      background-position: -200% center;
-    }
-    100% {
-      background-position: 200% center;
-    }
+    to { background-position: -200% center; }
   }
-
-  @keyframes matrix-fall {
-    0% {
-      transform: translateY(-100%);
-      opacity: 1;
-    }
-    100% {
-      transform: translateY(100vh);
-      opacity: 0;
-    }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
   }
-
-  @keyframes rotate-gradient {
-    0% {
-      transform: rotate(0deg);
-    }
-    100% {
-      transform: rotate(360deg);
-    }
-  }
-
-  @keyframes typing {
-    from { width: 0; }
-    to { width: 100%; }
-  }
-
-  @keyframes blink-caret {
-    from, to { border-color: transparent; }
-    50% { border-color: hsl(var(--primary)); }
-  }
-
-  @keyframes pulse-ring {
-    0% {
-      transform: scale(0.8);
-      opacity: 1;
-    }
-    100% {
-      transform: scale(2);
-      opacity: 0;
-    }
-  }
-
-  @keyframes float-tech {
-    0%, 100% {
-      transform: translateY(0) rotate(0deg);
-    }
-    25% {
-      transform: translateY(-10px) rotate(2deg);
-    }
-    50% {
-      transform: translateY(-5px) rotate(-1deg);
-    }
-    75% {
-      transform: translateY(-15px) rotate(1deg);
-    }
-  }
-
-  @keyframes data-stream {
-    0% {
-      transform: translateX(-100%);
-      opacity: 0;
-    }
-    10% {
-      opacity: 1;
-    }
-    90% {
-      opacity: 1;
-    }
-    100% {
-      transform: translateX(100%);
-      opacity: 0;
-    }
-  }
-
   @keyframes slide-up-fade {
-    from {
-      opacity: 0;
-      transform: translateY(8px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes pulse-ring {
+    0%   { transform: scale(.6); opacity: .7; }
+    100% { transform: scale(3.4); opacity: 0; }
+  }
+  @keyframes float-particle {
+    0%   { transform: translateY(0) translateX(0) scale(0); opacity: 0; }
+    10%  { opacity: 1; }
+    90%  { opacity: 1; }
+    100% { transform: translateY(-100vh) translateX(20px) scale(1); opacity: 0; }
+  }
+  @keyframes live-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(22,163,74,.55); }
+    100% { box-shadow: 0 0 0 10px rgba(22,163,74,0); }
+  }
+  @keyframes scroll-marquee {
+    from { transform: translateX(0); }
+    to   { transform: translateX(-50%); }
+  }
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes node-blink {
+    0%, 92%, 100% { fill: var(--indigo); }
+    94%           { fill: var(--warn-raw); }
+    96%           { fill: var(--success-raw); }
+  }
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-6px); }
+  }
+  @keyframes dash {
+    to { stroke-dashoffset: -200; }
+  }
+  @keyframes line-flow {
+    to { stroke-dashoffset: -16; }
+  }
+  @keyframes bar {
+    0%, 100% { transform: scaleY(.6); }
+    50%      { transform: scaleY(1); }
+  }
+  @keyframes tick {
+    0%, 49%   { opacity: 1; }
+    50%, 100% { opacity: .25; }
+  }
+  @keyframes slide3dInFwd {
+    0%   { opacity: 0; transform: translate3d(38%, 0, -260px) rotateY(28deg); }
+    60%  { opacity: 1; }
+    100% { opacity: 1; transform: translate3d(0, 0, 0) rotateY(0deg); }
+  }
+  @keyframes slide3dInBack {
+    0%   { opacity: 0; transform: translate3d(-38%, 0, -260px) rotateY(-28deg); }
+    60%  { opacity: 1; }
+    100% { opacity: 1; transform: translate3d(0, 0, 0) rotateY(0deg); }
   }
 
-  @keyframes progress-fill {
-    from { width: 0%; }
-    to   { width: 100%; }
-  }
+  .animate-accordion-down { animation: accordion-down 0.2s ease-out; }
+  .animate-accordion-up   { animation: accordion-up 0.2s ease-out; }
+  .animate-shimmer        { animation: shimmer 3s ease-in-out infinite; }
+  .animate-text-shimmer   { animation: text-shimmer 4s linear infinite; }
+  .animate-rise           { animation: rise 0.8s var(--ease) both; }
+  .animate-slide-up-fade  { animation: slide-up-fade 0.4s ease both; }
+  .animate-pulse-ring     { animation: pulse-ring 2s ease-out infinite; }
+  .animate-slide-in       { animation: slideIn .35s var(--ease) both; }
+  .animate-float          { animation: float 3s ease-in-out infinite; }
+  .animate-bar            { animation: bar 1.4s ease-in-out infinite; }
 
-  @keyframes chart-bar-grow {
-    from { transform: scaleY(0); }
-    to   { transform: scaleY(1); }
-  }
+  /* Rise with stagger delays (landing parity) */
+  .rise     { animation: rise .8s var(--ease) both; }
+  .rise.d1  { animation-delay: .08s; }
+  .rise.d2  { animation-delay: .16s; }
+  .rise.d3  { animation-delay: .24s; }
+  .rise.d4  { animation-delay: .32s; }
 
-  .animate-scan-line {
-    animation: scan-line 8s linear infinite;
-  }
+  /* Slide-in / tick */
+  .slide-in { animation: slideIn .35s var(--ease) both; }
+  .tick-dot { animation: tick 1.4s ease-in-out infinite; }
 
-  .animate-glow-pulse {
-    animation: glow-pulse 3s ease-in-out infinite;
-  }
+  /* SVG line helpers */
+  .kdo-line        { stroke: rgba(15,60,165,.18); stroke-width: 1; fill: none; stroke-dasharray: 4 6; animation: line-flow 2.4s linear infinite; }
+  .kdo-line-active { stroke: var(--indigo); stroke-width: 1.4; }
 
-  .animate-border-glow {
-    animation: border-glow 2s ease-in-out infinite;
-  }
-
-  .animate-text-shimmer {
-    background: linear-gradient(90deg, 
-      hsl(var(--foreground)) 0%, 
-      hsl(var(--primary)) 25%, 
-      hsl(var(--foreground)) 50%,
-      hsl(var(--primary)) 75%,
-      hsl(var(--foreground)) 100%
-    );
+  /* Animated gradient text */
+  .text-gradient-indigo {
+    background: linear-gradient(120deg, #0F3CA5 0%, #577DB2 60%, #0F3CA5 120%);
     background-size: 200% auto;
-    background-clip: text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    animation: text-shimmer 3s linear infinite;
+    background-clip: text;
+    animation: text-shimmer 4s linear infinite;
   }
 
-  .animate-rotate-gradient {
-    animation: rotate-gradient 8s linear infinite;
+  /* Live dot */
+  .live-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: #16A34A;
+    box-shadow: 0 0 0 0 rgba(22,163,74,.55);
+    animation: live-pulse 1.6s ease-out infinite;
   }
 
-  .animate-float-tech {
-    animation: float-tech 6s ease-in-out infinite;
-  }
-
-  .animate-pulse-ring {
-    animation: pulse-ring 2s ease-out infinite;
-  }
-
-  .animate-data-stream {
-    animation: data-stream 10s linear infinite;
-  }
-
-  /* Hexagon clip path */
-  .clip-hexagon {
-    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
-  }
-
-  /* Cyber border */
-  .cyber-border {
-    position: relative;
-  }
-  
-  .cyber-border::before {
-    content: '';
-    position: absolute;
-    inset: -2px;
-    background: linear-gradient(90deg, 
-      hsl(var(--primary)) 0%, 
-      hsl(265 89% 62%) 25%,
-      hsl(var(--primary)) 50%,
-      hsl(265 89% 62%) 75%,
-      hsl(var(--primary)) 100%
-    );
-    background-size: 200% 100%;
-    border-radius: inherit;
-    z-index: -1;
-    animation: text-shimmer 3s linear infinite;
-  }
-
-  /* Glitch effect */
-  .glitch {
-    position: relative;
-  }
-
-  .glitch::before,
-  .glitch::after {
-    content: attr(data-text);
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-  }
-
-  .glitch::before {
-    animation: glitch-1 2s infinite linear alternate-reverse;
-    clip-path: polygon(0 0, 100% 0, 100% 45%, 0 45%);
+  /* Eyebrow / section label */
+  .kdo-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
     color: hsl(var(--primary));
   }
-
-  .glitch::after {
-    animation: glitch-2 3s infinite linear alternate-reverse;
-    clip-path: polygon(0 55%, 100% 55%, 100% 100%, 0 100%);
-    color: hsl(265 89% 62%);
+  .kdo-eyebrow::before {
+    content: "";
+    width: 18px;
+    height: 1px;
+    background: hsl(var(--primary));
   }
 
-  @keyframes glitch-1 {
-    0%, 100% { transform: translateX(0); }
-    20% { transform: translateX(-2px); }
-    40% { transform: translateX(2px); }
-    60% { transform: translateX(-1px); }
-    80% { transform: translateX(1px); }
+  /* Highlight underline */
+  .hl {
+    background-image: linear-gradient(transparent 65%, rgba(15,60,165,.18) 65%);
+    padding: 0 .08em;
   }
 
-  @keyframes glitch-2 {
-    0%, 100% { transform: translateX(0); }
-    20% { transform: translateX(2px); }
-    40% { transform: translateX(-2px); }
-    60% { transform: translateX(1px); }
-    80% { transform: translateX(-1px); }
+  /* Reduce motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition: none !important;
+    }
+  }
+}
+
+/* ── Style guards & effects ── */
+@layer components {
+
+  /* ── Density system ── */
+  :root[data-density="compact"] {
+    --d-section-y:  80px;
+    --d-section-px: 48px;
+    --d-card-pad:   22px;
+    --d-h1:         64px;
+    --d-stack:      16px;
+  }
+  :root[data-density="spacious"] {
+    --d-section-y:  160px;
+    --d-section-px: 80px;
+    --d-card-pad:   36px;
+    --d-h1:         104px;
+    --d-stack:      32px;
+  }
+  @media (max-width: 1200px) {
+    :root { --d-h1: 64px; --d-section-px: 40px; }
+  }
+  @media (max-width: 720px) {
+    :root { --d-h1: 44px; --d-section-px: 24px; --d-section-y: 72px; }
   }
 
-  /* Code background */
-  .code-bg {
-    background: repeating-linear-gradient(
-      0deg,
-      transparent,
-      transparent 24px,
-      hsl(var(--primary) / 0.03) 24px,
-      hsl(var(--primary) / 0.03) 25px
-    );
+  /* ── Layout helpers ── */
+  .kdo-section { width: 100%; padding: var(--d-section-y) var(--d-section-px); position: relative; }
+  .kdo-inner   { width: 100%; max-width: 1440px; margin: 0 auto; }
+
+  /* ── Typography classes ── */
+  .t-display, .display {
+    font-family: var(--font);
+    font-size: 32px;
+    font-weight: 900;
+    letter-spacing: -0.03em;
+    line-height: 1.05;
+    color: var(--ink);
+  }
+  .kdo-h2 {
+    font-family: var(--font);
+    font-weight: 900;
+    font-size: clamp(36px, 4.2vw, 56px);
+    letter-spacing: -0.03em;
+    line-height: 1.02;
+    color: var(--ink);
+    margin: 18px 0 0 0;
+    text-wrap: balance;
+  }
+  .kdo-sub {
+    margin: 18px 0 0 0;
+    font-size: 17px;
+    line-height: 1.55;
+    color: var(--ink-muted);
+    max-width: 620px;
+    text-wrap: pretty;
+  }
+  .kdo-mono { font-family: var(--mono); }
+  .label, .eyebrow-text {
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+  }
+
+  /* ── Card (landing parity) ── */
+  .kdo-card {
+    background: var(--surface);
+    border: 1px solid var(--border-raw);
+    border-radius: var(--r-xl);
+    box-shadow: var(--shadow-sm);
+    padding: var(--d-card-pad);
+    transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+  }
+  .kdo-card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-md);
+  }
+
+  /* ── Hero ── */
+  .kdo-hero {
+    position: relative;
+    overflow: hidden;
+    background: var(--bg);
+    min-height: 760px;
+    padding-top: 96px;
+    padding-bottom: 96px;
+  }
+  .kdo-hero-bg { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+  .kdo-hero-grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(to right, rgba(15,60,165,.06) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(15,60,165,.06) 1px, transparent 1px);
+    background-size: 56px 56px;
+    mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, #000 30%, transparent 90%);
+    -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, #000 30%, transparent 90%);
+  }
+  .dark .kdo-hero-grid {
+    background-image:
+      linear-gradient(to right, rgba(123,179,227,.06) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(123,179,227,.06) 1px, transparent 1px);
+  }
+  .kdo-hero-inner { position: relative; z-index: 2; }
+
+  /* Spotlight cursor radial */
+  .kdo-spot {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(circle 420px at var(--mx, 50%) var(--my, 40%), rgba(15,60,165,.10), transparent 70%);
+    transition: background var(--dur) var(--ease);
+    mix-blend-mode: multiply;
+  }
+  .dark .kdo-spot {
+    background: radial-gradient(circle 420px at var(--mx, 50%) var(--my, 40%), rgba(123,179,227,.08), transparent 70%);
+    mix-blend-mode: screen;
+  }
+
+  /* ── Marquee ── */
+  .kdo-marquee { display: flex; gap: 64px; animation: scroll-marquee 26s linear infinite; align-items: center; white-space: nowrap; }
+
+  /* ── Tabs ── */
+  .kdo-tabs { display: inline-flex; padding: 4px; background: var(--surface); border: 1px solid var(--border-raw); border-radius: var(--r-pill); }
+  .kdo-tab {
+    height: 32px;
+    padding: 0 16px;
+    border-radius: var(--r-pill);
+    border: none;
+    background: transparent;
+    color: var(--ink-muted);
+    font-family: var(--font);
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all var(--dur) var(--ease);
+  }
+  .kdo-tab[aria-selected="true"] { background: var(--ink); color: #fff; }
+
+  /* ── Cloud chip ── */
+  .cloud-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border-radius: var(--r-md);
+    background: var(--surface);
+    border: 1px solid var(--border-raw);
+    font-family: var(--font);
+    font-weight: 600;
+    font-size: 13px;
+  }
+
+  /* ── FAQ ── */
+  .kdo-faq details { border-bottom: 1px solid var(--border-raw); padding: 22px 0; }
+  .kdo-faq details > summary {
+    list-style: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+  .kdo-faq details > summary::-webkit-details-marker { display: none; }
+  .kdo-faq details > summary .plus {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--r-pill);
+    background: var(--indigo-pale);
+    color: var(--indigo);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: 700;
+    transition: transform var(--dur-slow) var(--ease);
+    flex-shrink: 0;
+  }
+  .kdo-faq details[open] > summary .plus { transform: rotate(45deg); }
+  .kdo-faq details > .answer {
+    margin-top: 14px;
+    color: var(--ink-muted);
+    font-size: 15px;
+    line-height: 1.65;
+    max-width: 760px;
+  }
+
+  /* ── 3D stage (hero tab transitions) ── */
+  .kdo-stage {
+    perspective: 1400px;
+    perspective-origin: 50% 50%;
+    position: relative;
+  }
+  .kdo-stage-inner {
+    transform-style: preserve-3d;
+    will-change: transform, opacity;
+    backface-visibility: hidden;
+  }
+  .kdo-stage-inner[data-dir="1"]  { animation: slide3dInFwd  640ms var(--ease) both; }
+  .kdo-stage-inner[data-dir="-1"] { animation: slide3dInBack 640ms var(--ease) both; }
+
+  /* ── Btn — indigo variant glow on hover */
+  .btn-indigo,
+  [data-variant="indigo"] {
+    background: #0F3CA5;
+    color: #fff;
+    box-shadow: 0 1px 2px rgba(15,60,165,.18);
+    transition: background 200ms, box-shadow 200ms, transform 150ms;
+  }
+  .btn-indigo:hover,
+  [data-variant="indigo"]:hover {
+    background: #0A2D7E;
+    box-shadow: 0 4px 16px rgba(15,60,165,.30);
+    transform: translateY(-1px);
+  }
+  .btn-indigo:active,
+  [data-variant="indigo"]:active {
+    background: #082660;
+    transform: translateY(0);
+    box-shadow: 0 1px 4px rgba(15,60,165,.18);
+  }
+
+  /* Frosted nav */
+  .kdo-nav-frosted {
+    background: rgba(240,244,250,.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(15,60,165,.08);
+    transition: background 300ms, border-color 300ms, box-shadow 300ms;
+  }
+  .kdo-nav-frosted.scrolled {
+    background: rgba(240,244,250,.95);
+    box-shadow: 0 2px 12px rgba(15,60,165,.08);
+  }
+  .dark .kdo-nav-frosted {
+    background: rgba(13,17,23,.85);
+    border-bottom-color: rgba(123,179,227,.08);
+  }
+
+  /* Status pills — light-mode only override guards */
+  .kdo-pill-ok      { background: #DCFCE7 !important; color: #14532D !important; }
+  .kdo-pill-warn    { background: #FEF9C3 !important; color: #713F12 !important; }
+  .kdo-pill-err     { background: #FEE2E2 !important; color: #7F1D1D !important; }
+  .kdo-pill-info    { background: #E6EEF8 !important; color: #0F3CA5 !important; }
+  .kdo-pill-ink     { background: #1A1A1A !important; color: #ffffff !important; }
+  .kdo-pill-neutral { background: #F0F4FA !important; color: #1A1A1A !important; }
+
+  /* Entrance animation for dashboard cards */
+  .kdo-enter {
+    animation: rise 0.5s cubic-bezier(.2,.7,.2,1) both;
+  }
+  .kdo-enter-1 { animation-delay: 60ms; }
+  .kdo-enter-2 { animation-delay: 120ms; }
+  .kdo-enter-3 { animation-delay: 180ms; }
+  .kdo-enter-4 { animation-delay: 240ms; }
+  .kdo-enter-5 { animation-delay: 300ms; }
+  .kdo-enter-6 { animation-delay: 360ms; }
+
+  /* Focus ring guard — always indigo */
+  *:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(15,60,165,.25);
+  }
+  .dark *:focus-visible {
+    box-shadow: 0 0 0 3px rgba(123,179,227,.30);
   }
 }

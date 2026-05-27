@@ -93,8 +93,7 @@ export default function BlogIndex() {
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
                       <span className="inline-block text-xs font-semibold uppercase tracking-widest mb-3 px-2.5 py-1 rounded-full border"
-                        style={{ background: "#E6EEF8", borderColor: "rgba(15,60,165,0.15)" }}
-                        style={{ color: '#0F3CA5', fontFamily: "'DM Mono', monospace" }}>
+                        style={{ background: "#E6EEF8", borderColor: "rgba(15,60,165,0.15)", color: '#0F3CA5', fontFamily: "'DM Mono', monospace" }}>
                         {post.tag}
                       </span>
                       <h2 className="text-xl font-bold text-slate-900 mb-2 group-hover:text-cyan-700 transition-colors leading-tight"

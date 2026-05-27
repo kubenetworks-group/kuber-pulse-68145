@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="pt-BR" data-density="default">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kodo — Kubernetes sob controle.</title>
+  <link rel="icon" href="assets/logo/kodo-symbol.png">
+  <link rel="stylesheet" href="colors_and_type.css">
+  <link rel="stylesheet" href="styles.css">
+
+  <!-- Resources only referenced as strings in JSX — lifted for the bundler -->
+  <meta name="ext-resource-dependency" content="assets/icons/arrow.svg"     data-resource-id="icon_arrow" />
+  <meta name="ext-resource-dependency" content="assets/icons/auth.svg"      data-resource-id="icon_auth" />
+  <meta name="ext-resource-dependency" content="assets/icons/cloud.svg"     data-resource-id="icon_cloud" />
+  <meta name="ext-resource-dependency" content="assets/icons/cluster.svg"   data-resource-id="icon_cluster" />
+  <meta name="ext-resource-dependency" content="assets/icons/deploy.svg"    data-resource-id="icon_deploy" />
+  <meta name="ext-resource-dependency" content="assets/icons/external.svg"  data-resource-id="icon_external" />
+  <meta name="ext-resource-dependency" content="assets/icons/finops.svg"    data-resource-id="icon_finops" />
+  <meta name="ext-resource-dependency" content="assets/icons/grid.svg"      data-resource-id="icon_grid" />
+  <meta name="ext-resource-dependency" content="assets/icons/heal.svg"      data-resource-id="icon_heal" />
+  <meta name="ext-resource-dependency" content="assets/icons/namespace.svg" data-resource-id="icon_namespace" />
+  <meta name="ext-resource-dependency" content="assets/icons/pulse.svg"     data-resource-id="icon_pulse" />
+  <meta name="ext-resource-dependency" content="assets/icons/security.svg"  data-resource-id="icon_security" />
+  <meta name="ext-resource-dependency" content="assets/icons/success.svg"   data-resource-id="icon_success" />
+  <meta name="ext-resource-dependency" content="assets/logo/kodo-symbol.png"       data-resource-id="logoInk" />
+  <meta name="ext-resource-dependency" content="assets/logo/kodo-symbol-white.png" data-resource-id="logoWhite" />
+
+  <template id="__bundler_thumbnail" data-bg-color="#F0F4FA">
+    <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+      <!-- Subtle grid backdrop -->
+      <defs>
+        <pattern id="g" x="0" y="0" width="80" height="80" patternUnits="userSpaceOnUse">
+          <path d="M 80 0 L 0 0 0 80" fill="none" stroke="#0F3CA5" stroke-width="0.6" opacity=".18"/>
+        </pattern>
+      </defs>
+      <rect width="1200" height="800" fill="#F0F4FA"/>
+      <rect width="1200" height="800" fill="url(#g)"/>
+      <!-- Three isometric containers -->
+      <g transform="translate(330 320) scale(3)">
+        <path d="M0 -50 L50 -25 L0 0 L-50 -25 Z" fill="#0F3CA5"/>
+        <path d="M-50 -25 L0 0 L0 50 L-50 25 Z" fill="#0A2D7E"/>
+        <path d="M50 -25 L0 0 L0 50 L50 25 Z" fill="#1E4FB8"/>
+      </g>
+      <g transform="translate(600 380) scale(3.4)">
+        <path d="M0 -50 L50 -25 L0 0 L-50 -25 Z" fill="#0F3CA5"/>
+        <path d="M-50 -25 L0 0 L0 50 L-50 25 Z" fill="#0A2D7E"/>
+        <path d="M50 -25 L0 0 L0 50 L50 25 Z" fill="#1E4FB8"/>
+      </g>
+      <g transform="translate(870 320) scale(3)">
+        <path d="M0 -50 L50 -25 L0 0 L-50 -25 Z" fill="#0F3CA5"/>
+        <path d="M-50 -25 L0 0 L0 50 L-50 25 Z" fill="#0A2D7E"/>
+        <path d="M50 -25 L0 0 L0 50 L50 25 Z" fill="#1E4FB8"/>
+      </g>
+      <!-- Connecting lines -->
+      <g stroke="#0F3CA5" stroke-width="2" stroke-dasharray="6 12" fill="none" opacity=".5">
+        <line x1="430" y1="320" x2="490" y2="380"/>
+        <line x1="710" y1="380" x2="770" y2="320"/>
+      </g>
+      <!-- Wordmark -->
+      <text x="600" y="640" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="84" fill="#1A1A1A" letter-spacing="-3">Kodo</text>
+      <text x="600" y="700" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-weight="500" font-size="22" fill="#6B6B6B" letter-spacing="2">KUBERNETES SOB CONTROLE</text>
+    </svg>
+  </template>
+</head>
+<body id="top">
+  <div id="app"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel" src="tweaks-panel.jsx"></script>
+  <script type="text/babel" src="primitives-bundle.jsx"></script>
+  <script type="text/babel" src="chrome-bundle.jsx"></script>
+  <script type="text/babel" src="hero.jsx"></script>
+  <script type="text/babel" src="features.jsx"></script>
+  <script type="text/babel" src="how-integrations.jsx"></script>
+  <script type="text/babel" src="pricing-faq.jsx"></script>
+
+  <script type="text/babel">
+    const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+      "density": "spacious",
+      "heroAccent": "ink",
+      "showLogos": true
+    }/*EDITMODE-END*/;
+
+    function App() {
+      const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+
+      React.useEffect(() => {
+        document.documentElement.setAttribute('data-density', t.density);
+      }, [t.density]);
+
+      React.useEffect(() => {
+        const accents = {
+          indigo: { primary: '#0F3CA5', dark: '#0A2D7E', pale: '#E6EEF8' },
+          ink:    { primary: '#1A1A1A', dark: '#000000', pale: '#E4E4E4' },
+        };
+        const a = accents[t.heroAccent] || accents.indigo;
+        document.documentElement.style.setProperty('--indigo', a.primary);
+        document.documentElement.style.setProperty('--indigo-dark', a.dark);
+        document.documentElement.style.setProperty('--indigo-pale', a.pale);
+        document.documentElement.style.setProperty('--info', a.primary);
+        document.documentElement.style.setProperty('--info-fg', a.primary);
+        document.documentElement.style.setProperty('--info-bg', a.pale);
+        document.documentElement.style.setProperty('--primary', a.primary);
+      }, [t.heroAccent]);
+
+      return (
+        <div data-screen-label="01 Kodo landing">
+          <Nav />
+          <main>
+            <Hero />
+            <Features />
+            <HowItWorks />
+            <Integrations />
+            <Pricing />
+            <Faq />
+            <FinalCTA />
+          </main>
+          <Footer />
+
+          <TweaksPanel title="Tweaks">
+            <TweakSection label="Densidade">
+              <TweakRadio
+                label="Espaçamento"
+                value={t.density}
+                onChange={v => setTweak('density', v)}
+                options={[
+                  { value: 'compact',  label: 'Compact' },
+                  { value: 'default',  label: 'Padrão' },
+                  { value: 'spacious', label: 'Aberto' },
+                ]}
+              />
+            </TweakSection>
+            <TweakSection label="Acento">
+              <TweakRadio
+                label="Cor primária"
+                value={t.heroAccent}
+                onChange={v => setTweak('heroAccent', v)}
+                options={[
+                  { value: 'indigo', label: 'Indigo' },
+                  { value: 'ink',    label: 'Ink' },
+                ]}
+              />
+            </TweakSection>
+          </TweaksPanel>
+        </div>
+      );
+    }
+    ReactDOM.createRoot(document.getElementById('app')).render(<App />);
+  </script>
+</body>
+</html>

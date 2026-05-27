@@ -28,14 +28,15 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
 
-    // Check admin — accept either profiles.role = 'admin' OR the caller is a superadmin in auth.users
-    const { data: profile } = await admin
-      .from('profiles')
+    // Check admin via user_roles table (same logic as has_role RPC)
+    const { data: roleRow } = await admin
+      .from('user_roles')
       .select('role')
-      .eq('id', user.id)
-      .single();
-    console.log(`Caller ${user.email} has role: ${profile?.role}`);
-    if (profile?.role !== 'admin') return json({ error: `Forbidden — role is "${profile?.role ?? 'null'}", expected "admin"` }, 403);
+      .eq('user_id', user.id)
+      .eq('role', 'admin')
+      .maybeSingle();
+    console.log(`Caller ${user.email} is admin: ${!!roleRow}`);
+    if (!roleRow) return json({ error: 'Forbidden — admin role required' }, 403);
 
     const { lead_id, email: emailParam } = await req.json();
 

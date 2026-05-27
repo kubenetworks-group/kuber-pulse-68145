@@ -108,7 +108,7 @@ export const Footer = () => {
               { icon: MapPin,  text: "São Paulo, SP — Brasil" },
             ].map(({ icon: Icon, text }) => (
               <li key={text} className="flex items-start gap-3">
-                <Icon className="w-4 h-4 mt-0.5 shrink-0" style={{ color: "#22d3ee" }} />
+                <Icon className="w-4 h-4 mt-0.5 shrink-0" style={{ color: "#7BB3E3" }} />
                 <span className="text-sm" style={{ color: "rgba(255,255,255,0.45)" }}>{text}</span>
               </li>
             ))}

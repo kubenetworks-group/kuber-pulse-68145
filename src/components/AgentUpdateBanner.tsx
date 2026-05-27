@@ -123,10 +123,10 @@ export function AgentUpdateBanner() {
     <div
       className="rounded-xl border px-4 py-3 relative"
       style={{
-        borderColor: "#6366f130",
-        borderLeftColor: "#6366f1",
+        borderColor: "#0F3CA530",
+        borderLeftColor: "#0F3CA5",
         borderLeftWidth: "3px",
-        background: "#6366f108",
+        background: "#0F3CA508",
       }}
     >
       <button
@@ -138,15 +138,15 @@ export function AgentUpdateBanner() {
       </button>
 
       <div className="flex items-start gap-2.5 pr-8">
-        <ArrowUpCircle className="h-4 w-4 shrink-0 mt-0.5" style={{ color: "#6366f1" }} />
+        <ArrowUpCircle className="h-4 w-4 shrink-0 mt-0.5" style={{ color: "#0F3CA5" }} />
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-xs font-mono font-semibold" style={{ color: "#6366f1" }}>
+            <span className="text-xs font-mono font-semibold" style={{ color: "#0F3CA5" }}>
               Atualização Disponível
             </span>
             <span
               className="text-[10px] font-mono px-1.5 py-0.5 rounded border"
-              style={{ color: "#6366f1", borderColor: "#6366f130", background: "#6366f110" }}
+              style={{ color: "#0F3CA5", borderColor: "#0F3CA530", background: "#0F3CA510" }}
             >
               {updateInfo.current_version} → {updateInfo.latest_version}
             </span>

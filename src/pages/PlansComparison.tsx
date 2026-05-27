@@ -158,7 +158,7 @@ export default function PlansComparison() {
             </div>
             <h1 className="text-4xl sm:text-5xl font-bold mb-6">
               Escolha o plano ideal para seu{" "}
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-violet-500">
+              <span className="text-transparent bg-clip-text" style={{ backgroundImage: 'linear-gradient(120deg, #0F3CA5, #577DB2)' }}>
                 Kubernetes
               </span>
             </h1>
@@ -175,7 +175,7 @@ export default function PlansComparison() {
                 key={plan.name}
                 className={`p-6 text-center ${
                   plan.highlight
-                    ? "bg-gradient-to-br from-primary/10 to-violet-500/10 border-primary/30"
+                    ? "bg-gradient-to-br from-primary/10 to-primary/5 border-primary/30"
                     : "bg-card"
                 }`}
               >
@@ -236,7 +236,7 @@ export default function PlansComparison() {
 
           {/* CTA Section */}
           <div className="max-w-2xl mx-auto mt-16 text-center">
-            <Card className="p-8 bg-gradient-to-br from-primary/5 to-violet-500/5 border-primary/20">
+            <Card className="p-8 bg-gradient-to-br from-primary/5 to-primary/5 border-primary/20">
               <Lock className="w-12 h-12 text-primary mx-auto mb-4" />
               <h2 className="text-2xl font-bold mb-3">
                 Comece com 30 dias de trial Pro

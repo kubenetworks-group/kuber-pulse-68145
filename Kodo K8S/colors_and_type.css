@@ -1,0 +1,234 @@
+/* ============================================================
+   Kodo Design System — Colors & Type
+   Tema: Indigo Dusk · Aileron + DM Mono
+   ============================================================ */
+
+/* ---------- Fonts ---------- */
+@font-face {
+  font-family: 'Aileron';
+  src: url('fonts/Aileron-Light.otf') format('opentype');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Aileron';
+  src: url('fonts/Aileron-Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Aileron';
+  src: url('fonts/Aileron-Italic.otf') format('opentype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Aileron';
+  src: url('fonts/Aileron-SemiBold.otf') format('opentype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Aileron';
+  src: url('fonts/Aileron-Bold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Aileron';
+  src: url('fonts/Aileron-Heavy.otf') format('opentype');
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Aileron';
+  src: url('fonts/Aileron-Black.otf') format('opentype');
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'DM Mono';
+  src: url('fonts/DMMono-Light.ttf') format('truetype');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'DM Mono';
+  src: url('fonts/DMMono-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'DM Mono';
+  src: url('fonts/DMMono-Medium.ttf') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ---------- Tokens ---------- */
+:root {
+  /* Indigo palette */
+  --primary:        #0F3CA5;
+  --indigo:         #0F3CA5;
+  --indigo-dark:    #0A5B93;
+  --indigo-mid:     #577DB2;
+  --indigo-pale:    #E6EEF8;
+
+  /* Ink (text + base) */
+  --ink:            #1A1A1A;
+  --ink-2:          #333333;
+  --ink-muted:      #6B6B6B;
+  --ink-light:      #9B9B9B;
+
+  /* Backgrounds */
+  --bg:             #F0F4FA;   /* indigo white — page bg */
+  --bg-2:           #E4EAF5;   /* deeper indigo bg */
+  --off-white:      #F5F5F5;   /* neutral alt page bg */
+  --surface:        #FFFFFF;   /* cards, modals, dropdowns */
+
+  /* Borders */
+  --border:         rgba(0,0,0,.08);
+  --border-md:      rgba(0,0,0,.14);
+  --border-strong:  rgba(0,0,0,.20);
+
+  /* Semantic */
+  --success:        #16A34A;
+  --success-bg:    #DCFCE7;
+  --success-fg:    #14532D;
+  --warn:           #CA8A04;
+  --warn-bg:       #FEF9C3;
+  --warn-fg:       #713F12;
+  --danger:         #DC2626;
+  --danger-bg:     #FEE2E2;
+  --danger-fg:     #7F1D1D;
+  --info:           #0F3CA5;
+  --info-bg:       #E6EEF8;
+  --info-fg:       #0F3CA5;
+
+  /* Radii */
+  --r-xs:  6px;
+  --r-sm:  8px;
+  --r:     12px;
+  --r-md:  14px;
+  --r-lg:  16px;
+  --r-xl:  20px;
+  --r-pill: 999px;
+
+  /* Spacing scale */
+  --sp-xs:  4px;
+  --sp-sm:  8px;
+  --sp-md:  12px;
+  --sp-lg:  16px;
+  --sp-xl:  24px;
+  --sp-2xl: 32px;
+  --sp-3xl: 48px;
+  --sp-4xl: 64px;
+
+  /* Elevation */
+  --shadow-sm:  0 1px 2px rgba(15,60,165,.05), 0 1px 1px rgba(0,0,0,.04);
+  --shadow-md:  0 4px 12px rgba(15,60,165,.08), 0 1px 2px rgba(0,0,0,.04);
+  --shadow-lg:  0 16px 40px rgba(15,60,165,.12), 0 2px 6px rgba(0,0,0,.05);
+  --shadow-pop: 0 24px 60px rgba(15,60,165,.18);
+
+  /* Focus ring */
+  --ring:       0 0 0 3px rgba(15,60,165,.25);
+
+  /* Motion */
+  --ease:       cubic-bezier(.2,.7,.2,1);
+  --dur-fast:   120ms;
+  --dur:        200ms;
+  --dur-slow:   320ms;
+
+  /* Typography */
+  --font:       'Aileron', system-ui, -apple-system, Segoe UI, sans-serif;
+  --mono:       'DM Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Type scale (px) */
+  --t-display: 32px;  --t-display-w: 900; --t-display-track: -0.03em;
+  --t-h1:      24px;  --t-h1-w:      700; --t-h1-track:      -0.025em;
+  --t-h2:      18px;  --t-h2-w:      600; --t-h2-track:      -0.02em;
+  --t-h3:      15px;  --t-h3-w:      500; --t-h3-track:      -0.01em;
+  --t-body:    13px;  --t-body-w:    400; --t-body-lh:       1.7;
+  --t-small:   11px;  --t-small-w:   400;
+  --t-mono:    11px;  --t-mono-w:    400;
+  --t-label:    9px;  --t-label-w:   500; --t-label-track:    0.10em;
+}
+
+/* ---------- Base ---------- */
+html, body {
+  font-family: var(--font);
+  color: var(--ink);
+  background: var(--bg);
+  font-size: var(--t-body);
+  line-height: var(--t-body-lh);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ---------- Semantic type ---------- */
+.t-display, .display {
+  font-family: var(--font);
+  font-size: var(--t-display);
+  font-weight: var(--t-display-w);
+  letter-spacing: var(--t-display-track);
+  line-height: 1.05;
+  color: var(--ink);
+}
+h1, .h1 {
+  font-family: var(--font);
+  font-size: var(--t-h1);
+  font-weight: var(--t-h1-w);
+  letter-spacing: var(--t-h1-track);
+  line-height: 1.15;
+  color: var(--ink);
+  margin: 0;
+}
+h2, .h2 {
+  font-family: var(--font);
+  font-size: var(--t-h2);
+  font-weight: var(--t-h2-w);
+  letter-spacing: var(--t-h2-track);
+  line-height: 1.25;
+  color: var(--ink);
+  margin: 0;
+}
+h3, .h3 {
+  font-family: var(--font);
+  font-size: var(--t-h3);
+  font-weight: var(--t-h3-w);
+  line-height: 1.3;
+  color: var(--ink);
+  margin: 0;
+}
+p, .body {
+  font-size: var(--t-body);
+  line-height: var(--t-body-lh);
+  color: var(--ink-muted);
+  margin: 0;
+}
+.small {
+  font-size: var(--t-small);
+  color: var(--ink-muted);
+}
+.mono, code, kbd, pre, samp {
+  font-family: var(--mono);
+  font-size: var(--t-mono);
+  font-weight: var(--t-mono-w);
+}
+.label, .eyebrow {
+  font-size: var(--t-label);
+  font-weight: var(--t-label-w);
+  letter-spacing: var(--t-label-track);
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}

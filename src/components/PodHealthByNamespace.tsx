@@ -25,9 +25,9 @@ interface NamespaceHealth {
 }
 
 const NAMESPACE_COLORS = [
-  "var(--kodo-brand)", "#6366f1", "var(--kodo-warn)", "#8b5cf6",
-  "#06b6d4", "#ec4899", "#14b8a6", "#f97316",
-  "#3b82f6", "#10b981",
+  "var(--kodo-brand)", "#577DB2", "var(--kodo-warn)", "#0A5B93",
+  "#16A34A", "#DC2626", "#0F3CA5", "#CA8A04",
+  "#577DB2", "#16A34A",
 ];
 
 const POD_STATUS_MAP: Record<string, string> = {

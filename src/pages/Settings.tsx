@@ -8,13 +8,13 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/AuthContext";
-import { useSubscription, PLAN_LIMITS } from "@/contexts/SubscriptionContext";
+import { useSubscription, PLAN_LIMITS, TRIAL_LIMITS } from "@/contexts/SubscriptionContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Database, Loader2, Sparkles, GraduationCap, Crown, Clock, Brain, Server, User, Check, Shield, MessageSquare, XCircle, Info, FileText, Lock, Download, Trash2, ExternalLink } from "lucide-react";
 import { seedDemoData, deleteDemoData, generateAISavings } from "@/services/demoDataSeeder";
 import { AIUsageWidget } from "@/components/AIUsageWidget";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { AvatarUpload } from "@/components/AvatarUpload";
 import { MFASetup } from "@/components/MFASetup";
 import { useAdminCheck } from "@/hooks/useAdminCheck";
@@ -38,6 +38,8 @@ const Settings = () => {
   const { subscription, currentPlan, isTrialActive, daysLeftInTrial, planLimits, isReadOnly, changePlan } = useSubscription();
   const { isAdmin } = useAdminCheck();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const initialTab = searchParams.get('tab') || 'profile';
   const [loading, setLoading] = useState(false);
   const [demoLoading, setDemoLoading] = useState(false);
   const [demoDeleteLoading, setDemoDeleteLoading] = useState(false);
@@ -280,24 +282,24 @@ const Settings = () => {
     }
   };
 
-  const plans = [
-    {
-      name: "Free",
-      price: "R$ 0",
-      period: "/mês",
-      features: ["1 cluster", "10 análises de IA/mês", "7 dias de histórico", "Suporte por email"],
-      current: currentPlan === 'free',
-      plan: 'free' as const,
-    },
-    {
-      name: "Pro",
-      price: "R$ 250",
-      period: "/mês",
-      features: ["10 clusters", "Análises de IA ilimitadas", "90 dias de histórico", "Auto-healing", "Suporte prioritário"],
-      current: currentPlan === 'pro',
-      plan: 'pro' as const,
-      popular: true,
-    },
+  const isProActive = isAdmin || (currentPlan === 'pro' && !isTrialActive);
+
+  const planComparisonRows: { feature: string; trial: string | boolean; pro: string | boolean }[] = [
+    { feature: "Clusters",                   trial: "1",             pro: `${PLAN_LIMITS.pro.clusters}` },
+    { feature: "Dashboard",                  trial: true,            pro: true },
+    { feature: "AI Monitor",                 trial: true,            pro: true },
+    { feature: "Kubernetes",                 trial: true,            pro: true },
+    { feature: "Agents",                     trial: true,            pro: true },
+    { feature: "Configurações",              trial: true,            pro: true },
+    { feature: "Análises de IA / mês",       trial: `${TRIAL_LIMITS.aiAnalysesPerMonth}`, pro: "Ilimitado" },
+    { feature: "Mensagens de chat / mês",    trial: `${TRIAL_LIMITS.chatMessagesPerMonth}`, pro: "Ilimitado" },
+    { feature: "Análises de Storage / mês",  trial: `${TRIAL_LIMITS.storageAnalysesPerMonth}`, pro: `${PLAN_LIMITS.pro.storageAnalysesPerMonth}` },
+    { feature: "Auto-healing",               trial: true,            pro: true },
+    { feature: "Retenção de histórico",      trial: "7 dias",        pro: "90 dias" },
+    { feature: "FinOps",                     trial: false,           pro: true },
+    { feature: "Plataforma Dev",             trial: false,           pro: true },
+    { feature: "Backup & Migração",          trial: false,           pro: true },
+    { feature: "Painel de Risco",            trial: false,           pro: true },
   ];
 
   return (
@@ -316,7 +318,7 @@ const Settings = () => {
       </div>
 
       <div className="px-6 py-8">
-        <Tabs defaultValue="profile" className="flex flex-col lg:flex-row gap-8">
+        <Tabs defaultValue={initialTab} className="flex flex-col lg:flex-row gap-8">
 
           {/* ── Sidebar ── */}
           <div className="lg:w-64 shrink-0 space-y-3">
@@ -392,8 +394,8 @@ const Settings = () => {
 
             <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm">
               <div className="flex items-center gap-3 mb-5">
-                <div className="p-2 rounded-xl bg-violet-50 dark:bg-violet-900/30 border border-violet-100 dark:border-violet-800">
-                  <User className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+                <div className="p-2 rounded-xl bg-primary/5 dark:bg-primary/10 border border-primary/20 dark:border-primary/30">
+                  <User className="w-4 h-4 text-primary" />
                 </div>
                 <h3 className="font-semibold text-slate-900 dark:text-white">Informações do Perfil</h3>
               </div>
@@ -473,6 +475,8 @@ const Settings = () => {
 
           {/* Plans Tab */}
           <TabsContent value="upgrade" className="space-y-5 mt-0">
+
+            {/* Current plan status card */}
             <div className="rounded-2xl border border-amber-200/60 dark:border-amber-800/40 bg-gradient-to-br from-amber-50/60 to-orange-50/30 dark:from-amber-900/20 dark:to-orange-900/10 p-6 shadow-sm">
               <div className="flex items-start gap-4">
                 <div className="p-3 rounded-2xl bg-amber-100 dark:bg-amber-900/40 border border-amber-200 dark:border-amber-800">
@@ -480,9 +484,10 @@ const Settings = () => {
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 flex-wrap mb-3">
-                    <h3 className="font-semibold text-slate-900 dark:text-white">Seu Plano</h3>
-                    <Badge variant="secondary" className="capitalize">{subscription?.plan || 'free'}</Badge>
-                    {isTrialActive && <Badge className="bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/40 dark:text-amber-400">Trial · {daysLeftInTrial}d</Badge>}
+                    <h3 className="font-semibold text-slate-900 dark:text-white">Seu Plano Atual</h3>
+                    {isTrialActive && <Badge className="bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/40 dark:text-amber-400">Trial · {daysLeftInTrial} dias restantes</Badge>}
+                    {isProActive && !isAdmin && <Badge className="bg-primary/10 text-primary border-primary/20">PRO Ativo</Badge>}
+                    {isAdmin && <Badge variant="secondary">Admin</Badge>}
                     {isReadOnly && <Badge variant="destructive">Somente leitura</Badge>}
                   </div>
                   <div className="grid gap-3 sm:grid-cols-3">
@@ -490,7 +495,9 @@ const Settings = () => {
                       <Brain className="w-4 h-4 text-blue-500 shrink-0" />
                       <div className="flex-1 min-w-0">
                         <p className="text-xs text-slate-400">Análises IA</p>
-                        <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{subscription?.ai_analyses_used || 0} / {planLimits.aiAnalysesPerMonth === Infinity ? '∞' : planLimits.aiAnalysesPerMonth}</p>
+                        <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                          {subscription?.ai_analyses_used || 0} / {planLimits.aiAnalysesPerMonth === Infinity ? '∞' : planLimits.aiAnalysesPerMonth}
+                        </p>
                         {planLimits.aiAnalysesPerMonth !== Infinity && <Progress value={aiUsagePercent} className="h-1 mt-1" />}
                       </div>
                     </div>
@@ -498,11 +505,11 @@ const Settings = () => {
                       <Server className="w-4 h-4 text-emerald-500 shrink-0" />
                       <div>
                         <p className="text-xs text-slate-400">Clusters</p>
-                        <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{isTrialActive ? `Até ${PLAN_LIMITS.pro.clusters} (trial)` : planLimits.clusters === Infinity ? 'Ilimitado' : `Até ${planLimits.clusters}`}</p>
+                        <p className="text-sm font-medium text-slate-800 dark:text-slate-200">Até {planLimits.clusters === Infinity ? '∞' : planLimits.clusters}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-3 p-3 rounded-xl bg-white/70 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700">
-                      <Clock className="w-4 h-4 text-violet-500 shrink-0" />
+                      <Clock className="w-4 h-4 text-primary shrink-0" />
                       <div>
                         <p className="text-xs text-slate-400">Histórico</p>
                         <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{planLimits.historyRetentionDays} dias</p>
@@ -512,55 +519,123 @@ const Settings = () => {
                   {isTrialActive && (
                     <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200/50 dark:border-amber-800/40 mt-3">
                       <Info className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
-                      <p className="text-xs text-amber-700 dark:text-amber-400">Após o trial, seu plano será <strong>{subscription?.plan || 'free'}</strong> com <strong>{PLAN_LIMITS[subscription?.plan || 'free'].clusters} cluster</strong> e <strong>{PLAN_LIMITS[subscription?.plan || 'free'].aiAnalysesPerMonth} análises/mês</strong>.</p>
+                      <p className="text-xs text-amber-700 dark:text-amber-400">
+                        Após o trial, funcionalidades avançadas serão bloqueadas. Assine o PRO para manter acesso completo.
+                      </p>
                     </div>
                   )}
                 </div>
               </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              {plans.map((plan) => (
-                <div key={plan.name} className={`relative rounded-2xl border p-6 shadow-sm ${plan.popular ? 'border-primary/40 bg-gradient-to-br from-primary/3 to-primary/8 dark:from-primary/10 dark:to-primary/5' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800'} ${plan.current ? 'ring-2 ring-primary/30' : ''}`}>
-                  {plan.popular && <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-xs font-semibold text-white bg-primary px-3 py-1 rounded-full">Mais Popular</span>}
-                  <div className="mb-5">
-                    <h3 className="text-base font-bold text-slate-900 dark:text-white">{plan.name}</h3>
-                    <div className="mt-1"><span className="text-2xl font-black text-slate-900 dark:text-white">{plan.price}</span><span className="text-slate-400 text-sm">{plan.period}</span></div>
-                  </div>
-                  <ul className="space-y-2 mb-5">
-                    {plan.features.map((f, i) => (
-                      <li key={i} className="flex items-center gap-2.5 text-sm text-slate-600 dark:text-slate-300">
-                        <div className="w-4 h-4 rounded-full bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center shrink-0">
-                          <Check className="w-2.5 h-2.5 text-emerald-600" />
-                        </div>{f}
-                      </li>
+            {/* Plan comparison table */}
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm overflow-hidden">
+              <div className="p-5 border-b border-slate-100 dark:border-slate-700">
+                <h3 className="font-semibold text-slate-900 dark:text-white">Comparativo de Planos</h3>
+                <p className="text-sm text-slate-400 mt-0.5">Trial de 30 dias vs. Plano PRO</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100 dark:border-slate-700">
+                      <th className="text-left px-5 py-3 font-medium text-slate-500 dark:text-slate-400 w-1/2">Funcionalidade</th>
+                      <th className="text-center px-4 py-3 font-semibold text-slate-700 dark:text-slate-200 w-1/4">
+                        <span className="flex items-center justify-center gap-1.5">
+                          <span className="inline-block w-2 h-2 rounded-full bg-amber-400" />
+                          Trial (30 dias)
+                        </span>
+                      </th>
+                      <th className="text-center px-4 py-3 font-semibold text-primary w-1/4">
+                        <span className="flex items-center justify-center gap-1.5">
+                          <Crown className="w-3.5 h-3.5" />
+                          PRO
+                        </span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50 dark:divide-slate-700/60">
+                    {planComparisonRows.map((row) => (
+                      <tr key={row.feature} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/20 transition-colors">
+                        <td className="px-5 py-3 text-slate-700 dark:text-slate-300 font-medium">{row.feature}</td>
+                        <td className="px-4 py-3 text-center">
+                          {typeof row.trial === 'boolean' ? (
+                            row.trial
+                              ? <Check className="w-4 h-4 text-emerald-500 mx-auto" />
+                              : <span className="text-slate-300 dark:text-slate-600 text-base leading-none">—</span>
+                          ) : (
+                            <span className="text-slate-700 dark:text-slate-300">{row.trial}</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {typeof row.pro === 'boolean' ? (
+                            row.pro
+                              ? <Check className="w-4 h-4 text-emerald-500 mx-auto" />
+                              : <span className="text-slate-300 dark:text-slate-600 text-base leading-none">—</span>
+                          ) : (
+                            <span className="font-medium text-primary">{row.pro}</span>
+                          )}
+                        </td>
+                      </tr>
                     ))}
-                  </ul>
-                  <Button className="w-full" variant={plan.current ? "outline" : plan.popular ? "default" : "secondary"} disabled={plan.current}>
-                    {plan.current ? "Plano Atual" : "Escolher Plano"}
-                  </Button>
+                  </tbody>
+                </table>
+              </div>
+              {!isProActive && (
+                <div className="p-5 border-t border-slate-100 dark:border-slate-700 bg-gradient-to-r from-primary/3 to-primary/5 dark:from-primary/10 dark:to-primary/5">
+                  <div className="flex items-center justify-between gap-4 flex-wrap">
+                    <div>
+                      <p className="font-semibold text-slate-900 dark:text-white">Plano PRO</p>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">4 clusters · IA ilimitada · Todas as features</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <span className="text-2xl font-black text-slate-900 dark:text-white">R$ 250</span>
+                        <span className="text-slate-400 text-sm">/mês</span>
+                      </div>
+                      <Button
+                        className="gap-2 bg-primary hover:bg-primary/90"
+                        onClick={async () => {
+                          try {
+                            const { data: { session } } = await supabase.auth.getSession();
+                            const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-checkout-session`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+                              body: JSON.stringify({ plan: 'pro' }),
+                            });
+                            const { url } = await res.json();
+                            if (url) window.location.href = url;
+                          } catch {
+                            toast.error('Erro ao iniciar checkout. Tente novamente.');
+                          }
+                        }}
+                      >
+                        <Crown className="w-4 h-4" />
+                        Assinar PRO
+                      </Button>
+                    </div>
+                  </div>
                 </div>
-              ))}
+              )}
             </div>
 
-            {currentPlan === 'pro' && (
+            {isProActive && !isAdmin && (
               <div className="rounded-2xl border border-red-200/60 dark:border-red-800/40 bg-red-50/40 dark:bg-red-900/10 p-6">
                 <div className="flex items-start gap-4">
                   <div className="p-3 rounded-2xl bg-red-100 dark:bg-red-900/40 border border-red-200 dark:border-red-800"><XCircle className="h-5 w-5 text-red-600 dark:text-red-400" /></div>
                   <div className="flex-1">
-                    <h3 className="font-semibold text-slate-900 dark:text-white mb-1">Cancelar Plano Pro</h3>
-                    <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Ao cancelar, você perderá acesso aos recursos premium. Plano será revertido para Free.</p>
+                    <h3 className="font-semibold text-slate-900 dark:text-white mb-1">Cancelar Plano PRO</h3>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Ao cancelar, você perderá acesso às features avançadas. O plano será revertido para Free.</p>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button variant="destructive" className="gap-2"><XCircle className="w-4 h-4" />Cancelar Plano Pro</Button>
+                        <Button variant="destructive" className="gap-2"><XCircle className="w-4 h-4" />Cancelar Plano PRO</Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
                           <AlertDialogTitle>Tem certeza que deseja cancelar?</AlertDialogTitle>
-                          <AlertDialogDescription>Esta ação irá reverter seu plano para o Free. Você perderá acesso a: análises ilimitadas, até 10 clusters, auto-healing, 90 dias de histórico e suporte prioritário.</AlertDialogDescription>
+                          <AlertDialogDescription>Esta ação irá reverter seu plano para o Free. Você perderá acesso a: IA ilimitada, até {PLAN_LIMITS.pro.clusters} clusters, FinOps, Plataforma Dev, Backup & Migração, Painel de Risco, 90 dias de histórico e suporte prioritário.</AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
-                          <AlertDialogCancel>Manter Plano Pro</AlertDialogCancel>
+                          <AlertDialogCancel>Manter Plano PRO</AlertDialogCancel>
                           <AlertDialogAction onClick={handleCancelPlan} disabled={cancelLoading} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
                             {cancelLoading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Cancelando...</> : "Sim, cancelar plano"}
                           </AlertDialogAction>
@@ -679,9 +754,9 @@ const Settings = () => {
                   </div>
                 </div>
               </div>
-              <div className="rounded-2xl border border-violet-200/50 dark:border-violet-800/40 bg-gradient-to-br from-violet-50/60 to-purple-50/30 dark:from-violet-900/20 dark:to-purple-900/10 p-6 shadow-sm">
+              <div className="rounded-2xl border border-primary/20 dark:border-primary/30 bg-gradient-to-br from-primary/5 to-primary/3 dark:from-primary/10 dark:to-primary/5 p-6 shadow-sm">
                 <div className="flex items-start gap-4">
-                  <div className="p-3 rounded-2xl bg-violet-100 dark:bg-violet-900/40 border border-violet-200 dark:border-violet-800"><GraduationCap className="h-5 w-5 text-violet-600 dark:text-violet-400" /></div>
+                  <div className="p-3 rounded-2xl bg-primary/10 dark:bg-primary/20 border border-primary/20 dark:border-primary/30"><GraduationCap className="h-5 w-5 text-primary" /></div>
                   <div className="flex-1">
                     <h3 className="font-semibold text-slate-900 dark:text-white mb-1">Tutorial de Boas-Vindas</h3>
                     <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Reveja o tutorial interativo com todas as funcionalidades do Kodo.</p>

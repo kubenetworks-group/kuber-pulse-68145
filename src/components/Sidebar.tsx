@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useTranslation } from "react-i18next";
@@ -36,6 +37,7 @@ import {
   Globe,
   FileText,
   GitBranch,
+  Lock,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -140,6 +142,7 @@ const K8sSubGroup = ({ label, items, collapsed, onNavigate, onCollapse, matchFn 
 
 export const Sidebar = ({ collapsed = false, onNavigate, onToggleCollapse, onCollapse }: SidebarProps) => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { signOut } = useAuth();
   const { t } = useTranslation();
   const { isAdmin } = useAdminCheck();
@@ -151,7 +154,7 @@ export const Sidebar = ({ collapsed = false, onNavigate, onToggleCollapse, onCol
   const isRiskActive = location.pathname.startsWith("/risk");
   const [riskOpen, setRiskOpen] = useState(isRiskActive);
 
-  const isPro = currentPlan === 'pro' && !isTrialActive;
+  const isProActive = isAdmin || (currentPlan === 'pro' && !isTrialActive);
 
   const navigationBefore = [
     { name: t('common.dashboard'), href: "/dashboard", icon: LayoutDashboard },
@@ -159,18 +162,57 @@ export const Sidebar = ({ collapsed = false, onNavigate, onToggleCollapse, onCol
 
   const navigationAfter = [
     { name: t('common.aiMonitor'), href: "/ai-monitor", icon: Bot },
-    ...(isPro ? [{ name: "FinOps", href: "/ai-savings", icon: Sparkles }] : []),
-    { name: "Plataforma Dev",      href: "/developer",  icon: Code2 },
     { name: t('common.clusters'),  href: "/clusters",   icon: Server },
     { name: t('common.agents'),    href: "/agents",     icon: Bot },
-    { name: "Backup & Migração",   href: "/migration",  icon: Archive },
     { name: t('common.settings'),  href: "/settings",   icon: Settings },
     ...(isAdmin ? [{ name: "Admin", href: "/admin",     icon: Shield }] : []),
+  ];
+
+  const proOnlyItems = [
+    { name: "FinOps",          href: "/ai-savings", icon: Sparkles },
+    { name: "Plataforma Dev",  href: "/developer",  icon: Code2 },
+    { name: "Backup & Migração", href: "/migration", icon: Archive },
   ];
 
   const handleClick = () => {
     onNavigate?.();
     if (window.innerWidth >= 1024 && !collapsed) onCollapse?.();
+  };
+
+  const renderLockedNavItem = (item: { name: string; href: string; icon: React.ElementType }) => {
+    const Icon = item.icon;
+    if (collapsed) {
+      return (
+        <Tooltip key={item.href} delayDuration={0}>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              className="w-full justify-center px-2 opacity-50 cursor-pointer"
+              onClick={() => navigate('/settings?tab=upgrade')}
+            >
+              <Icon className="w-4 h-4 flex-shrink-0" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right">{item.name} · Apenas PRO</TooltipContent>
+        </Tooltip>
+      );
+    }
+    return (
+      <div key={item.href}>
+        <Button
+          variant="ghost"
+          className="w-full justify-start gap-3 transition-all opacity-50 cursor-pointer"
+          onClick={() => navigate('/settings?tab=upgrade')}
+        >
+          <Icon className="w-4 h-4 flex-shrink-0" />
+          <span className="flex-1 text-left">{item.name}</span>
+          <span className="flex items-center gap-1">
+            <Lock className="w-3 h-3" />
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-semibold">PRO</Badge>
+          </span>
+        </Button>
+      </div>
+    );
   };
 
   const renderNavItem = (item: { name: string; href: string; icon: React.ElementType }) => {
@@ -229,39 +271,69 @@ export const Sidebar = ({ collapsed = false, onNavigate, onToggleCollapse, onCol
         {navigationBefore.map(renderNavItem)}
 
         {/* Painel de Risco group */}
-        {collapsed ? (
-          <Tooltip key="risk-group" delayDuration={0}>
-            <TooltipTrigger asChild>
-              <Link to="/risk" onClick={handleClick}>
+        {isProActive ? (
+          collapsed ? (
+            <Tooltip key="risk-group" delayDuration={0}>
+              <TooltipTrigger asChild>
+                <Link to="/risk" onClick={handleClick}>
+                  <Button
+                    variant={isRiskActive ? "secondary" : "ghost"}
+                    className="w-full justify-center px-2 transition-all"
+                  >
+                    <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                  </Button>
+                </Link>
+              </TooltipTrigger>
+              <TooltipContent side="right">Painel de Risco</TooltipContent>
+            </Tooltip>
+          ) : (
+            <div className="space-y-0.5">
+              <Button
+                variant={isRiskActive ? "secondary" : "ghost"}
+                className="w-full justify-start gap-3 transition-all"
+                onClick={() => setRiskOpen((v) => !v)}
+              >
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                Painel de Risco
+                <ChevronDown className={`ml-auto w-3 h-3 transition-transform duration-200 ${riskOpen ? "rotate-180" : ""}`} />
+              </Button>
+              {riskOpen && (
+                <div className="ml-3 pl-3 border-l border-border/50 space-y-2 py-1">
+                  <K8sSubGroup label="Segurança"       items={RISK_SECURITY}      collapsed={collapsed} onNavigate={onNavigate} />
+                  <K8sSubGroup label="Infraestrutura"  items={RISK_INFRA}         collapsed={collapsed} onNavigate={onNavigate} />
+                  <K8sSubGroup label="Observabilidade" items={RISK_OBSERVABILITY} collapsed={collapsed} onNavigate={onNavigate} />
+                </div>
+              )}
+            </div>
+          )
+        ) : (
+          collapsed ? (
+            <Tooltip key="risk-group-locked" delayDuration={0}>
+              <TooltipTrigger asChild>
                 <Button
-                  variant={isRiskActive ? "secondary" : "ghost"}
-                  className="w-full justify-center px-2 transition-all"
+                  variant="ghost"
+                  className="w-full justify-center px-2 opacity-50 cursor-pointer"
+                  onClick={() => navigate('/settings?tab=upgrade')}
                 >
                   <AlertTriangle className="w-4 h-4 flex-shrink-0" />
                 </Button>
-              </Link>
-            </TooltipTrigger>
-            <TooltipContent side="right">Painel de Risco</TooltipContent>
-          </Tooltip>
-        ) : (
-          <div className="space-y-0.5">
+              </TooltipTrigger>
+              <TooltipContent side="right">Painel de Risco · Apenas PRO</TooltipContent>
+            </Tooltip>
+          ) : (
             <Button
-              variant={isRiskActive ? "secondary" : "ghost"}
-              className="w-full justify-start gap-3 transition-all"
-              onClick={() => setRiskOpen((v) => !v)}
+              variant="ghost"
+              className="w-full justify-start gap-3 transition-all opacity-50 cursor-pointer"
+              onClick={() => navigate('/settings?tab=upgrade')}
             >
               <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-              Painel de Risco
-              <ChevronDown className={`ml-auto w-3 h-3 transition-transform duration-200 ${riskOpen ? "rotate-180" : ""}`} />
+              <span className="flex-1 text-left">Painel de Risco</span>
+              <span className="flex items-center gap-1">
+                <Lock className="w-3 h-3" />
+                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-semibold">PRO</Badge>
+              </span>
             </Button>
-            {riskOpen && (
-              <div className="ml-3 pl-3 border-l border-border/50 space-y-2 py-1">
-                <K8sSubGroup label="Segurança"       items={RISK_SECURITY}      collapsed={collapsed} onNavigate={onNavigate} />
-                <K8sSubGroup label="Infraestrutura"  items={RISK_INFRA}         collapsed={collapsed} onNavigate={onNavigate} />
-                <K8sSubGroup label="Observabilidade" items={RISK_OBSERVABILITY} collapsed={collapsed} onNavigate={onNavigate} />
-              </div>
-            )}
-          </div>
+          )
         )}
 
         {/* Kubernetes group */}
@@ -301,6 +373,13 @@ export const Sidebar = ({ collapsed = false, onNavigate, onToggleCollapse, onCol
         )}
 
         {navigationAfter.map(renderNavItem)}
+
+        {/* PRO-only items */}
+        {proOnlyItems.map((item) =>
+          isProActive
+            ? renderNavItem(item)
+            : renderLockedNavItem(item)
+        )}
       </nav>
 
       <div className={`border-t border-border space-y-2 ${collapsed ? 'p-2' : 'p-4'}`}>

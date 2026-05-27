@@ -1,0 +1,251 @@
+/* Kodo landing — overrides on top of colors_and_type.css */
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--bg); }
+body { overflow-x: hidden; }
+a { color: inherit; text-decoration: none; }
+button { font-family: var(--font); }
+
+/* Density vars driven by Tweaks */
+:root {
+  --d-section-y: 120px;
+  --d-section-px: 64px;
+  --d-card-pad: 28px;
+  --d-h1: 88px;
+  --d-stack: 24px;
+}
+:root[data-density="compact"] {
+  --d-section-y: 80px;
+  --d-section-px: 48px;
+  --d-card-pad: 22px;
+  --d-h1: 64px;
+  --d-stack: 16px;
+}
+:root[data-density="spacious"] {
+  --d-section-y: 160px;
+  --d-section-px: 80px;
+  --d-card-pad: 36px;
+  --d-h1: 104px;
+  --d-stack: 32px;
+}
+
+@media (max-width: 1200px) {
+  :root { --d-h1: 64px; --d-section-px: 40px; }
+}
+@media (max-width: 720px) {
+  :root { --d-h1: 44px; --d-section-px: 24px; --d-section-y: 72px; }
+}
+
+/* Reusable */
+.kdo-section { width: 100%; padding: var(--d-section-y) var(--d-section-px); position: relative; }
+.kdo-inner { width: 100%; max-width: 1440px; margin: 0 auto; }
+.kdo-eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 10px; font-weight: 600; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--indigo);
+}
+.kdo-eyebrow::before {
+  content: ""; width: 18px; height: 1px; background: var(--indigo);
+}
+.kdo-h2 {
+  font-family: var(--font); font-weight: 900;
+  font-size: clamp(36px, 4.2vw, 56px); letter-spacing: -0.03em;
+  line-height: 1.02; color: var(--ink); margin: 18px 0 0 0;
+  text-wrap: balance;
+}
+.kdo-sub {
+  margin: 18px 0 0 0; font-size: 17px; line-height: 1.55;
+  color: var(--ink-muted); max-width: 620px; text-wrap: pretty;
+}
+.kdo-mono { font-family: var(--mono); }
+
+/* Card */
+.kdo-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-xl); box-shadow: var(--shadow-sm);
+  padding: var(--d-card-pad);
+}
+
+/* Animated background — Hero */
+.kdo-hero {
+  position: relative; overflow: hidden;
+  background: var(--bg);
+  min-height: 760px;
+  padding-top: 96px; padding-bottom: 96px;
+}
+.kdo-hero-bg { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+.kdo-hero-grid {
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(to right, rgba(15,60,165,.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(15,60,165,.06) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, #000 30%, transparent 90%);
+  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, #000 30%, transparent 90%);
+}
+.kdo-hero-inner { position: relative; z-index: 2; }
+
+/* Topology nodes */
+@keyframes pulse-ring {
+  0%   { transform: scale(.6); opacity: .7; }
+  100% { transform: scale(3.4); opacity: 0; }
+}
+@keyframes node-blink {
+  0%, 92%, 100% { fill: var(--indigo); }
+  94%           { fill: var(--warn); }
+  96%           { fill: var(--success); }
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+@keyframes dash {
+  to { stroke-dashoffset: -200; }
+}
+@keyframes line-flow {
+  to { stroke-dashoffset: -16; }
+}
+
+.kdo-line { stroke: rgba(15,60,165,.18); stroke-width: 1; fill: none; stroke-dasharray: 4 6; animation: line-flow 2.4s linear infinite; }
+.kdo-line-active { stroke: var(--indigo); stroke-width: 1.4; }
+
+/* Spotlight ring (cursor-tracked) */
+.kdo-spot {
+  position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(circle 420px at var(--mx, 50%) var(--my, 40%), rgba(15,60,165,.10), transparent 70%);
+  transition: background 200ms var(--ease);
+  mix-blend-mode: multiply;
+}
+
+/* H1 reveal */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.rise { animation: rise .8s var(--ease) both; }
+.rise.d1 { animation-delay: .08s; }
+.rise.d2 { animation-delay: .16s; }
+.rise.d3 { animation-delay: .24s; }
+.rise.d4 { animation-delay: .32s; }
+
+/* Marquee */
+.kdo-marquee {
+  display: flex; gap: 64px; animation: scroll 26s linear infinite;
+  align-items: center; white-space: nowrap;
+}
+@keyframes scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+/* Ticker dot */
+@keyframes tick {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: .25; }
+}
+.tick-dot { animation: tick 1.4s ease-in-out infinite; }
+
+/* Bar pulse */
+@keyframes bar {
+  0%, 100% { transform: scaleY(.6); }
+  50%      { transform: scaleY(1); }
+}
+
+/* FAQ */
+.kdo-faq details {
+  border-bottom: 1px solid var(--border);
+  padding: 22px 0;
+}
+.kdo-faq details > summary {
+  list-style: none; cursor: pointer; display: flex;
+  align-items: center; justify-content: space-between; gap: 24px;
+  font-size: 18px; font-weight: 600; color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.kdo-faq details > summary::-webkit-details-marker { display: none; }
+.kdo-faq details > summary .plus {
+  width: 28px; height: 28px; border-radius: 999px;
+  background: var(--indigo-pale); color: var(--indigo);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 16px; font-weight: 700; transition: transform 240ms var(--ease);
+}
+.kdo-faq details[open] > summary .plus { transform: rotate(45deg); }
+.kdo-faq details > .answer {
+  margin-top: 14px; color: var(--ink-muted); font-size: 15px; line-height: 1.65;
+  max-width: 760px;
+}
+
+/* Live indicator */
+.live-dot {
+  width: 8px; height: 8px; border-radius: 999px; background: var(--success);
+  box-shadow: 0 0 0 0 rgba(22,163,74,.55);
+  animation: live 1.6s ease-out infinite;
+}
+@keyframes live {
+  0%   { box-shadow: 0 0 0 0 rgba(22,163,74,.55); }
+  100% { box-shadow: 0 0 0 10px rgba(22,163,74,0); }
+}
+
+/* Tab pills */
+.kdo-tabs { display: inline-flex; padding: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; }
+.kdo-tab {
+  height: 32px; padding: 0 16px; border-radius: 999px; border: none;
+  background: transparent; color: var(--ink-muted); font-weight: 600; font-size: 13px;
+  cursor: pointer; transition: all 200ms var(--ease);
+}
+.kdo-tab[aria-selected="true"] { background: var(--ink); color: #fff; }
+
+/* Cloud badge */
+.cloud-chip {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 12px 16px; border-radius: 14px;
+  background: var(--surface); border: 1px solid var(--border);
+  font-weight: 600; font-size: 13px;
+}
+
+/* Subtle highlight underline */
+.hl {
+  background-image: linear-gradient(transparent 65%, rgba(15,60,165,.18) 65%);
+  padding: 0 .08em;
+}
+
+/* Status feed item enter */
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.slide-in { animation: slideIn .35s var(--ease) both; }
+
+/* Scrollbar polish */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: rgba(15,60,165,.15); border-radius: 999px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* Reduce motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition: none !important; }
+}
+
+/* 3D slide stage — Hero showcase tabs */
+.kdo-stage {
+  perspective: 1400px;
+  perspective-origin: 50% 50%;
+  position: relative;
+}
+.kdo-stage-inner {
+  transform-style: preserve-3d;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+}
+@keyframes slide3dInFwd {
+  0%   { opacity: 0; transform: translate3d(38%, 0, -260px) rotateY(28deg); }
+  60%  { opacity: 1; }
+  100% { opacity: 1; transform: translate3d(0, 0, 0) rotateY(0deg); }
+}
+@keyframes slide3dInBack {
+  0%   { opacity: 0; transform: translate3d(-38%, 0, -260px) rotateY(-28deg); }
+  60%  { opacity: 1; }
+  100% { opacity: 1; transform: translate3d(0, 0, 0) rotateY(0deg); }
+}
+.kdo-stage-inner[data-dir="1"]  { animation: slide3dInFwd  640ms cubic-bezier(.2,.7,.2,1) both; }
+.kdo-stage-inner[data-dir="-1"] { animation: slide3dInBack 640ms cubic-bezier(.2,.7,.2,1) both; }

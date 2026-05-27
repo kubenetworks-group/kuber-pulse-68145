@@ -5,9 +5,9 @@ import { DocsAssistantChat } from "./DocsAssistantChat";
 import { TrialBanner } from "./TrialBanner";
 import { AgentUpdateButton } from "./AgentUpdateButton";
 import { UserProfileDropdown } from "./UserProfileDropdown";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation } from "react-router-dom";
-import { Menu, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { Menu, ChevronLeft } from "lucide-react";
 import { Button } from "./ui/button";
 import { useAuditLog } from "@/hooks/useAuditLog";
 
@@ -24,12 +24,29 @@ const pageNameMap: Record<string, string> = {
 };
 
 export const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
-  // Mobile: closed by default, Desktop: open by default
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => window.innerWidth < 1024);
+  const [navScrolled, setNavScrolled] = useState(false);
   const location = useLocation();
   const { logPageAccess } = useAuditLog();
   const lastLoggedPath = useRef<string | null>(null);
+
+  // Spotlight cursor effect
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    const rect = el.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width * 100).toFixed(1);
+    const y = ((e.clientY - rect.top) / rect.height * 100).toFixed(1);
+    el.style.setProperty('--mx', `${x}%`);
+    el.style.setProperty('--my', `${y}%`);
+  }, []);
+
+  // Frosted nav scroll state
+  useEffect(() => {
+    const onScroll = () => setNavScrolled(window.scrollY > 10);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   // Log page access when route changes
   useEffect(() => {
@@ -73,22 +90,18 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
         />
       )}
 
-      {/* Sidebar — always w-64 on mobile overlay, desktop width follows collapsed state */}
+      {/* Sidebar */}
       <div className={`
         fixed left-0 top-0 bottom-0 z-50 transition-all duration-300
         w-64 ${desktopSidebarWidth}
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
         <Sidebar
-          // Mobile overlay: always show full sidebar with labels (not icon-only)
-          // Desktop: respect the collapsed state
           collapsed={sidebarOpen ? false : sidebarCollapsed}
           onNavigate={() => setSidebarOpen(false)}
           onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
           onCollapse={() => setSidebarCollapsed(true)}
         />
-
-        {/* Mobile edge handle — visible tab on the right side to close the drawer */}
         <button
           className="lg:hidden absolute top-1/2 -translate-y-1/2 -right-8 z-50 flex items-center justify-center w-8 h-14 rounded-r-xl shadow-lg transition-all duration-200 active:scale-95"
           style={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderLeft: "none" }}
@@ -100,16 +113,20 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
       </div>
 
       {/* Main content */}
-      <div className={`flex flex-col min-h-screen transition-all duration-300 ${mainMargin}`}>
-        {/* Trial banner */}
+      <div
+        className={`flex flex-col min-h-screen transition-all duration-300 ${mainMargin}`}
+        onMouseMove={handleMouseMove}
+        style={{ position: 'relative' }}
+      >
+        {/* Spotlight radial */}
+        <div className="kdo-spot pointer-events-none" aria-hidden="true" />
+
         <TrialBanner />
-        
-        {/* Top bar with cluster selector and notifications */}
-        <div className="sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
+
+        {/* Top bar — frosted nav */}
+        <div className={`sticky top-0 z-30 kdo-nav-frosted${navScrolled ? ' scrolled' : ''}`}>
           <div className="flex items-center px-3 sm:px-4 lg:px-8 py-2 sm:py-3 gap-2 min-w-0">
-            {/* Left — menu button + cluster selector (grows to fill available space) */}
             <div className="flex items-center gap-2 min-w-0 flex-1">
-              {/* Mobile menu button */}
               <Button
                 variant="outline"
                 size="icon"
@@ -121,7 +138,6 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
               </Button>
               {!hideClusterSelector && <ClusterSelector />}
             </div>
-            {/* Right — actions (never shrinks below content) */}
             <div className="flex items-center gap-2 flex-shrink-0">
               <AgentUpdateButton />
               <NotificationBell />
@@ -129,12 +145,12 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
             </div>
           </div>
         </div>
-        <div className="flex-1 flex flex-col min-h-0 p-3 sm:p-4 lg:p-6">
+
+        <div className="flex-1 flex flex-col min-h-0 p-3 sm:p-4 lg:p-6 rise">
           {children}
         </div>
       </div>
-      
-      {/* Global Docs Assistant */}
+
       <DocsAssistantChat />
     </div>
   );

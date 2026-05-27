@@ -20,24 +20,24 @@ interface ServicesOverviewProps {
 const TYPE_CONFIG: Record<string, { icon: typeof Globe; color: string; glow: string; label: string; bg: string }> = {
   LoadBalancer: {
     icon: Globe,
-    color: "#38bdf8",
-    glow: "0 0 12px #38bdf840",
+    color: "#0F3CA5",
+    glow: "0 0 12px rgba(15,60,165,0.3)",
     label: "LB",
-    bg: "rgba(56,189,248,0.08)",
+    bg: "rgba(15,60,165,0.08)",
   },
   NodePort: {
     icon: ExternalLink,
-    color: "#fbbf24",
-    glow: "0 0 12px #fbbf2440",
+    color: "#CA8A04",
+    glow: "0 0 12px rgba(202,138,4,0.3)",
     label: "NP",
-    bg: "rgba(251,191,36,0.08)",
+    bg: "rgba(202,138,4,0.08)",
   },
   ClusterIP: {
     icon: Lock,
-    color: "#34d399",
-    glow: "0 0 12px #34d39940",
+    color: "#16A34A",
+    glow: "0 0 12px rgba(22,163,74,0.3)",
     label: "CIP",
-    bg: "rgba(52,211,153,0.08)",
+    bg: "rgba(22,163,74,0.08)",
   },
   ExternalName: {
     icon: Wifi,
@@ -195,7 +195,7 @@ export const ServicesOverview = ({ services, loading }: ServicesOverviewProps) =
                 </span>
               )}
               {cipCount > 0 && (
-                <span className="text-[10px] px-2 py-0.5 rounded-full font-mono" style={{ background: "rgba(52,211,153,0.1)", color: "#34d399", border: "1px solid rgba(52,211,153,0.2)" }}>
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-mono" style={{ background: "rgba(22,163,74,0.08)", color: "#16A34A", border: "1px solid rgba(22,163,74,0.2)" }}>
                   {cipCount} CIP
                 </span>
               )}

@@ -36,8 +36,8 @@ const IngressCard = ({ ing }: { ing: IngressData }) => {
         className="h-[2px] w-full"
         style={{
           background: ing.tls
-            ? "linear-gradient(90deg, #34d399, #38bdf8)"
-            : "linear-gradient(90deg, #fbbf24, #fb923c)",
+            ? "linear-gradient(90deg, #16A34A, #0F3CA5)"
+            : "linear-gradient(90deg, #CA8A04, #DC2626)",
         }}
       />
 
@@ -97,7 +97,7 @@ const IngressCard = ({ ing }: { ing: IngressData }) => {
               className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold"
               style={
                 ing.tls
-                  ? { background: "rgba(52,211,153,0.12)", color: "#34d399", border: "1px solid rgba(52,211,153,0.25)" }
+                  ? { background: "rgba(22,163,74,0.08)", color: "#16A34A", border: "1px solid rgba(22,163,74,0.2)" }
                   : { background: "rgba(251,191,36,0.12)", color: "#fbbf24", border: "1px solid rgba(251,191,36,0.25)" }
               }
             >
@@ -206,7 +206,7 @@ export const IngressOverview = ({ ingresses, loading }: IngressOverviewProps) =>
               {tlsCount > 0 && (
                 <span
                   className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium"
-                  style={{ background: "rgba(52,211,153,0.1)", color: "#34d399", border: "1px solid rgba(52,211,153,0.2)" }}
+                  style={{ background: "rgba(22,163,74,0.08)", color: "#16A34A", border: "1px solid rgba(22,163,74,0.2)" }}
                 >
                   <ShieldCheck className="w-3 h-3" /> TLS: {tlsCount}
                 </span>

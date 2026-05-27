@@ -44,13 +44,22 @@ const PLAN_LIMITS: Record<PlanType, PlanLimits> = {
     autoHealing: false,
   },
   pro: {
-    clusters: 10,
+    clusters: 4,
     aiAnalysesPerMonth: Infinity,
     storageAnalysesPerMonth: 3,
     chatMessagesPerMonth: Infinity,
     historyRetentionDays: 90,
     autoHealing: true,
   },
+};
+
+const TRIAL_LIMITS: PlanLimits = {
+  clusters: 1,
+  aiAnalysesPerMonth: 20,
+  storageAnalysesPerMonth: 2,
+  chatMessagesPerMonth: 50,
+  historyRetentionDays: 7,
+  autoHealing: true,
 };
 
 interface AIUsageLimits {
@@ -158,8 +167,8 @@ export const SubscriptionProvider = ({ children }: { children: React.ReactNode }
   const currentPlan: PlanType = isAdmin ? 'pro' : (subscription?.plan || 'free');
   const planLimits = PLAN_LIMITS[currentPlan];
 
-  // Admin or during trial = full access (pro-like)
-  const effectiveLimits = isAdmin || isTrialActive ? PLAN_LIMITS.pro : planLimits;
+  // Admin = full pro access; trial = restricted trial limits; otherwise use plan limits
+  const effectiveLimits = isAdmin ? PLAN_LIMITS.pro : isTrialActive ? TRIAL_LIMITS : planLimits;
 
   // Check if storage analyses reset is needed
   const checkAndResetUsage = useCallback(async () => {
@@ -211,8 +220,6 @@ export const SubscriptionProvider = ({ children }: { children: React.ReactNode }
   const canCreateCluster = (currentCount: number): boolean => {
     if (isAdmin) return true;
     if (isReadOnly) return false;
-    if (isTrialActive) return true;
-    
     const clusterLimit = subscription?.custom_cluster_limit ?? effectiveLimits.clusters;
     return currentCount < clusterLimit;
   };
@@ -220,7 +227,6 @@ export const SubscriptionProvider = ({ children }: { children: React.ReactNode }
   const canUseAI = (): boolean => {
     if (isAdmin) return true;
     if (isReadOnly) return false;
-    if (isTrialActive) return true;
     if (effectiveLimits.aiAnalysesPerMonth === Infinity) return true;
     return (subscription?.ai_analyses_used || 0) < effectiveLimits.aiAnalysesPerMonth;
   };
@@ -228,7 +234,6 @@ export const SubscriptionProvider = ({ children }: { children: React.ReactNode }
   const canUseStorageAnalysis = (): boolean => {
     if (isAdmin) return true;
     if (isReadOnly) return false;
-    if (isTrialActive) return true;
     if (effectiveLimits.storageAnalysesPerMonth === Infinity) return true;
     return (subscription?.storage_analyses_used || 0) < effectiveLimits.storageAnalysesPerMonth;
   };
@@ -236,7 +241,6 @@ export const SubscriptionProvider = ({ children }: { children: React.ReactNode }
   const canUseChatMessage = (): boolean => {
     if (isAdmin) return true;
     if (isReadOnly) return false;
-    if (isTrialActive) return true;
     if (effectiveLimits.chatMessagesPerMonth === Infinity) return true;
     return (subscription?.chat_messages_used || 0) < effectiveLimits.chatMessagesPerMonth;
   };
@@ -244,7 +248,6 @@ export const SubscriptionProvider = ({ children }: { children: React.ReactNode }
   const canUseAutoHealing = (): boolean => {
     if (isAdmin) return true;
     if (isReadOnly) return false;
-    if (isTrialActive) return true;
     return effectiveLimits.autoHealing;
   };
 
@@ -349,5 +352,5 @@ export const useSubscription = () => {
   return context;
 };
 
-export { PLAN_LIMITS };
+export { PLAN_LIMITS, TRIAL_LIMITS };
 export type { PlanType, PlanLimits, Subscription };

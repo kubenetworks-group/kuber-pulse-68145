@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="pt-BR" data-density="default">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kodo — Kubernetes sob controle.</title>
+  <link rel="icon" href="assets/logo/kodo-symbol.png">
+  <link rel="stylesheet" href="colors_and_type.css">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    /* ---- Print setup ---- */
+    @page { size: A4; margin: 0; }
+    html, body { background: #FFFFFF !important; }
+
+    /* Force the page to render at a fixed width — A4 portrait at ~96dpi */
+    body { width: 794px; margin: 0 auto; }
+    #app { width: 794px; }
+
+    /* Force colors/backgrounds to print */
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
+
+    /* Kill all animations + transitions */
+    *, *::before, *::after {
+      animation: none !important;
+      transition: none !important;
+    }
+
+    /* Hide sticky chrome that doesn't make sense in print */
+    header[role], .twk-launcher, .twk-panel { display: none !important; }
+
+    /* Page-break hygiene — each big section gets its own page */
+    section { break-inside: avoid; page-break-inside: avoid; }
+    #features, #como, #integracoes, #precos, #faq { break-before: page; page-break-before: always; }
+
+    /* Tighten section padding so it fits well on A4 */
+    :root {
+      --d-section-y: 48px !important;
+      --d-section-px: 36px !important;
+      --d-card-pad: 18px !important;
+      --d-h1: 56px !important;
+      --d-stack: 16px !important;
+    }
+    .kdo-inner { max-width: 100% !important; }
+
+    /* Hero — compact hero on a single page */
+    .kdo-hero { min-height: 0 !important; padding-top: 32px !important; padding-bottom: 32px !important; }
+    .kdo-hero .kdo-hero-bg { opacity: .55; }
+    .kdo-hero-inner.kdo-inner { grid-template-columns: 1.05fr .95fr !important; }
+
+    /* Pricing — keep cards aligned on print */
+    #precos .kdo-inner > div[style*="grid-template-columns"] > div { transform: none !important; }
+
+    /* FAQ — open all details for print */
+    details { open: open; }
+
+    /* Footer slightly tighter */
+    footer { padding-top: 56px !important; padding-bottom: 24px !important; }
+
+    /* Make scrollable mask-image regions readable */
+    [style*="maskImage"] { mask-image: none !important; -webkit-mask-image: none !important; }
+
+    /* Marquee — line-up tools instead of scrolling */
+    .kdo-marquee { animation: none !important; flex-wrap: wrap !important; white-space: normal !important; gap: 12px !important; justify-content: flex-start; }
+  </style>
+</head>
+<body id="top">
+  <div id="app"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel" src="tweaks-panel.jsx"></script>
+  <script type="text/babel" src="primitives.jsx"></script>
+  <script type="text/babel" src="chrome.jsx"></script>
+  <script type="text/babel" src="hero.jsx"></script>
+  <script type="text/babel" src="features.jsx"></script>
+  <script type="text/babel" src="how-integrations.jsx"></script>
+  <script type="text/babel" src="pricing-faq.jsx"></script>
+
+  <script type="text/babel">
+    function PrintApp() {
+      // For print: open all FAQ items, render every section flat.
+      React.useEffect(() => {
+        document.querySelectorAll('details').forEach(d => d.setAttribute('open', ''));
+      }, []);
+      return (
+        <div data-screen-label="01 Kodo landing (print)">
+          <Nav />
+          <main>
+            <Hero />
+            <Features />
+            <HowItWorks />
+            <Integrations />
+            <Pricing />
+            <Faq />
+            <FinalCTA />
+          </main>
+          <Footer />
+        </div>
+      );
+    }
+    ReactDOM.createRoot(document.getElementById('app')).render(<PrintApp />);
+
+    // Auto-print: wait for fonts + JSX transpile + a small settle delay.
+    (async () => {
+      try {
+        if (document.fonts && document.fonts.ready) {
+          await document.fonts.ready;
+        }
+      } catch (_) {}
+      // Open every <details> after mount
+      setTimeout(() => {
+        document.querySelectorAll('details').forEach(d => d.setAttribute('open', ''));
+      }, 200);
+      setTimeout(() => { window.print(); }, 900);
+    })();
+  </script>
+</body>
+</html>

@@ -61,8 +61,8 @@ type TimeRange = "7d" | "30d" | "90d";
 type GroupBy = "namespace" | "node";
 
 const COLORS = [
-  "#6366f1", "#22d3ee", "#f59e0b", "#10b981",
-  "#f43f5e", "#8b5cf6", "#ec4899", "#14b8a6",
+  "#0F3CA5", "#577DB2", "#CA8A04", "#16A34A",
+  "#DC2626", "#0A5B93", "#E6EEF8", "#16A34A",
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -510,8 +510,8 @@ const FinOps = () => {
                     <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false}
                       tickFormatter={(v) => `R$${(v * USD_TO_BRL).toFixed(0)}`} width={44} />
                     <Tooltip content={<CostTooltip />} />
-                    <Bar dataKey="cpu" name="CPU" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="ram" name="RAM" fill="#22d3ee" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="cpu" name="CPU" fill="#0F3CA5" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="ram" name="RAM" fill="#577DB2" radius={[4, 4, 0, 0]} />
                     <Bar dataKey="storage" name="Storage" fill="#f59e0b" radius={[4, 4, 0, 0]} />
                     <Bar dataKey="network" name="Network" fill="#10b981" radius={[4, 4, 0, 0]} />
                   </BarChart>

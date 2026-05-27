@@ -227,7 +227,7 @@ export const AIInsightsWidget = ({ recentIncidents }: AIInsightsWidgetProps) => 
   const severityColor = (s: string) => {
     if (s === "critical") return "var(--kodo-crit)";
     if (s === "high") return "var(--kodo-warn)";
-    return "#6366f1";
+    return "var(--kodo-brand)";
   };
 
   return (
