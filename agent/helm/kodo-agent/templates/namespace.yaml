@@ -1,0 +1,9 @@
+{{- if .Values.namespace.create }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ include "kodo-agent.namespace" . }}
+  labels:
+    name: {{ include "kodo-agent.namespace" . }}
+    {{- include "kodo-agent.labels" . | nindent 4 }}
+{{- end }}

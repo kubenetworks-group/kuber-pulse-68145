@@ -6,8 +6,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useCluster } from "@/contexts/ClusterContext";
 import { toast } from "sonner";
 import {
-  Terminal, Copy, Trash2, Plus, Download, CheckCircle,
-  AlertTriangle, Clock, Wifi, WifiOff, RefreshCw, ArrowUpCircle, KeyRound, ShieldAlert,
+  Terminal, Copy, Trash2, Plus, CheckCircle,
+  AlertTriangle, Clock, Wifi, WifiOff, RefreshCw, ArrowUpCircle, ShieldAlert,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger,
@@ -272,119 +272,18 @@ const Agents = () => {
     toast.success("Copiado!");
   };
 
-  const downloadYaml = (apiKey: string, clusterId: string) => {
-    const imageTag = `ghcr.io/kubenetworks-group/kodo-agent:${latestAgentVersion ?? "v0.1.77"}`;
-    const yaml = `apiVersion: v1
-kind: Namespace
-metadata:
-  name: kodo
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: kodo-agent
-  namespace: kodo
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: kodo-agent
-rules:
-- apiGroups: [""]
-  resources: ["nodes","pods","events","namespaces","persistentvolumeclaims","persistentvolumes","secrets","resourcequotas","limitranges","services","configmaps","endpoints"]
-  verbs: ["get","list","watch"]
-- apiGroups: [""]
-  resources: ["pods"]
-  verbs: ["delete"]
-- apiGroups: ["apps"]
-  resources: ["deployments","daemonsets","replicasets","statefulsets"]
-  verbs: ["get","list","watch","update","patch"]
-- apiGroups: ["metrics.k8s.io"]
-  resources: ["nodes","pods"]
-  verbs: ["get","list","watch"]
-- apiGroups: ["rbac.authorization.k8s.io"]
-  resources: ["roles","rolebindings","clusterroles","clusterrolebindings"]
-  verbs: ["get","list","watch"]
-- apiGroups: ["networking.k8s.io"]
-  resources: ["networkpolicies","ingresses","ingressclasses"]
-  verbs: ["get","list","watch"]
-- apiGroups: ["coordination.k8s.io"]
-  resources: ["leases"]
-  verbs: ["get","list","watch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: kodo-agent
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: kodo-agent
-subjects:
-- kind: ServiceAccount
-  name: kodo-agent
-  namespace: kodo
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: kodo-config
-  namespace: kodo
-data:
-  API_ENDPOINT: "${import.meta.env.VITE_SUPABASE_URL}/functions/v1"
-  COLLECT_INTERVAL: "15"
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: kodo-secret
-  namespace: kodo
-type: Opaque
-stringData:
-  API_KEY: "${apiKey}"
-  CLUSTER_ID: "${clusterId}"
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: kodo-agent
-  namespace: kodo
-  labels:
-    app: kodo-agent
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: kodo-agent
-  template:
-    metadata:
-      labels:
-        app: kodo-agent
-    spec:
-      serviceAccountName: kodo-agent
-      containers:
-      - name: agent
-        image: ${imageTag}
-        imagePullPolicy: Always
-        envFrom:
-        - configMapRef:
-            name: kodo-config
-        - secretRef:
-            name: kodo-secret
-        resources:
-          requests:
-            memory: "64Mi"
-            cpu: "100m"
-          limits:
-            memory: "128Mi"
-            cpu: "200m"`;
-
-    const blob = new Blob([yaml], { type: "text/yaml" });
-    const url  = URL.createObjectURL(blob);
-    const a    = Object.assign(document.createElement("a"), { href: url, download: `kodo-agent-${clusterId}.yaml` });
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success("YAML baixado com sucesso");
+  const buildHelmInstallCmd = (apiKey: string, clusterId: string) => {
+    const version = (latestAgentVersion ?? "v0.2.81").replace(/^v/, "");
+    const endpoint = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+    return [
+      `helm install kodo-agent \\`,
+      `  oci://ghcr.io/kubenetworks-group/helm-charts/kodo-agent \\`,
+      `  --version ${version} \\`,
+      `  --namespace kodo --create-namespace \\`,
+      `  --set agent.apiKey=${apiKey} \\`,
+      `  --set agent.clusterId=${clusterId} \\`,
+      `  --set agent.apiEndpoint=${endpoint}`,
+    ].join("\n");
   };
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -485,53 +384,79 @@ spec:
         </div>
 
         {/* ── New API key reveal ── */}
-        {showApiKey && (
-          <div
-            className="rounded-xl overflow-hidden"
-            style={{ border: `1px solid ${C.accentB}`, background: C.accentD }}
-          >
-            <div className="flex items-center gap-2 px-5 py-3 border-b" style={{ borderColor: C.accentB }}>
-              <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" style={{ color: C.accent }} />
-              <span className="text-sm font-semibold" style={{ color: C.accent }}>API Key Criada</span>
-              <span className="text-xs text-muted-foreground ml-1">— copie agora, não será exibida novamente</span>
-            </div>
-            <div className="p-5 flex flex-col gap-3">
-              <div className="flex items-center gap-2">
-                <code
-                  className="flex-1 px-3 py-2 rounded-lg bg-card border border-border text-xs overflow-x-auto"
-                  style={{ fontFamily: MONO }}
-                >
-                  {showApiKey}
-                </code>
-                <button
-                  onClick={() => copy(showApiKey, "newkey")}
-                  className="flex items-center justify-center w-8 h-8 rounded-lg bg-muted border border-border hover:bg-accent transition-colors cursor-pointer outline-none flex-shrink-0"
-                >
-                  {copiedId === "newkey"
-                    ? <CheckCircle className="w-3.5 h-3.5" style={{ color: C.accent }} />
-                    : <Copy className="w-3.5 h-3.5 text-muted-foreground" />
-                  }
-                </button>
+        {showApiKey && lastCreatedClusterId && (() => {
+          const helmCmd = buildHelmInstallCmd(showApiKey, lastCreatedClusterId);
+          return (
+            <div
+              className="rounded-xl overflow-hidden"
+              style={{ border: `1px solid ${C.accentB}`, background: C.accentD }}
+            >
+              <div className="flex items-center gap-2 px-5 py-3 border-b" style={{ borderColor: C.accentB }}>
+                <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" style={{ color: C.accent }} />
+                <span className="text-sm font-semibold" style={{ color: C.accent }}>Agente pronto para instalar</span>
+                <span className="text-xs text-muted-foreground ml-1">— copie a chave agora, não será exibida novamente</span>
               </div>
-              <div className="flex flex-col sm:flex-row gap-2">
-                <button
-                  onClick={() => lastCreatedClusterId && downloadYaml(showApiKey, lastCreatedClusterId)}
-                  className="flex items-center justify-center gap-1.5 h-8 px-4 rounded-lg text-xs font-semibold transition-all hover:-translate-y-px cursor-pointer outline-none border-none"
-                  style={{ background: C.accent, color: "#000" }}
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  Baixar YAML de Deploy
-                </button>
+              <div className="p-5 flex flex-col gap-4">
+
+                {/* API key */}
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">API Key</span>
+                  <div className="flex items-center gap-2">
+                    <code
+                      className="flex-1 px-3 py-2 rounded-lg bg-card border border-border text-xs overflow-x-auto"
+                      style={{ fontFamily: MONO }}
+                    >
+                      {showApiKey}
+                    </code>
+                    <button
+                      onClick={() => copy(showApiKey, "newkey")}
+                      className="flex items-center justify-center w-8 h-8 rounded-lg bg-muted border border-border hover:bg-accent transition-colors cursor-pointer outline-none flex-shrink-0"
+                    >
+                      {copiedId === "newkey"
+                        ? <CheckCircle className="w-3.5 h-3.5" style={{ color: C.accent }} />
+                        : <Copy className="w-3.5 h-3.5 text-muted-foreground" />
+                      }
+                    </button>
+                  </div>
+                </div>
+
+                {/* Helm install command */}
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                    Instalar via Helm
+                  </span>
+                  <div className="relative">
+                    <code
+                      className="block text-[11px] bg-card border border-border rounded-lg px-3 py-3 pr-9 overflow-x-auto whitespace-pre"
+                      style={{ fontFamily: MONO }}
+                    >
+                      {helmCmd}
+                    </code>
+                    <button
+                      onClick={() => copy(helmCmd, "helmcmd")}
+                      className="absolute top-2 right-2 flex items-center justify-center w-6 h-6 rounded bg-muted border border-border hover:bg-accent transition-colors cursor-pointer outline-none"
+                    >
+                      {copiedId === "helmcmd"
+                        ? <CheckCircle className="w-3 h-3" style={{ color: C.accent }} />
+                        : <Copy className="w-3 h-3 text-muted-foreground" />
+                      }
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    O agente aparecerá como <strong>Online</strong> no dashboard em até 30 segundos após a instalação.
+                  </p>
+                </div>
+
                 <button
                   onClick={() => { setShowApiKey(null); setLastCreatedClusterId(null); }}
-                  className="flex items-center justify-center h-8 px-4 rounded-lg text-xs bg-muted border border-border text-muted-foreground hover:text-foreground transition-colors cursor-pointer outline-none"
+                  className="self-start flex items-center justify-center h-8 px-4 rounded-lg text-xs bg-muted border border-border text-muted-foreground hover:text-foreground transition-colors cursor-pointer outline-none"
                 >
                   Fechar
                 </button>
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* ── Agent list ── */}
         {loading ? (
@@ -560,7 +485,8 @@ spec:
               const updateAvail = agent.clusters?.agent_update_available;
               const status      = getAgentStatus(agent, latestAgentVersion);
               const isOnline       = status.label === "Online";
-              const kubectlCmd     = `kubectl set image deployment/kodo-agent agent=ghcr.io/kubenetworks-group/kodo-agent:${latestAgentVersion ?? "latest"} -n kodo`;
+              const helmVersion     = (latestAgentVersion ?? "v0.2.81").replace(/^v/, "");
+              const helmUpgradeCmd  = `helm upgrade kodo-agent \\\n  oci://ghcr.io/kubenetworks-group/helm-charts/kodo-agent \\\n  --version ${helmVersion} \\\n  --namespace kodo \\\n  --reuse-values`;
               const cmdId          = `cmd-${agent.id}`;
               const authFailure    = isLikelyAuthFailure(agent);
               const patchSecretId  = `patch-${agent.id}`;
@@ -652,17 +578,17 @@ spec:
                       </div>
                       <div className="px-4 py-3 flex flex-col gap-2">
                         <p className="text-[11px] text-muted-foreground">
-                          Execute para atualizar o agente no cluster:
+                          Execute para atualizar o agente via Helm:
                         </p>
                         <div className="relative">
                           <code
-                            className="block text-[11px] bg-card border border-border rounded-md px-3 py-2 pr-9 overflow-x-auto"
+                            className="block text-[11px] bg-card border border-border rounded-md px-3 py-2 pr-9 overflow-x-auto whitespace-pre"
                             style={{ fontFamily: MONO }}
                           >
-                            {kubectlCmd}
+                            {helmUpgradeCmd}
                           </code>
                           <button
-                            onClick={() => copy(kubectlCmd, cmdId)}
+                            onClick={() => copy(helmUpgradeCmd, cmdId)}
                             className="absolute top-1.5 right-1.5 flex items-center justify-center w-6 h-6 rounded bg-muted border border-border hover:bg-accent transition-colors cursor-pointer outline-none border-none"
                           >
                             {copiedId === cmdId
@@ -698,40 +624,20 @@ spec:
                             1. Crie uma nova API Key acima e copie-a
                           </span>
                           <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-                            2. Atualize o secret no cluster
+                            2. Atualize via Helm com a nova chave
                           </span>
                           <div className="relative">
                             <code
-                              className="block text-[11px] bg-card border border-border rounded-md px-3 py-2 pr-9 overflow-x-auto"
+                              className="block text-[11px] bg-card border border-border rounded-md px-3 py-2 pr-9 overflow-x-auto whitespace-pre"
                               style={{ fontFamily: MONO, color: C.danger }}
                             >
-                              {`kubectl patch secret kodo-secret -n kodo -p '{"stringData":{"API_KEY":"<nova-chave>"}}'`}
+                              {`helm upgrade kodo-agent \\\n  oci://ghcr.io/kubenetworks-group/helm-charts/kodo-agent \\\n  --namespace kodo --reuse-values \\\n  --set agent.apiKey=<nova-chave>`}
                             </code>
                             <button
-                              onClick={() => copy(`kubectl patch secret kodo-secret -n kodo -p '{"stringData":{"API_KEY":"<nova-chave>"}}'`, patchSecretId)}
+                              onClick={() => copy(`helm upgrade kodo-agent \\\n  oci://ghcr.io/kubenetworks-group/helm-charts/kodo-agent \\\n  --namespace kodo --reuse-values \\\n  --set agent.apiKey=<nova-chave>`, patchSecretId)}
                               className="absolute top-1.5 right-1.5 flex items-center justify-center w-6 h-6 rounded bg-muted border border-border hover:bg-accent transition-colors cursor-pointer outline-none border-none"
                             >
                               {copiedId === patchSecretId
-                                ? <CheckCircle className="w-3 h-3" style={{ color: C.accent }} />
-                                : <Copy className="w-3 h-3 text-muted-foreground" />
-                              }
-                            </button>
-                          </div>
-                          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-                            3. Reinicie o pod do agente
-                          </span>
-                          <div className="relative">
-                            <code
-                              className="block text-[11px] bg-card border border-border rounded-md px-3 py-2 pr-9 overflow-x-auto"
-                              style={{ fontFamily: MONO, color: "hsl(var(--muted-foreground))" }}
-                            >
-                              kubectl rollout restart deployment/kodo-agent -n kodo
-                            </code>
-                            <button
-                              onClick={() => copy("kubectl rollout restart deployment/kodo-agent -n kodo", `restart-${agent.id}`)}
-                              className="absolute top-1.5 right-1.5 flex items-center justify-center w-6 h-6 rounded bg-muted border border-border hover:bg-accent transition-colors cursor-pointer outline-none border-none"
-                            >
-                              {copiedId === `restart-${agent.id}`
                                 ? <CheckCircle className="w-3 h-3" style={{ color: C.accent }} />
                                 : <Copy className="w-3 h-3 text-muted-foreground" />
                               }

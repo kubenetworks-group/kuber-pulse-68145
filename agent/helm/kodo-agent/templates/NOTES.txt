@@ -1,0 +1,16 @@
+🟢 Kodo Agent {{ .Chart.AppVersion }} instalado com sucesso!
+
+O agente começará a enviar métricas em até 30 segundos.
+Acompanhe o status no dashboard: https://kodo.kubenetworks.com.br
+
+Para verificar o status do pod:
+  kubectl get pods -n {{ include "kodo-agent.namespace" . }}
+
+Para ver os logs:
+  kubectl logs -n {{ include "kodo-agent.namespace" . }} -l app=kodo-agent -f
+
+Para atualizar para uma nova versão:
+  helm upgrade kodo-agent oci://ghcr.io/kubenetworks-group/helm-charts/kodo-agent \
+    --version <nova-versao> \
+    --namespace {{ include "kodo-agent.namespace" . }} \
+    --reuse-values

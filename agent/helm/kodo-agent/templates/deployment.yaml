@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kodo-agent
+  namespace: {{ include "kodo-agent.namespace" . }}
+  labels:
+    {{- include "kodo-agent.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: kodo-agent
+  template:
+    metadata:
+      labels:
+        app: kodo-agent
+        {{- include "kodo-agent.labels" . | nindent 8 }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: kodo-agent
+      containers:
+      - name: agent
+        image: "{{ .Values.agent.image.repository }}:{{ include "kodo-agent.imageTag" . }}"
+        imagePullPolicy: {{ .Values.agent.image.pullPolicy }}
+        envFrom:
+        - configMapRef:
+            name: kodo-config
+        - secretRef:
+            name: kodo-secret
+        resources:
+          requests:
+            memory: {{ .Values.resources.requests.memory | quote }}
+            cpu: {{ .Values.resources.requests.cpu | quote }}
+          limits:
+            memory: {{ .Values.resources.limits.memory | quote }}
+            cpu: {{ .Values.resources.limits.cpu | quote }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - kodo-agent
+              topologyKey: kubernetes.io/hostname
+      tolerations:
+        {{- toYaml .Values.tolerations | nindent 8 }}

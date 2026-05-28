@@ -1,0 +1,18 @@
+apiVersion: v2
+name: kodo-agent
+description: Kodo AI monitoring agent for Kubernetes clusters
+type: application
+version: 0.2.81
+appVersion: "v0.2.81"
+keywords:
+  - kubernetes
+  - monitoring
+  - finops
+  - auto-healing
+  - kodo
+home: https://kodo.kubenetworks.com.br
+sources:
+  - https://github.com/kubenetworks-group/kodo
+maintainers:
+  - name: KubeNetworks
+    email: suporte@kubenetworks.com.br

@@ -1,0 +1,38 @@
+agent:
+  # Required: API key generated in Kodo dashboard
+  apiKey: ""
+  # Required: Cluster UUID from Kodo dashboard
+  clusterId: ""
+  # Required: Supabase functions endpoint
+  apiEndpoint: "https://dadaeduevxyvkhjmwlel.supabase.co/functions/v1"
+  # Metrics collection interval in seconds
+  collectInterval: "15"
+  logLevel: "info"
+
+  image:
+    repository: ghcr.io/kubenetworks-group/kodo-agent
+    pullPolicy: Always
+    # Defaults to Chart appVersion
+    tag: ""
+
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "100m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+
+namespace:
+  create: true
+  name: kodo
+
+tolerations:
+  - key: cloud.google.com/gke-preemptible
+    operator: Equal
+    value: "true"
+    effect: NoSchedule
+  - key: cloud.google.com/gke-spot
+    operator: Equal
+    value: "true"
+    effect: NoSchedule
