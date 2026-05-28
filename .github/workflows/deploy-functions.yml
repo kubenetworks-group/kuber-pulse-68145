@@ -26,3 +26,40 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
           supabase functions deploy --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
+
+      - name: List deployed function URLs
+        env:
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          BASE_URL="https://${SUPABASE_PROJECT_REF}.supabase.co/functions/v1"
+          echo ""
+          echo "✅ Functions deployed to: ${BASE_URL}"
+          echo ""
+          echo "─────────────────────────────────────────"
+          for dir in supabase/functions/*/; do
+            name=$(basename "$dir")
+            if [ "$name" != "_shared" ]; then
+              echo "  ${name}"
+              echo "  → ${BASE_URL}/${name}"
+              echo ""
+            fi
+          done
+          echo "─────────────────────────────────────────"
+
+      - name: Write deploy summary
+        env:
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          BASE_URL="https://${SUPABASE_PROJECT_REF}.supabase.co/functions/v1"
+          echo "## ✅ Supabase Edge Functions Deployed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Base URL:** \`${BASE_URL}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Function | URL |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          for dir in supabase/functions/*/; do
+            name=$(basename "$dir")
+            if [ "$name" != "_shared" ]; then
+              echo "| \`${name}\` | [${BASE_URL}/${name}](${BASE_URL}/${name}) |" >> $GITHUB_STEP_SUMMARY
+            fi
+          done

@@ -962,7 +962,38 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* Logo strip */}
+          {/* Stats strip */}
+          <div className="kdo-hero-inner" style={{ marginTop: 72 }}>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(4, 1fr)',
+              gap: 0,
+              borderTop: '1px solid #E8EDF5',
+              borderBottom: '1px solid #E8EDF5',
+              padding: '32px 0',
+            }}>
+              {[
+                { value: '5 min',   label: 'para instalar o agente',    sub: 'um único helm install' },
+                { value: '30s',     label: 'tempo médio de resposta',   sub: 'auto-healing ativo' },
+                { value: '40%',     label: 'redução de custo de infra', sub: 'média entre clientes' },
+                { value: '99.9%',   label: 'uptime médio dos clusters', sub: 'com SLA garantido' },
+              ].map((s, i) => (
+                <div key={i} style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center',
+                  padding: '0 24px',
+                  borderRight: i < 3 ? '1px solid #E8EDF5' : 'none',
+                }}>
+                  <span style={{ fontFamily: 'Aileron, sans-serif', fontWeight: 900, fontSize: 36, color: '#0F3CA5', letterSpacing: '-0.02em', lineHeight: 1 }}>
+                    {s.value}
+                  </span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#1A1A1A', marginTop: 8 }}>{s.label}</span>
+                  <span style={{ fontSize: 12, color: '#6B6B6B', marginTop: 2 }}>{s.sub}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Logo strip — TODO: implementar com logos reais dos clientes
           <div className="kdo-hero-inner" style={{ marginTop: 88 }}>
             <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#6B6B6B', marginBottom: 18, textAlign: 'center' }}>
               Times que confiam no Kodo
@@ -973,6 +1004,7 @@ export default function LandingPage() {
               ))}
             </div>
           </div>
+          */}
         </section>
 
         {/* ══════════════════ FEATURES ══════════════════ */}
