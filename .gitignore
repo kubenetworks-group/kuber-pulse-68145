@@ -24,4 +24,4 @@ dist-ssr
 *.sw?
 kuberpulse-agent*
 mongo*
-Kodo K8S
+Kodo*

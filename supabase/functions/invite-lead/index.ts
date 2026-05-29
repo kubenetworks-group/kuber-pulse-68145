@@ -14,19 +14,15 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) return json({ error: 'Unauthorized' }, 401);
 
-    // Verify caller using their JWT
-    const supabaseUser = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_ANON_KEY')!,
-      { global: { headers: { Authorization: authHeader } } },
-    );
-    const { data: { user }, error: userErr } = await supabaseUser.auth.getUser();
-    if (userErr || !user) return json({ error: 'Unauthorized' }, 401);
-
     const admin = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
+
+    // verify_jwt=false requires passing the token explicitly to getUser()
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: userErr } = await admin.auth.getUser(token);
+    if (userErr || !user) return json({ error: 'Unauthorized' }, 401);
 
     // Check admin via user_roles table (same logic as has_role RPC)
     const { data: roleRow } = await admin
