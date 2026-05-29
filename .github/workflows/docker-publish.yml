@@ -7,12 +7,62 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-and-push:
+  # ─────────────────────────────────────────────────────────────
+  # 1. SAST — Static Application Security Testing
+  # ─────────────────────────────────────────────────────────────
+  sast:
+    name: SAST & Secret Scan
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
 
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Go SAST: detect security issues in agent source code
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+
+      - name: Run gosec (Go Security Scanner)
+        uses: securego/gosec@master
+        with:
+          args: "-fmt sarif -out gosec-results.sarif -severity medium ./agent/..."
+        continue-on-error: true
+
+      - name: Upload gosec SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: gosec-results.sarif
+          category: gosec
+        continue-on-error: true
+
+      # Secret scanning in source files
+      - name: Detect secrets with Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+        continue-on-error: true
+
+  # ─────────────────────────────────────────────────────────────
+  # 2. Build, scan image and push
+  # ─────────────────────────────────────────────────────────────
+  build-and-push:
+    name: Build, Scan & Push
+    runs-on: ubuntu-latest
+    needs: sast
     permissions:
       contents: read
       packages: write
+      security-events: write
+      id-token: write   # for Cosign keyless signing
 
     steps:
       - name: Checkout
@@ -21,6 +71,9 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Install Cosign (keyless image signing)
+        uses: sigstore/cosign-installer@v3
+
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -28,7 +81,46 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Build WITHOUT push first so Trivy can scan it
+      - name: Build Docker image (local)
+        uses: docker/build-push-action@v5
+        with:
+          context: ./agent
+          file: ./agent/Dockerfile
+          push: false
+          load: true
+          platforms: linux/amd64
+          tags: kodo-agent-local:scan
+
+      # Scan image for OS + library CVEs before pushing
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: kodo-agent-local:scan
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+          exit-code: "0"        # warn only — set to "1" to block on HIGH/CRITICAL
+
+      - name: Upload Trivy SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy
+        continue-on-error: true
+
+      # Dockerfile best-practice linting
+      - name: Lint Dockerfile with Hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: agent/Dockerfile
+          failure-threshold: warning
+        continue-on-error: true
+
+      # Build and push final multi-arch image
       - name: Build and Push Docker image
+        id: build-push
         uses: docker/build-push-action@v5
         with:
           context: ./agent
@@ -37,6 +129,20 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: |
             ghcr.io/${{ github.repository_owner }}/kodo-agent:${{ github.ref_name }}
+            ghcr.io/${{ github.repository_owner }}/kodo-agent:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.ref_name }}
+
+      # Sign the image with Sigstore/Cosign (keyless, no key management needed)
+      - name: Sign image with Cosign
+        run: |
+          cosign sign --yes \
+            ghcr.io/${{ github.repository_owner }}/kodo-agent@${{ steps.build-push.outputs.digest }}
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        continue-on-error: true
 
       - name: Publish agent version to Kodo backend
         if: startsWith(github.ref, 'refs/tags/v')
@@ -48,7 +154,6 @@ jobs:
           VERSION="${{ github.ref_name }}"
           if [ -z "${SUPABASE_URL}" ] || [ -z "${ADMIN_API_KEY}" ]; then
             echo "⚠️  Skipping: SUPABASE_URL or ADMIN_API_KEY secrets not configured."
-            echo "   Add them in GitHub → Settings → Secrets and variables → Actions"
             exit 0
           fi
           echo "📦 Publishing version ${VERSION} to Kodo backend..."
@@ -70,3 +175,19 @@ jobs:
           else
             echo "✅ Version ${VERSION} published successfully"
           fi
+
+      - name: Security summary
+        if: always()
+        run: |
+          echo "## 🔒 Security Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Tool | Result |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Go SAST | gosec | See Security tab |" >> $GITHUB_STEP_SUMMARY
+          echo "| Secret scan | Gitleaks | See logs |" >> $GITHUB_STEP_SUMMARY
+          echo "| CVE scan | Trivy (CRITICAL+HIGH) | See Security tab |" >> $GITHUB_STEP_SUMMARY
+          echo "| Dockerfile lint | Hadolint | See logs |" >> $GITHUB_STEP_SUMMARY
+          echo "| Image signature | Cosign (keyless) | Sigstore transparency log |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Image:** \`ghcr.io/${{ github.repository_owner }}/kodo-agent:${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Digest:** \`${{ steps.build-push.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
