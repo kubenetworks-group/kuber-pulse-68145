@@ -10,6 +10,7 @@ import { SecurityThreatsFloatingAlert } from "@/components/SecurityThreatsFloati
 import { WeeklyReportBanner } from "@/components/WeeklyReportBanner";
 import { CleanHeader } from "@/components/dashboard/CleanHeader";
 import { CleanMetricsRow } from "@/components/dashboard/CleanMetricsRow";
+import { MetricsWarmingBanner } from "@/components/dashboard/MetricsWarmingBanner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCluster } from "@/contexts/ClusterContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -155,6 +156,13 @@ const Index = () => {
           <ClusterOnboarding />
         ) : (
           <div className="space-y-6">
+            {/* Banner: agent just connected, waiting for first metrics cycle */}
+            <MetricsWarmingBanner
+              clusterData={clusterData}
+              totalNodes={totalNodes}
+              cpuUsage={liveCpuUsage}
+            />
+
             {/* Top metrics row — minimal pill cards */}
             <CleanMetricsRow
               clusterData={clusterData}
