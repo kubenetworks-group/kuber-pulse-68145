@@ -21,7 +21,7 @@ import { ClusterLogs } from "@/components/ClusterLogs";
 import { ClusterDeletionProgress } from "@/components/ClusterDeletionProgress";
 import { LimitReachedModal } from "@/components/LimitReachedModal";
 import { ClusterAnalysisPopup } from "@/components/ClusterAnalysisPopup";
-import { Plus, Trash2, RefreshCw, Edit, Bot, ArrowRight } from "lucide-react";
+import { Plus, Trash2, RefreshCw, Edit, Bot, ArrowRight, Server } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
