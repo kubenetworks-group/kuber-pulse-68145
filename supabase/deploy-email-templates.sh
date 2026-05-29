@@ -55,9 +55,7 @@ RESPONSE=$(curl -s -w "\n%{http_code}" -X PATCH \
     \"mailer_templates_confirmation_content\": $CONFIRM_HTML,
     \"mailer_templates_magic_link_content\": $MAGIC_HTML,
     \"mailer_templates_invite_content\": $INVITE_HTML,
-    \"mailer_templates_email_change_content\": $CHANGE_HTML,
-    \"smtp_admin_email\": \"noreply@kubenetworks.com.br\",
-    \"smtp_sender_name\": \"Kodo by KubeNetworks\"
+    \"mailer_templates_email_change_content\": $CHANGE_HTML
   }")
 
 HTTP_CODE=$(echo "$RESPONSE" | tail -1)
