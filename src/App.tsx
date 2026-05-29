@@ -55,6 +55,7 @@ import AutoHealingKubernetes from "./pages/blog/AutoHealingKubernetes";
 import FinOpsKubernetes from "./pages/blog/FinOpsKubernetes";
 import KodoVsAlternatives from "./pages/blog/KodoVsAlternatives";
 import { CookieBanner } from "@/components/CookieBanner";
+import RegisterProfile from "./pages/RegisterProfile";
 
 const queryClient = new QueryClient();
 
@@ -88,6 +89,14 @@ const App = () => (
                 <Route path="/" element={<LandingPage />} />
                 <Route path="/sobre" element={<About />} />
                 <Route path="/auth" element={<Auth />} />
+                <Route
+                  path="/register"
+                  element={
+                    <ProtectedRoute>
+                      <RegisterProfile />
+                    </ProtectedRoute>
+                  }
+                />
                 <Route
                   path="/welcome"
                   element={

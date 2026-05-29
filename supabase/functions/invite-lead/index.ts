@@ -4,6 +4,7 @@ import { corsHeaders } from '../_shared/cors.ts';
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
 const FROM_EMAIL = 'Kodo by KubeNetworks <noreply@kubenetworks.com.br>';
 const SITE_URL = 'https://kodo.kubenetworks.com.br';
+const INVITE_REDIRECT = `${SITE_URL}/register`;
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -53,11 +54,11 @@ Deno.serve(async (req) => {
 
     // Try to generate an invite link (for new users not yet in auth.users).
     // Falls back to magiclink if user already exists, then to the signup URL.
-    let actionLink = `${SITE_URL}/auth?tab=signup`;
+    let actionLink = `${SITE_URL}/auth?tab=signup&redirect=/register`;
     const { data: inviteData, error: inviteError } = await admin.auth.admin.generateLink({
       type: 'invite',
       email: lead.email,
-      options: { redirectTo: `${SITE_URL}/welcome` },
+      options: { redirectTo: INVITE_REDIRECT },
     });
 
     if (inviteError) {
@@ -65,7 +66,7 @@ Deno.serve(async (req) => {
       const { data: magicData, error: magicError } = await admin.auth.admin.generateLink({
         type: 'magiclink',
         email: lead.email,
-        options: { redirectTo: `${SITE_URL}/welcome` },
+        options: { redirectTo: INVITE_REDIRECT },
       });
       if (magicError) {
         console.warn(`magiclink also failed (${magicError.message}), using signup URL`);
