@@ -16,6 +16,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # needed to set package visibility via API
+      id-token: write
 
     steps:
       - name: Checkout
@@ -56,6 +58,17 @@ jobs:
           helm package agent/helm/kodo-agent/ --destination /tmp/helm-charts
           helm push /tmp/helm-charts/kodo-agent-${{ steps.version.outputs.chart_version }}.tgz \
             oci://ghcr.io/${{ github.repository_owner }}/helm-charts
+
+      - name: Make package public
+        run: |
+          # GHCR packages are private by default — set to public so end users
+          # can install without authenticating.
+          curl -s -X PATCH \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/orgs/${{ github.repository_owner }}/packages/container/helm-charts%2Fkodo-agent" \
+            -d '{"visibility":"public"}' | grep -E '"visibility"|"message"' || true
 
       - name: Write publish summary
         run: |
