@@ -25,3 +25,7 @@ dist-ssr
 kuberpulse-agent*
 mongo*
 Kodo*
+
+# Local secrets — never commit tokens or private keys
+.env.local
+.env.secrets
