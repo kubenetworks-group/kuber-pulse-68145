@@ -5,45 +5,83 @@ metadata:
   labels:
     {{- include "kodo-agent.labels" . | nindent 4 }}
 rules:
+# ── Core read-only (metrics, events, config) ────────────────────────────────
 - apiGroups: [""]
-  resources: ["nodes", "pods", "events", "persistentvolumeclaims", "persistentvolumes", "secrets", "resourcequotas", "limitranges", "services", "configmaps", "endpoints"]
+  resources: ["nodes", "events", "secrets", "resourcequotas", "limitranges",
+              "services", "configmaps", "endpoints"]
   verbs: ["get", "list", "watch"]
+
 - apiGroups: [""]
   resources: ["namespaces"]
   verbs: ["get", "list", "watch"]
+
+# ── Node stats / metrics (kubelet proxy, metrics-server) ─────────────────────
 - apiGroups: [""]
   resources: ["nodes/proxy", "nodes/stats", "nodes/metrics"]
   verbs: ["get"]
+
+# ── Pods: read + delete (restart/heal) + exec + logs ─────────────────────────
 - apiGroups: [""]
   resources: ["pods"]
-  verbs: ["get", "list", "delete"]
+  verbs: ["get", "list", "watch", "delete"]
 - apiGroups: [""]
   resources: ["pods/exec", "pods/log"]
   verbs: ["create", "get"]
+
+# ── PVCs: full lifecycle (agent can create/resize/delete for remediation) ────
+- apiGroups: [""]
+  resources: ["persistentvolumeclaims"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+# ── PVs: read + delete (cleanup orphaned volumes) ────────────────────────────
+- apiGroups: [""]
+  resources: ["persistentvolumes"]
+  verbs: ["get", "list", "watch", "delete"]
+
+# ── Workloads: read + update/patch (scale, rollout, remediation) ─────────────
 - apiGroups: ["apps"]
   resources: ["deployments", "daemonsets", "replicasets", "statefulsets"]
   verbs: ["get", "list", "watch", "update", "patch"]
+
+# ── HPA: full lifecycle (agent creates/updates HPAs for rightsizing) ─────────
 - apiGroups: ["autoscaling"]
   resources: ["horizontalpodautoscalers"]
-  verbs: ["get", "list", "watch"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+# ── Batch workloads: read only ────────────────────────────────────────────────
 - apiGroups: ["batch"]
   resources: ["jobs", "cronjobs"]
   verbs: ["get", "list", "watch"]
+
+# ── Storage: read only ───────────────────────────────────────────────────────
 - apiGroups: ["storage.k8s.io"]
   resources: ["storageclasses", "volumeattachments"]
   verbs: ["get", "list", "watch"]
+
+# ── Metrics server ───────────────────────────────────────────────────────────
 - apiGroups: ["metrics.k8s.io"]
   resources: ["nodes", "pods"]
   verbs: ["get", "list"]
+
+# ── RBAC: read only (security audit) ─────────────────────────────────────────
 - apiGroups: ["rbac.authorization.k8s.io"]
   resources: ["roles", "rolebindings", "clusterroles", "clusterrolebindings"]
   verbs: ["get", "list", "watch"]
+
+# ── Networking: read + create NetworkPolicy (security remediation) ───────────
 - apiGroups: ["networking.k8s.io"]
-  resources: ["networkpolicies", "ingresses", "ingressclasses"]
+  resources: ["ingresses", "ingressclasses"]
   verbs: ["get", "list", "watch"]
+- apiGroups: ["networking.k8s.io"]
+  resources: ["networkpolicies"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+# ── Leases: leader election / heartbeat ──────────────────────────────────────
 - apiGroups: ["coordination.k8s.io"]
   resources: ["leases"]
   verbs: ["get", "list", "watch", "create", "update"]
+
+# ── Pod Disruption Budgets: read only ────────────────────────────────────────
 - apiGroups: ["policy"]
   resources: ["poddisruptionbudgets"]
   verbs: ["get", "list", "watch"]
