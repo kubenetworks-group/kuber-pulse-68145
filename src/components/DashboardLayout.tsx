@@ -10,6 +10,7 @@ import { useLocation } from "react-router-dom";
 import { Menu, ChevronLeft } from "lucide-react";
 import { Button } from "./ui/button";
 import { useAuditLog } from "@/hooks/useAuditLog";
+import { useCluster } from "@/contexts/ClusterContext";
 
 const pageNameMap: Record<string, string> = {
   '/': 'Dashboard',
@@ -30,6 +31,11 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
   const location = useLocation();
   const { logPageAccess } = useAuditLog();
   const lastLoggedPath = useRef<string | null>(null);
+  const { clusters, loading: clustersLoading } = useCluster();
+
+  // Sidebar only visible once at least one cluster has a connected agent
+  const hasConnectedAgent = clusters.some(c => c.status === 'healthy');
+  const showSidebar = !clustersLoading && hasConnectedAgent;
 
   // Spotlight cursor effect
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -78,39 +84,41 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
   // Desktop: collapsed = icon-only (w-16), expanded = full (w-64)
   // Mobile: sidebar always overlays as full-width (w-64); desktop width follows collapsed state
   const desktopSidebarWidth = sidebarCollapsed ? 'lg:w-16' : 'lg:w-64';
-  const mainMargin = sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64';
+  const mainMargin = showSidebar ? (sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64') : '';
 
   return (
     <div className="min-h-screen bg-background">
       {/* Mobile overlay */}
-      {sidebarOpen && (
+      {showSidebar && sidebarOpen && (
         <div
           className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
-      {/* Sidebar */}
-      <div className={`
-        fixed left-0 top-0 bottom-0 z-50 transition-all duration-300
-        w-64 ${desktopSidebarWidth}
-        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-      `}>
-        <Sidebar
-          collapsed={sidebarOpen ? false : sidebarCollapsed}
-          onNavigate={() => setSidebarOpen(false)}
-          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-          onCollapse={() => setSidebarCollapsed(true)}
-        />
-        <button
-          className="lg:hidden absolute top-1/2 -translate-y-1/2 -right-8 z-50 flex items-center justify-center w-8 h-14 rounded-r-xl shadow-lg transition-all duration-200 active:scale-95"
-          style={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderLeft: "none" }}
-          onClick={() => setSidebarOpen(false)}
-          aria-label="Fechar menu"
-        >
-          <ChevronLeft className="w-4 h-4 text-muted-foreground" />
-        </button>
-      </div>
+      {/* Sidebar — only shown after agent connects */}
+      {showSidebar && (
+        <div className={`
+          fixed left-0 top-0 bottom-0 z-50 transition-all duration-300
+          w-64 ${desktopSidebarWidth}
+          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        `}>
+          <Sidebar
+            collapsed={sidebarOpen ? false : sidebarCollapsed}
+            onNavigate={() => setSidebarOpen(false)}
+            onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+            onCollapse={() => setSidebarCollapsed(true)}
+          />
+          <button
+            className="lg:hidden absolute top-1/2 -translate-y-1/2 -right-8 z-50 flex items-center justify-center w-8 h-14 rounded-r-xl shadow-lg transition-all duration-200 active:scale-95"
+            style={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderLeft: "none" }}
+            onClick={() => setSidebarOpen(false)}
+            aria-label="Fechar menu"
+          >
+            <ChevronLeft className="w-4 h-4 text-muted-foreground" />
+          </button>
+        </div>
+      )}
 
       {/* Main content */}
       <div
@@ -127,20 +135,29 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
         <div className={`sticky top-0 z-30 kdo-nav-frosted${navScrolled ? ' scrolled' : ''}`}>
           <div className="flex items-center px-3 sm:px-4 lg:px-8 py-2 sm:py-3 gap-2 min-w-0">
             <div className="flex items-center gap-2 min-w-0 flex-1">
-              <Button
-                variant="outline"
-                size="icon"
-                className="lg:hidden flex-shrink-0 h-9 w-9 border-border"
-                onClick={() => setSidebarOpen(true)}
-                aria-label="Abrir menu"
-              >
-                <Menu className="h-4 w-4" />
-              </Button>
-              {!hideClusterSelector && <ClusterSelector />}
+              {/* Mobile hamburger only when sidebar is active */}
+              {showSidebar && (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="lg:hidden flex-shrink-0 h-9 w-9 border-border"
+                  onClick={() => setSidebarOpen(true)}
+                  aria-label="Abrir menu"
+                >
+                  <Menu className="h-4 w-4" />
+                </Button>
+              )}
+              {/* Kodo logo when sidebar is hidden (onboarding state) */}
+              {!showSidebar && (
+                <span className="text-lg font-black tracking-tight text-foreground select-none">
+                  Kodo
+                </span>
+              )}
+              {showSidebar && !hideClusterSelector && <ClusterSelector />}
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
-              <AgentUpdateButton />
-              <NotificationBell />
+              {showSidebar && <AgentUpdateButton />}
+              {showSidebar && <NotificationBell />}
               <UserProfileDropdown />
             </div>
           </div>
@@ -151,7 +168,7 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
         </div>
       </div>
 
-      <DocsAssistantChat />
+      {showSidebar && <DocsAssistantChat />}
     </div>
   );
 };
