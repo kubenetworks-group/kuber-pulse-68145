@@ -1,4 +1,5 @@
-CREATE TABLE public.storage_recommendations (
+-- storage_recommendations already created by earlier migrations
+CREATE TABLE IF NOT EXISTS public.storage_recommendations (
   id uuid NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id uuid NOT NULL,
   cluster_id uuid NOT NULL REFERENCES public.clusters(id) ON DELETE CASCADE,
@@ -17,7 +18,15 @@ CREATE TABLE public.storage_recommendations (
 
 ALTER TABLE public.storage_recommendations ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can view own storage recommendations" ON public.storage_recommendations FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own storage recommendations" ON public.storage_recommendations FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can update own storage recommendations" ON public.storage_recommendations FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Users can delete own storage recommendations" ON public.storage_recommendations FOR DELETE USING (auth.uid() = user_id);
+DO $$ BEGIN
+  CREATE POLICY "Users can view own storage recommendations" ON public.storage_recommendations FOR SELECT USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "Users can insert own storage recommendations" ON public.storage_recommendations FOR INSERT WITH CHECK (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "Users can update own storage recommendations" ON public.storage_recommendations FOR UPDATE USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "Users can delete own storage recommendations" ON public.storage_recommendations FOR DELETE USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;

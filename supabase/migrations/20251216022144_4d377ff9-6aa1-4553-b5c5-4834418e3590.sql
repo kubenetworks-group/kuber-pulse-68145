@@ -1,5 +1,5 @@
--- Create security_threats table
-CREATE TABLE public.security_threats (
+-- security_threats already created by 20251215000001_security_threats.sql
+CREATE TABLE IF NOT EXISTS public.security_threats (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   cluster_id UUID NOT NULL REFERENCES public.clusters(id) ON DELETE CASCADE,
   user_id UUID NOT NULL,
@@ -62,18 +62,26 @@ ALTER TABLE public.security_threats ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.auto_heal_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.auto_heal_actions_log ENABLE ROW LEVEL SECURITY;
 
--- RLS policies for security_threats
-CREATE POLICY "Users can view own security threats" ON public.security_threats
-  FOR SELECT USING (auth.uid() = user_id);
+-- RLS policies for security_threats (skip if already created by previous migration)
+DO $$ BEGIN
+  CREATE POLICY "Users can view own security threats" ON public.security_threats
+    FOR SELECT USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE POLICY "Users can create own security threats" ON public.security_threats
-  FOR INSERT WITH CHECK (auth.uid() = user_id);
+DO $$ BEGIN
+  CREATE POLICY "Users can create own security threats" ON public.security_threats
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE POLICY "Users can update own security threats" ON public.security_threats
-  FOR UPDATE USING (auth.uid() = user_id);
+DO $$ BEGIN
+  CREATE POLICY "Users can update own security threats" ON public.security_threats
+    FOR UPDATE USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE POLICY "Users can delete own security threats" ON public.security_threats
-  FOR DELETE USING (auth.uid() = user_id);
+DO $$ BEGIN
+  CREATE POLICY "Users can delete own security threats" ON public.security_threats
+    FOR DELETE USING (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- RLS policies for auto_heal_settings
 CREATE POLICY "Users can view own auto heal settings" ON public.auto_heal_settings
@@ -98,17 +106,23 @@ CREATE POLICY "Users can create own auto heal actions" ON public.auto_heal_actio
 CREATE POLICY "System can insert auto heal actions" ON public.auto_heal_actions_log
   FOR INSERT WITH CHECK (true);
 
--- Enable realtime for these tables
-ALTER PUBLICATION supabase_realtime ADD TABLE public.security_threats;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.auto_heal_actions_log;
+-- Enable realtime (skip if already added)
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.security_threats;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
--- Create updated_at trigger for security_threats
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.auto_heal_actions_log;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- Triggers (drop first to avoid duplicate errors)
+DROP TRIGGER IF EXISTS update_security_threats_updated_at ON public.security_threats;
 CREATE TRIGGER update_security_threats_updated_at
   BEFORE UPDATE ON public.security_threats
   FOR EACH ROW
   EXECUTE FUNCTION public.update_updated_at_column();
 
--- Create updated_at trigger for auto_heal_settings
+DROP TRIGGER IF EXISTS update_auto_heal_settings_updated_at ON public.auto_heal_settings;
 CREATE TRIGGER update_auto_heal_settings_updated_at
   BEFORE UPDATE ON public.auto_heal_settings
   FOR EACH ROW

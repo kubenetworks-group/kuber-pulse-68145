@@ -1,4 +1,4 @@
-CREATE TABLE public.leads (
+CREATE TABLE IF NOT EXISTS public.leads (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   email text NOT NULL UNIQUE,
   company text,
@@ -15,13 +15,14 @@ CREATE TABLE public.leads (
 
 ALTER TABLE public.leads ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Admins can view leads"
-  ON public.leads FOR SELECT
-  TO authenticated
-  USING (public.has_role(auth.uid(), 'admin'));
+DO $$ BEGIN
+  CREATE POLICY "Admins can view leads" ON public.leads FOR SELECT TO authenticated
+    USING (public.has_role(auth.uid(), 'admin'));
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
+DROP TRIGGER IF EXISTS set_leads_updated_at ON public.leads;
 CREATE TRIGGER set_leads_updated_at
   BEFORE UPDATE ON public.leads
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
-CREATE INDEX idx_leads_created_at ON public.leads(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_leads_created_at ON public.leads(created_at DESC);

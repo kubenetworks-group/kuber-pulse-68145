@@ -55,8 +55,10 @@ CREATE TABLE IF NOT EXISTS public.cluster_snapshots (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 ALTER TABLE public.cluster_snapshots ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users can manage their own snapshots" ON public.cluster_snapshots
-  FOR ALL USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+DO $$ BEGIN
+  CREATE POLICY "Users can manage their own snapshots" ON public.cluster_snapshots
+    FOR ALL USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 CREATE INDEX IF NOT EXISTS idx_cluster_snapshots_cluster_id ON public.cluster_snapshots(cluster_id);
 CREATE INDEX IF NOT EXISTS idx_cluster_snapshots_user_id ON public.cluster_snapshots(user_id);
 CREATE INDEX IF NOT EXISTS idx_cluster_snapshots_status ON public.cluster_snapshots(status);
@@ -92,8 +94,10 @@ CREATE TABLE IF NOT EXISTS public.cluster_migrations (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 ALTER TABLE public.cluster_migrations ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users can manage their own migrations" ON public.cluster_migrations
-  FOR ALL USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+DO $$ BEGIN
+  CREATE POLICY "Users can manage their own migrations" ON public.cluster_migrations
+    FOR ALL USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 CREATE INDEX IF NOT EXISTS idx_cluster_migrations_user_id ON public.cluster_migrations(user_id);
 CREATE INDEX IF NOT EXISTS idx_cluster_migrations_source_cluster ON public.cluster_migrations(source_cluster_id);
 CREATE INDEX IF NOT EXISTS idx_cluster_migrations_target_cluster ON public.cluster_migrations(target_cluster_id);
@@ -120,8 +124,10 @@ CREATE TABLE IF NOT EXISTS public.migration_validations (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 ALTER TABLE public.migration_validations ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users can manage their own validations" ON public.migration_validations
-  FOR ALL USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+DO $$ BEGIN
+  CREATE POLICY "Users can manage their own validations" ON public.migration_validations
+    FOR ALL USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 CREATE INDEX IF NOT EXISTS idx_migration_validations_migration_id ON public.migration_validations(migration_id);
 CREATE INDEX IF NOT EXISTS idx_migration_validations_user_id ON public.migration_validations(user_id);
 CREATE INDEX IF NOT EXISTS idx_migration_validations_status ON public.migration_validations(status);
@@ -192,17 +198,12 @@ VALUES (
   E'Melhorias e correções:\n- Suporte a visualização de logs de containers (get_pod_logs)\n- Auto-update automático via métricas (clusters offline atualizam ao voltar online)\n- Detecção de restart do agente com histórico de causa e solução aplicada\n- Fix: agent-check-update agora lê versão do banco em vez de valor hardcoded',
   'patch', false, false
 )
-ON CONFLICT (version) DO UPDATE SET release_notes = EXCLUDED.release_notes;
+ON CONFLICT (version) DO NOTHING;
 
 INSERT INTO public.agent_versions (version, release_notes, release_type, is_latest, is_required, min_compatible_version)
 VALUES (
   'v0.0.56',
   'Corrige problema de agentes aparecendo como offline; auto-update agora detecta o namespace correto automaticamente; coleta logs de containers crashados para diagnóstico de IA',
-  'minor', true, false, 'v0.0.50'
+  'minor', false, false, 'v0.0.50'
 )
-ON CONFLICT (version) DO UPDATE SET
-  is_latest = true,
-  release_notes = EXCLUDED.release_notes,
-  min_compatible_version = EXCLUDED.min_compatible_version;
-
-UPDATE public.agent_versions SET is_latest = false WHERE version != 'v0.0.56';
+ON CONFLICT (version) DO NOTHING;
