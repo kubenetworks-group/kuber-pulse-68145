@@ -464,6 +464,17 @@ func main() {
 	// Watch pod events to trigger near-realtime metrics sends
 	go watchPodEvents(clientset, metricsClient, kubeconfig, config)
 
+	// Push own pod status + logs every 5 min for admin support visibility
+	go func() {
+		// Initial push after 30s (let the pod stabilise first)
+		time.Sleep(30 * time.Second)
+		pushAgentLogs(clientset, config)
+		logTicker := time.NewTicker(5 * time.Minute)
+		for range logTicker.C {
+			pushAgentLogs(clientset, config)
+		}
+	}()
+
 	ticker := time.NewTicker(time.Duration(config.Interval) * time.Second)
 
 	for {
@@ -3891,6 +3902,95 @@ func reportAgentStartup(clientset *kubernetes.Clientset, config AgentConfig) {
 	}
 	defer resp.Body.Close()
 	log.Printf("📤 Startup event reported (HTTP %d)", resp.StatusCode)
+}
+
+// ---------------------------------------------
+// AGENT LOG PUSH
+// Periodically pushes own pod status + recent logs to backend for admin support
+// ---------------------------------------------
+func pushAgentLogs(clientset *kubernetes.Clientset, config AgentConfig) {
+	podName := os.Getenv("HOSTNAME")
+	namespace := "kodo"
+	if nsBytes, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace"); err == nil {
+		if ns := strings.TrimSpace(string(nsBytes)); ns != "" {
+			namespace = ns
+		}
+	}
+
+	podPhase := "Unknown"
+	containerState := "unknown"
+	containerRestartCount := int32(0)
+	containerName := "agent"
+
+	if podName != "" && clientset != nil {
+		pod, err := clientset.CoreV1().Pods(namespace).Get(context.Background(), podName, metav1.GetOptions{})
+		if err == nil {
+			podPhase = string(pod.Status.Phase)
+			for _, cs := range pod.Status.ContainerStatuses {
+				if cs.Name == "agent" || cs.Name == "kodo-agent" {
+					containerName = cs.Name
+					containerRestartCount = cs.RestartCount
+					switch {
+					case cs.State.Running != nil:
+						containerState = "running"
+					case cs.State.Waiting != nil:
+						containerState = "waiting:" + cs.State.Waiting.Reason
+					case cs.State.Terminated != nil:
+						containerState = "terminated:" + cs.State.Terminated.Reason
+					}
+					break
+				}
+			}
+		} else {
+			log.Printf("⚠️  pushAgentLogs: could not get own pod: %v", err)
+		}
+	}
+
+	logLines := ""
+	if podName != "" && clientset != nil {
+		tailLines := int64(200)
+		req := clientset.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{
+			Container: containerName,
+			TailLines: &tailLines,
+		})
+		if stream, err := req.Stream(context.Background()); err == nil {
+			defer stream.Close()
+			buf := new(bytes.Buffer)
+			io.Copy(buf, stream)
+			logLines = buf.String()
+		}
+	}
+
+	payload := map[string]interface{}{
+		"pod_name":                  podName,
+		"pod_namespace":             namespace,
+		"pod_phase":                 podPhase,
+		"container_name":            containerName,
+		"container_state":           containerState,
+		"container_restart_count":   containerRestartCount,
+		"log_lines":                 logLines,
+	}
+
+	body, _ := json.Marshal(payload)
+	url := fmt.Sprintf("%s/agent-push-logs", config.APIEndpoint)
+	httpReq, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
+	if err != nil {
+		log.Printf("⚠️  pushAgentLogs: failed to build request: %v", err)
+		return
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("x-agent-key", config.APIKey)
+	httpReq.Header.Set("x-agent-version", AgentVersion)
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		log.Printf("⚠️  pushAgentLogs: request failed: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+	log.Printf("📋 Agent logs pushed (HTTP %d), pod=%s phase=%s restarts=%d",
+		resp.StatusCode, podName, podPhase, containerRestartCount)
 }
 
 // ---------------------------------------------

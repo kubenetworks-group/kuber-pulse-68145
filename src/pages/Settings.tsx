@@ -11,13 +11,15 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription, PLAN_LIMITS, TRIAL_LIMITS } from "@/contexts/SubscriptionContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Database, Loader2, Sparkles, GraduationCap, Crown, Clock, Brain, Server, User, Check, Shield, MessageSquare, XCircle, Info, FileText, Lock, Download, Trash2, ExternalLink } from "lucide-react";
+import { Database, Loader2, Sparkles, GraduationCap, Crown, Clock, Brain, Server, User, Check, Shield, MessageSquare, XCircle, Info, FileText, Lock, Download, Trash2, ExternalLink, KeyRound } from "lucide-react";
 import { seedDemoData, deleteDemoData, generateAISavings } from "@/services/demoDataSeeder";
 import { AIUsageWidget } from "@/components/AIUsageWidget";
 import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { AvatarUpload } from "@/components/AvatarUpload";
 import { MFASetup } from "@/components/MFASetup";
 import { useAdminCheck } from "@/hooks/useAdminCheck";
+import { PasswordInput } from "@/components/PasswordInput";
+import { z } from "zod";
 import { WhatsAppConfig } from "@/components/WhatsAppConfig";
 import { WhatsAppApprovals } from "@/components/WhatsAppApprovals";
 import { Switch } from "@/components/ui/switch";
@@ -55,6 +57,8 @@ const Settings = () => {
   const [consentLoading, setConsentLoading] = useState(false);
   const [deleteAccountLoading, setDeleteAccountLoading] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ newPassword: "", confirmPassword: "" });
+  const [passwordLoading, setPasswordLoading] = useState(false);
   const [profile, setProfile] = useState({
     full_name: "",
     company: "",
@@ -212,6 +216,39 @@ const Settings = () => {
       toast.error(error.message || "Falha ao gerar dados de economia com IA");
     } finally {
       setSavingsLoading(false);
+    }
+  };
+
+  const passwordSchema = z.string()
+    .min(8, "Mínimo 8 caracteres")
+    .regex(/[A-Z]/, "Ao menos uma letra maiúscula")
+    .regex(/[a-z]/, "Ao menos uma letra minúscula")
+    .regex(/[0-9]/, "Ao menos um número");
+
+  const getPasswordStrength = (p: string) =>
+    [p.length >= 8, /[A-Z]/.test(p), /[a-z]/.test(p), /[0-9]/.test(p)].filter(Boolean).length;
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const validation = passwordSchema.safeParse(passwordForm.newPassword);
+    if (!validation.success) {
+      toast.error(validation.error.errors[0].message);
+      return;
+    }
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      toast.error("As senhas não conferem");
+      return;
+    }
+    setPasswordLoading(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: passwordForm.newPassword });
+      if (error) throw error;
+      toast.success("Senha alterada com sucesso!");
+      setPasswordForm({ newPassword: "", confirmPassword: "" });
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao alterar senha");
+    } finally {
+      setPasswordLoading(false);
     }
   };
 
@@ -452,6 +489,80 @@ const Settings = () => {
           {/* Security Tab */}
           <TabsContent value="security" className="space-y-5 mt-0">
             <MFASetup />
+
+            {/* Change Password */}
+            {user?.app_metadata?.provider === 'email' || !user?.app_metadata?.provider ? (
+              <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm">
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800">
+                    <KeyRound className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-slate-900 dark:text-white">Alterar Senha</h3>
+                    <p className="text-xs text-slate-400 mt-0.5">Defina uma nova senha para sua conta</p>
+                  </div>
+                </div>
+                <form onSubmit={handleChangePassword} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Nova Senha</Label>
+                    <PasswordInput
+                      id="settings-new-password"
+                      value={passwordForm.newPassword}
+                      onChange={(v) => setPasswordForm({ ...passwordForm, newPassword: v })}
+                      required
+                    />
+                    {passwordForm.newPassword.length > 0 && (() => {
+                      const s = getPasswordStrength(passwordForm.newPassword);
+                      const color = s <= 1 ? "bg-red-500" : s === 2 ? "bg-orange-400" : s === 3 ? "bg-yellow-400" : "bg-green-500";
+                      const label = ["", "Muito fraca", "Fraca", "Boa", "Forte"][s];
+                      return (
+                        <div className="space-y-1.5 pt-1">
+                          <div className="flex gap-1">
+                            {[1, 2, 3, 4].map((l) => (
+                              <div key={l} className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${s >= l ? color : "bg-slate-200 dark:bg-slate-700"}`} />
+                            ))}
+                          </div>
+                          <p className="text-xs text-slate-400"><span className="font-medium">{label}</span> — mín. 8 chars, maiúscula, minúscula e número</p>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Confirmar Nova Senha</Label>
+                    <PasswordInput
+                      id="settings-confirm-password"
+                      value={passwordForm.confirmPassword}
+                      onChange={(v) => setPasswordForm({ ...passwordForm, confirmPassword: v })}
+                      required
+                    />
+                    {passwordForm.confirmPassword.length > 0 && passwordForm.newPassword !== passwordForm.confirmPassword && (
+                      <p className="text-xs text-destructive">As senhas não conferem</p>
+                    )}
+                  </div>
+                  <Button
+                    type="submit"
+                    disabled={passwordLoading || getPasswordStrength(passwordForm.newPassword) < 4 || passwordForm.newPassword !== passwordForm.confirmPassword}
+                    className="gap-2"
+                  >
+                    {passwordLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+                    {passwordLoading ? "Salvando..." : "Salvar Nova Senha"}
+                  </Button>
+                </form>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
+                    <KeyRound className="w-4 h-4 text-slate-400" />
+                  </div>
+                  <h3 className="font-semibold text-slate-900 dark:text-white">Alterar Senha</h3>
+                </div>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Sua conta foi criada com login social (Google). Não é possível definir uma senha separada.
+                </p>
+              </div>
+            )}
+
             <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm">
               <div className="flex items-center gap-3 mb-4">
                 <div className="p-2 rounded-xl bg-red-50 dark:bg-red-900/30 border border-red-100 dark:border-red-800">

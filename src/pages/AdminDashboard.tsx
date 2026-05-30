@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, Server, Bot, AlertTriangle, Search, RefreshCw, Shield, Settings2, Clock, Database, FileText, ShieldAlert, Bell, Trash2, Loader2, Mail, SendHorizonal, Building2, BarChart2 } from "lucide-react";
+import { Users, Server, Bot, AlertTriangle, Search, RefreshCw, Shield, Settings2, Clock, Database, FileText, ShieldAlert, Bell, Trash2, Loader2, Mail, SendHorizonal, Building2, BarChart2, Terminal } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { formatDistanceToNow, format, addDays } from "date-fns";
@@ -17,6 +17,7 @@ import { ptBR } from "date-fns/locale";
 import { AuditLogsTab } from "@/components/AuditLogsTab";
 import { AdminClusterAlertsTab } from "@/components/AdminClusterAlertsTab";
 import { SaasMetricsTab } from "@/components/SaasMetricsTab";
+import { AdminSupportTab } from "@/components/AdminSupportTab";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -352,6 +353,10 @@ const AdminDashboard = () => {
             <TabsTrigger value="metrics" className="gap-2">
               <BarChart2 className="h-4 w-4" />
               Métricas
+            </TabsTrigger>
+            <TabsTrigger value="support" className="gap-2">
+              <Terminal className="h-4 w-4" />
+              Suporte
             </TabsTrigger>
           </TabsList>
 
@@ -716,6 +721,10 @@ const AdminDashboard = () => {
 
           <TabsContent value="metrics" className="space-y-4">
             <SaasMetricsTab />
+          </TabsContent>
+
+          <TabsContent value="support">
+            <AdminSupportTab />
           </TabsContent>
         </Tabs>
       </div>

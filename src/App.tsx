@@ -56,6 +56,8 @@ import FinOpsKubernetes from "./pages/blog/FinOpsKubernetes";
 import KodoVsAlternatives from "./pages/blog/KodoVsAlternatives";
 import { CookieBanner } from "@/components/CookieBanner";
 import RegisterProfile from "./pages/RegisterProfile";
+import ResetPassword from "./pages/ResetPassword";
+import Onboarding from "./pages/Onboarding";
 
 const queryClient = new QueryClient();
 
@@ -89,6 +91,15 @@ const App = () => (
                 <Route path="/" element={<LandingPage />} />
                 <Route path="/sobre" element={<About />} />
                 <Route path="/auth" element={<Auth />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
+                <Route
+                  path="/onboarding"
+                  element={
+                    <ProtectedRoute>
+                      <Onboarding />
+                    </ProtectedRoute>
+                  }
+                />
                 <Route
                   path="/register"
                   element={

@@ -4,7 +4,7 @@ import { corsHeaders } from '../_shared/cors.ts';
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
 const FROM_EMAIL = 'Kodo by KubeNetworks <noreply@kubenetworks.com.br>';
 const SITE_URL = 'https://kodo.kubenetworks.com.br';
-const INVITE_REDIRECT = `${SITE_URL}/register`;
+const INVITE_REDIRECT = `${SITE_URL}/onboarding`;
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {

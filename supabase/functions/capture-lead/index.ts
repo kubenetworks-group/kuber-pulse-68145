@@ -47,12 +47,21 @@ Deno.serve(async (req) => {
           utm_content,
           updated_at: new Date().toISOString(),
         },
-        { onConflict: 'email' },
+        { onConflict: 'email', ignoreDuplicates: false },
       )
       .select('id')
       .single();
 
     if (insertError) {
+      // Duplicate email (23505) — lead already exists, treat as success
+      // (the user resubmitted or hit the back button)
+      if (insertError.code === '23505') {
+        console.log(`ℹ️ Duplicate lead for ${normalizedEmail} — returning success`);
+        return new Response(
+          JSON.stringify({ success: true, duplicate: true }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
       console.error('Error inserting lead:', insertError);
       throw insertError;
     }
