@@ -201,6 +201,9 @@ serve(async (req) => {
     };
     // ======= END DEDUPLICATION =======
 
+    // Namespaces allowed by the user (null = all non-system namespaces)
+    const allowedNamespaces: string[] | null = settings?.allowed_namespaces ?? null;
+
     // System namespaces that should be skipped (infrastructure components, CNI, etc.)
     // Define early so it can be used in both anomalies and pod issues sections
     const systemNamespaces = [
@@ -219,6 +222,13 @@ serve(async (req) => {
       'kodo', 'kodo-agent', // Agent namespace — NEVER auto-restart, manual only
       'local-path-storage', 'default',
     ];
+
+    // Helper: true when namespace is allowed for monitoring/healing
+    const isAllowedNamespace = (ns: string): boolean => {
+      if (systemNamespaces.includes(ns)) return false;           // system: always blocked
+      if (allowedNamespaces === null)     return true;           // null = all user namespaces
+      return allowedNamespaces.includes(ns);                     // explicit whitelist
+    };
 
     // Determine what to apply based on settings.
     // auto_apply_anomalies defaults to TRUE — only skip when explicitly set to false.
@@ -262,9 +272,9 @@ serve(async (req) => {
           }
         }
 
-        // Skip system namespaces to avoid breaking infrastructure
-        if (systemNamespaces.includes(namespace)) {
-          console.log(`Skipping anomaly ${anomaly.id} - system namespace: ${namespace}`);
+        // Skip system namespaces and namespaces not in the user's allowed list
+        if (!isAllowedNamespace(namespace)) {
+          console.log(`Skipping anomaly ${anomaly.id} - namespace not allowed: ${namespace}`);
           // Mark as resolved with note
           await supabase
             .from('agent_anomalies')
@@ -544,8 +554,8 @@ serve(async (req) => {
       
       // Find pods that are NOT Ready, in CrashLoopBackOff, or have restart issues
       const podsWithIssues = podDetails.filter((pod: any) => {
-        // Skip system namespaces
-        if (systemNamespaces.includes(pod.namespace)) {
+        // Skip system namespaces and disallowed namespaces
+        if (!isAllowedNamespace(pod.namespace)) {
           return false;
         }
 
@@ -584,7 +594,7 @@ serve(async (req) => {
                pod.ready === true &&
                restartCount >= restartThreshold &&
                hasRecentTermination &&
-               !systemNamespaces.includes(pod.namespace);
+               isAllowedNamespace(pod.namespace);
       });
 
       // Combine and deduplicate
@@ -775,8 +785,8 @@ serve(async (req) => {
       if (totalPods > 0 && limitPercentage < 50) {
         // Find pods without resource limits from pod_details
         const podsWithoutLimits = podDetails.filter((pod: any) => {
-          // Skip system namespaces (using the constant defined above)
-          if (systemNamespaces.includes(pod.namespace)) {
+          // Skip system namespaces and disallowed namespaces
+          if (!isAllowedNamespace(pod.namespace)) {
             return false;
           }
 

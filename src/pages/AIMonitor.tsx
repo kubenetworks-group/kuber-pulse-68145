@@ -8,12 +8,15 @@ import { MetricCard } from "@/components/MetricCard";
 import { CronJobsStatus } from "@/components/CronJobsStatus";
 import { ScanHistoryTab } from "@/components/ScanHistoryTab";
 import { AgentUpdateBanner } from "@/components/AgentUpdateBanner";
+import { AgentActivityPanel } from "@/components/AgentActivityPanel";
+import { AIActivityEmulator } from "@/components/AIActivityEmulator";
 import { useSecurityThreats } from "@/hooks/useSecurityThreats";
 import { Bot, Activity, CheckCircle, Shield, Zap, AlertCircle, History, ShieldAlert, Settings2, Clock, Server, AlertTriangle, RefreshCw, Search, FileText, Sliders, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AutoHealConfig } from "@/components/AutoHealConfig";
 import { AutoHealActionsLog } from "@/components/AutoHealActionsLog";
 import { PodRemediationPanel } from "@/components/PodRemediationPanel";
+import { NamespaceMonitoringConfig } from "@/components/NamespaceMonitoringConfig";
 import { ClusterSecurityAnalysis } from "@/components/ClusterSecurityAnalysis";
 import { PodRestartAuditTab } from "@/components/PodRestartAuditTab";
 import { toast } from "@/hooks/use-toast";
@@ -496,42 +499,42 @@ export default function AIMonitor() {
         {/* Agent Update Banner */}
         <AgentUpdateBanner />
 
-        {/* ── Header + Stats strip ── */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        {/* ── Header ── */}
+        <div className="flex items-center justify-between gap-4">
           <div>
             <h1 className="text-xl font-bold tracking-tight">{t('aiMonitor.title')}</h1>
             <p className="text-sm text-muted-foreground mt-0.5">{t('aiMonitor.description')}</p>
           </div>
-
-          {/* Compact stats */}
-          <div className="flex items-center gap-1 rounded-xl border border-border bg-card px-3 py-2 divide-x divide-border/60 overflow-x-auto shrink-0">
-            {[
-              { icon: Bot, label: "Agentes", value: stats.activeAgents, color: "text-primary" },
-              { icon: CheckCircle, label: "Sucesso", value: `${successRate}%`, color: "text-green-500" },
-              { icon: Shield, label: "Downtime evitado", value: `${stats.preventedDowntime}m`, color: "text-amber-500" },
-              { icon: Activity, label: "Incidentes", value: stats.total, color: "text-blue-500" },
-            ].map(({ icon: Icon, label, value, color }) => (
-              <div key={label} className="flex flex-col items-center px-4 first:pl-1 last:pr-1 gap-0.5 min-w-fit">
-                <div className="flex items-center gap-1.5">
-                  <Icon className={`h-3.5 w-3.5 ${color}`} />
-                  <span className={`text-lg font-bold tabular-nums ${color}`}>{value}</span>
-                </div>
-                <span className="text-[10px] text-muted-foreground whitespace-nowrap">{label}</span>
-              </div>
-            ))}
-          </div>
         </div>
 
+        {/* ── Agent Activity Panel ── */}
+        {(() => {
+          const agentInfo = getAgentStatus();
+          const cluster = clusters.find(c => c.id === selectedClusterId);
+          const lastSeen = cluster?.agent_last_seen_at ? new Date(cluster.agent_last_seen_at) : null;
+          return (
+            <AgentActivityPanel
+              clusterId={selectedClusterId}
+              clusterName={cluster?.name}
+              agentStatus={agentInfo?.status as any ?? null}
+              agentLastSeen={lastSeen}
+              successRate={successRate}
+              preventedDowntime={stats.preventedDowntime}
+              totalIncidents={stats.total}
+              recentAnomalies={recentAnomalies}
+            />
+          );
+        })()}
+
+        {/* ── AI Activity Emulator ── */}
+        <AIActivityEmulator />
+
         {/* ── Tabs ── */}
-        <Tabs defaultValue="remediation" className="space-y-4">
+        <Tabs defaultValue="anomalies" className="space-y-4">
           <TabsList className="flex flex-nowrap overflow-x-auto w-full max-w-full h-auto p-1 gap-0.5">
-            <TabsTrigger value="remediation" className="flex items-center gap-2 text-sm whitespace-nowrap px-3 py-2">
-              <Wrench className="h-4 w-4" />
-              <span>Remediações</span>
-            </TabsTrigger>
             <TabsTrigger value="autoheal" className="flex items-center gap-2 text-sm whitespace-nowrap px-3 py-2">
               <Sliders className="h-4 w-4" />
-              <span>Automação</span>
+              <span>Configurações</span>
             </TabsTrigger>
             <TabsTrigger value="anomalies" className="flex items-center gap-2 text-sm whitespace-nowrap px-3 py-2">
               <AlertCircle className="h-4 w-4" />
@@ -550,10 +553,7 @@ export default function AIMonitor() {
               <Activity className="h-4 w-4" />
               <span>{t('aiMonitor.incidents')}</span>
             </TabsTrigger>
-            <TabsTrigger value="commands" className="flex items-center gap-2 text-sm whitespace-nowrap px-3 py-2">
-              <Zap className="h-4 w-4" />
-              <span>Comandos {agentCommands.length > 0 && `(${agentCommands.length})`}</span>
-            </TabsTrigger>
+
             <TabsTrigger value="history" className="flex items-center gap-2 text-sm whitespace-nowrap px-3 py-2">
               <History className="h-4 w-4" />
               <span>Histórico</span>
@@ -820,8 +820,8 @@ export default function AIMonitor() {
             </Card>
           </TabsContent>
 
-          {/* Commands Tab */}
-          <TabsContent value="commands" className="space-y-4">
+          {/* Commands Tab — removed, now shown in AgentActivityPanel */}
+          <TabsContent value="commands" className="hidden">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -1311,16 +1311,15 @@ export default function AIMonitor() {
             )}
           </TabsContent>
 
-          {/* Remediation Tab */}
-          <TabsContent value="remediation" className="space-y-5">
+          {/* Configurações Tab (Automação + Remediações fundidos) */}
+          <TabsContent value="autoheal" className="space-y-5">
+            {selectedClusterId && (
+              <NamespaceMonitoringConfig clusterId={selectedClusterId} />
+            )}
+            <AutoHealConfig />
             <div className="rounded-xl border border-border bg-card p-4">
               <PodRemediationPanel />
             </div>
-          </TabsContent>
-
-          {/* Auto-Heal Tab */}
-          <TabsContent value="autoheal" className="space-y-5">
-            <AutoHealConfig />
             <AutoHealActionsLog />
           </TabsContent>
 

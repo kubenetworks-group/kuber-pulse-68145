@@ -196,180 +196,48 @@ export default function Developer() {
     setActiveTab("yaml");
 
     try {
-      // 1. Fetch cluster context from Supabase client-side
-      const { data: cluster } = await supabase
-        .from("clusters")
-        .select("name, provider, environment, nodes, pods, cpu_usage, memory_usage")
-        .eq("id", selectedClusterId)
-        .single();
-
-      const { data: podMetric } = await supabase
-        .from("agent_metrics")
-        .select("metric_data")
-        .eq("cluster_id", selectedClusterId)
-        .eq("metric_type", "pod_details")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      const pods: any[] = (podMetric?.metric_data as any)?.pods || [];
-      const namespaces = [...new Set(pods.map((p: any) => p.namespace))].filter(Boolean);
-      const runningWorkloads = pods
-        .filter((p: any) => p.status === "Running" && !["kube-system", "kodo"].includes(p.namespace))
-        .slice(0, 6)
-        .map((p: any) => `${p.namespace}/${p.name}`);
-
-      // 2. Build rich prompt with cluster context
-      const clusterCtx = cluster
-        ? `Cluster: ${cluster.name} | Provedor: ${cluster.provider || "K8s"} | Ambiente: ${cluster.environment || "production"} | Nodes: ${cluster.nodes || "?"} | CPU: ${cluster.cpu_usage ? Math.round(cluster.cpu_usage) + "%" : "?"} | Memória: ${cluster.memory_usage ? Math.round(cluster.memory_usage) + "%" : "?"}`
-        : "Cluster K8s padrão";
-
-      const namespacesCtx = namespaces.length > 0
-        ? namespaces.join(", ")
-        : "default";
-
-      const workloadsCtx = runningWorkloads.length > 0
-        ? runningWorkloads.join(", ")
-        : "nenhum workload encontrado";
-
-      const userPrompt = `MODO: GERAÇÃO DE YAML KUBERNETES PRODUCTION-READY
-
-ESTADO ATUAL DO CLUSTER:
-${clusterCtx}
-Namespaces disponíveis: ${namespacesCtx}
-Workloads em execução (exemplos): ${workloadsCtx}
-
-PEDIDO DO DESENVOLVEDOR:
-"${description.trim()}"
-
-INSTRUÇÕES:
-Gere manifestos Kubernetes completos e prontos para produção baseados no pedido e no contexto do cluster.
-
-Regras obrigatórias:
-- resources.requests e resources.limits realistas para o cluster atual
-- HPA se mencionar auto-scaling/escalonamento automático
-- liveness e readiness probes adequados
-- Labels: app, version, environment, managed-by: kodo
-- Nunca use "latest" como tag de imagem (use "v1.0.0" como placeholder)
-- Múltiplos recursos separados por ---
-- Se o pedido for para produção, use minReplicas >= 2
-
-Responda EXATAMENTE neste formato:
-
-YAML_START
-[YAML completo aqui]
-YAML_END
-
-EXPLANATION_START
-[Explicação em português, 3-5 frases: o que foi criado, por que as configurações foram escolhidas, considerações importantes]
-EXPLANATION_END
-
-COMPONENTS_START
-[lista de tipos de recursos separados por vírgula, ex: Deployment, Service, HPA]
-COMPONENTS_END`;
-
-      // 3. Call cluster-assistant via SSE stream
-      const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/cluster-assistant`;
-      const messages = [{ role: "user", content: userPrompt }];
-
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error("Sessão expirada. Faça login novamente.");
 
-      const resp = await fetch(CHAT_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ messages }),
-      });
+      const resp = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-k8s-yaml`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ cluster_id: selectedClusterId, description: description.trim() }),
+        }
+      );
 
       if (!resp.ok) {
-        if (resp.status === 429) throw new Error("Rate limit excedido. Tente novamente em instantes.");
-        if (resp.status === 402) throw new Error("Créditos de IA insuficientes.");
-        throw new Error(`Erro ${resp.status} ao chamar assistente`);
-      }
-
-      if (!resp.body) throw new Error("Sem resposta do servidor");
-
-      // 4. Read SSE stream
-      const reader = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let textBuffer = "";
-      let fullContent = "";
-      let streamDone = false;
-
-      while (!streamDone) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        textBuffer += decoder.decode(value, { stream: true });
-
-        let newlineIndex: number;
-        while ((newlineIndex = textBuffer.indexOf("\n")) !== -1) {
-          let line = textBuffer.slice(0, newlineIndex);
-          textBuffer = textBuffer.slice(newlineIndex + 1);
-          if (line.endsWith("\r")) line = line.slice(0, -1);
-          if (line.startsWith(":") || line.trim() === "") continue;
-          if (!line.startsWith("data: ")) continue;
-
-          const jsonStr = line.slice(6).trim();
-          if (jsonStr === "[DONE]") { streamDone = true; break; }
-
-          try {
-            const parsed = JSON.parse(jsonStr);
-            const token = parsed.choices?.[0]?.delta?.content as string | undefined;
-            if (token) fullContent += token;
-          } catch {
-            /* ignore parse errors */
-          }
+        if (resp.status === 429) throw new Error("Limite de velocidade da IA atingido. Aguarde 1 minuto e tente novamente.");
+        const errData = await resp.json().catch(() => ({}));
+        const errMsg = errData.error || `Erro ${resp.status} ao gerar YAML`;
+        if (errMsg.includes("Limite de") && errMsg.includes("análises de IA")) {
+          toast.error(errMsg, {
+            action: { label: "Ver planos", onClick: () => window.open("/plans", "_blank") },
+            duration: 8000,
+          });
+          return;
         }
+        throw new Error(errMsg);
       }
 
-      // 5. Parse structured response
-      const yamlMatch = fullContent.match(/YAML_START\s*([\s\S]*?)\s*YAML_END/);
-      const explanationMatch = fullContent.match(/EXPLANATION_START\s*([\s\S]*?)\s*EXPLANATION_END/);
-      const componentsMatch = fullContent.match(/COMPONENTS_START\s*([\s\S]*?)\s*COMPONENTS_END/);
+      const data = await resp.json();
 
-      let generatedYaml = yamlMatch?.[1]?.trim() || "";
-      const explanation = explanationMatch?.[1]?.trim() || "";
-      const componentsRaw = componentsMatch?.[1]?.trim() || "";
-      const components = componentsRaw.split(",").map((c: string) => c.trim()).filter(Boolean);
+      if (!data.yaml) throw new Error("A IA não retornou um YAML válido. Tente novamente.");
 
-      // Fallback: extract from markdown code block
-      if (!generatedYaml) {
-        const codeBlock = fullContent.match(/```(?:yaml|yml)?\s*([\s\S]*?)```/);
-        generatedYaml = codeBlock?.[1]?.trim() || fullContent.trim();
-      }
+      setResult({
+        yaml: data.yaml,
+        explanation: data.explanation || "",
+        components: data.components || [],
+        cluster_context: data.cluster_context,
+      });
 
-      const generatedResult: GeneratedResult = {
-        yaml: generatedYaml,
-        explanation,
-        components,
-        cluster_context: {
-          name: cluster?.name || "Cluster",
-          provider: cluster?.provider || "",
-          namespaces,
-          node_count: cluster?.nodes || 0,
-        },
-      };
-
-      setResult(generatedResult);
       toast.success("YAML gerado com sucesso!");
-
-      // 6. Save to history (silently — table may not exist yet)
-      try {
-        await supabase.from("generated_yamls").insert({
-          user_id: user.id,
-          cluster_id: selectedClusterId,
-          user_description: description.trim(),
-          generated_yaml: generatedYaml,
-          explanation,
-          components,
-        });
-        fetchHistory();
-      } catch {
-        /* table not created yet — ignore */
-      }
+      fetchHistory();
     } catch (err: any) {
       toast.error(err.message || "Erro ao gerar YAML");
     } finally {

@@ -81,20 +81,54 @@ const APP_NAMES = [
 ];
 
 const SYSTEM_PODS = [
-  { name: "coredns",           namespace: "kube-system"   },
-  { name: "kube-proxy",        namespace: "kube-system"   },
-  { name: "metrics-server",    namespace: "kube-system"   },
-  { name: "prometheus-server", namespace: "monitoring"    },
-  { name: "grafana",           namespace: "monitoring"    },
-  { name: "loki",              namespace: "monitoring"    },
-  { name: "nginx-ingress",     namespace: "ingress-nginx" },
-  { name: "cert-manager",      namespace: "cert-manager"  },
+  { name: "coredns",           namespace: "kube-system",   cpuRange: [80,  160], memRange: [150, 400], restartRange: [0, 40], kind: "DaemonSet"   },
+  { name: "kube-proxy",        namespace: "kube-system",   cpuRange: [40,  100], memRange: [150, 500], restartRange: [0, 40], kind: "DaemonSet"   },
+  { name: "metrics-server",    namespace: "kube-system",   cpuRange: [80,  200], memRange: [50,  150], restartRange: [0, 5],  kind: "Deployment"  },
+  { name: "prometheus-server", namespace: "monitoring",    cpuRange: [8,   60],  memRange: [200, 600], restartRange: [0, 3],  kind: "Deployment"  },
+  { name: "grafana",           namespace: "monitoring",    cpuRange: [20,  80],  memRange: [150, 600], restartRange: [0, 3],  kind: "Deployment"  },
+  { name: "loki",              namespace: "monitoring",    cpuRange: [5,   30],  memRange: [100, 350], restartRange: [0, 2],  kind: "StatefulSet" },
+  { name: "nginx-ingress",     namespace: "ingress-nginx", cpuRange: [80,  200], memRange: [50,  150], restartRange: [0, 5],  kind: "DaemonSet"   },
+  { name: "cert-manager",      namespace: "cert-manager",  cpuRange: [8,   30],  memRange: [200, 600], restartRange: [0, 3],  kind: "Deployment"  },
 ];
 
-function hash(s: string) {
-  let h = 0;
-  for (const c of s) h = ((h << 5) - h + c.charCodeAt(0)) | 0;
-  return Math.abs(h).toString(36).slice(0, 6);
+const SVC_NS: Record<string, string> = {
+  "api-gateway": "default", "auth-service": "production", "payment-service": "staging",
+  "user-service": "backend", "notification-service": "frontend", "search-service": "production",
+  "recommendation-engine": "backend", "analytics-worker": "staging", "report-generator": "default",
+  "webhook-dispatcher": "production", "cache-warmer": "backend", "data-pipeline": "staging",
+  "ml-inference": "backend", "image-processor": "production", "email-worker": "staging",
+  "scheduler": "default", "audit-logger": "default", "config-manager": "kube-system",
+};
+
+const SVC_RESOURCES: Record<string, { cpuRange: [number,number]; memRange: [number,number] }> = {
+  "api-gateway":           { cpuRange: [40,  150],  memRange: [100,  300] },
+  "auth-service":          { cpuRange: [10,  60],   memRange: [80,   250] },
+  "payment-service":       { cpuRange: [10,  60],   memRange: [30,   150] },
+  "user-service":          { cpuRange: [30,  120],  memRange: [80,   250] },
+  "notification-service":  { cpuRange: [5,   30],   memRange: [80,   300] },
+  "search-service":        { cpuRange: [50,  500],  memRange: [200, 2000] },
+  "recommendation-engine": { cpuRange: [50, 1000],  memRange: [300, 3000] },
+  "analytics-worker":      { cpuRange: [30,  200],  memRange: [150,  800] },
+  "report-generator":      { cpuRange: [15,  100],  memRange: [80,   400] },
+  "webhook-dispatcher":    { cpuRange: [8,   60],   memRange: [40,   150] },
+  "cache-warmer":          { cpuRange: [8,   80],   memRange: [60,   300] },
+  "data-pipeline":         { cpuRange: [50,  400],  memRange: [200,  800] },
+  "ml-inference":          { cpuRange: [100, 2000], memRange: [500, 4000] },
+  "image-processor":       { cpuRange: [50,  500],  memRange: [200,  800] },
+  "email-worker":          { cpuRange: [5,   40],   memRange: [40,   150] },
+  "scheduler":             { cpuRange: [3,   20],   memRange: [40,   100] },
+  "audit-logger":          { cpuRange: [3,   20],   memRange: [40,   150] },
+  "config-manager":        { cpuRange: [3,   20],   memRange: [40,   100] },
+};
+
+function k8sId(seed: string, len = 5): string {
+  const letters = "abcdefghijklmnopqrstuvwxyz";
+  const alnum   = "abcdefghijklmnopqrstuvwxyz0123456789";
+  let h = 5381;
+  for (let i = 0; i < seed.length; i++) h = (((h << 5) + h) ^ seed.charCodeAt(i)) >>> 0;
+  let out = letters[h % letters.length];
+  for (let i = 1; i < len; i++) { h = ((h * 1664525) + 1013904223) >>> 0; out += alnum[h % alnum.length]; }
+  return out;
 }
 
 function generatePods(
@@ -104,27 +138,33 @@ function generatePods(
   memUsagePct: number
 ) {
   const pods: any[] = [];
-  const namespaces = ["default", "production", "staging", "backend", "frontend"];
-  const sysPodCount = Math.min(8, Math.floor(totalPods * 0.15));
+  const sysPodCount = Math.min(SYSTEM_PODS.length, Math.floor(totalPods * 0.15));
+  const loadFactor = cpuUsagePct / 100;
+  const memFactor  = memUsagePct  / 100;
 
   for (let i = 0; i < sysPodCount; i++) {
-    const sp = SYSTEM_PODS[i % SYSTEM_PODS.length];
-    const restarts = i < 2 ? randInt(0, 3) : 0;
+    const sp       = SYSTEM_PODS[i];
+    const cpuMilli = randInt(sp.cpuRange[0], sp.cpuRange[1]);
+    const memMi    = randInt(sp.memRange[0], sp.memRange[1]);
+    const restarts = randInt(sp.restartRange[0], sp.restartRange[1]);
+    const podSuffix = k8sId(clusterName + sp.name, 6);
+    const ownerName = `${sp.name}-${k8sId(clusterName + sp.name + "owner", 6)}`;
     pods.push({
-      name: `${sp.name}-${hash(clusterName + i)}`,
-      namespace: sp.namespace,
-      phase: "Running",
-      status: "Running",
-      restarts,
+      name: `${sp.name}-${podSuffix}`, namespace: sp.namespace,
+      phase: "Running", status: "Running", restarts,
       node: `${clusterName}-worker-${randInt(1, 3)}`,
-      cpu: `${randInt(10, 200)}m`,
-      memory: `${randInt(64, 512)}Mi`,
+      cpu: `${cpuMilli}m`, memory: `${memMi}Mi`,
+      controlled_by_kind: sp.kind, controlled_by_name: ownerName,
+      qos_class: "Burstable",
+      created_at: daysAgo(randInt(1, 30)),
+      conditions: [{ type: "Ready", status: "True" }],
+      labels: { app: sp.name, component: sp.name },
       containers: [{
-        name: sp.name,
-        restart_count: restarts,
+        name: sp.name, restart_count: restarts,
+        ready: true, state: { status: "running" },
         resources: {
-          limits:   { cpu: "500m", memory: "512Mi" },
-          requests: { cpu: "50m",  memory: "128Mi" },
+          limits:   { cpu: `${cpuMilli * 4}m`,                            memory: `${memMi * 2}Mi` },
+          requests: { cpu: `${Math.max(5, Math.round(cpuMilli * 0.3))}m`, memory: `${Math.max(16, Math.round(memMi * 0.5))}Mi` },
         },
         readiness_probe: { http_get: { path: "/healthz", port: 8080 } },
         liveness_probe:  { http_get: { path: "/healthz", port: 8080 } },
@@ -138,30 +178,50 @@ function generatePods(
     : ["Running","Running","Running","Running","Running","Pending"];
 
   for (let i = 0; i < appPodCount; i++) {
-    const app  = APP_NAMES[i % APP_NAMES.length];
-    const ns   = namespaces[i % namespaces.length];
+    const app   = APP_NAMES[i % APP_NAMES.length];
+    const ns    = SVC_NS[app] || "default";
     const phase = pick(statusWeights);
-    const restarts = phase === "Failed" ? randInt(5, 20) : phase === "Pending" ? 0 : randInt(0, 4);
-    const cpuMilli = Math.round(cpuUsagePct / 100 * rand(10, 300));
-    const memMi    = Math.round(memUsagePct / 100 * rand(50, 500));
-    const missingLimits = Math.random() < 0.2;
-    const missingProbes = Math.random() < 0.25;
+    const res   = SVC_RESOURCES[app] || { cpuRange: [10, 200] as [number,number], memRange: [64, 512] as [number,number] };
+
+    const cpuMilli = Math.max(1, Math.round(randInt(res.cpuRange[0], res.cpuRange[1]) * Math.min(loadFactor * rand(0.6, 1.4), 2.0)));
+    const memMi    = Math.max(4, Math.round(randInt(res.memRange[0], res.memRange[1]) * Math.min(memFactor  * rand(0.6, 1.4), 2.0)));
+
+    const restarts = phase === "Failed"  ? randInt(8, 45)
+                   : phase === "Pending" ? 0
+                   : Math.random() < 0.55 ? 0 : randInt(1, 8);
+
+    const rsHash  = k8sId(clusterName + app, 6);
+    const podHash = k8sId(clusterName + app + String(i), 6);
+    const rsName  = `${app}-${rsHash}`;
+
+    const missingLimits = Math.random() < 0.15;
+    const missingProbes = Math.random() < 0.20;
+    const qosClass = missingLimits ? "BestEffort" : Math.random() < 0.25 ? "Guaranteed" : "Burstable";
+
     pods.push({
-      name: `${app}-${hash(clusterName + i)}-${hash(ns + i)}`,
-      namespace: ns,
-      phase,
-      status: phase,
-      restarts,
+      name: `${app}-${rsHash}-${podHash}`, namespace: ns,
+      phase, status: phase, restarts,
       node: `${clusterName}-worker-${randInt(1, 3)}`,
-      cpu: `${cpuMilli}m`,
-      memory: `${memMi}Mi`,
+      cpu: `${cpuMilli}m`, memory: `${memMi}Mi`,
+      controlled_by_kind: "ReplicaSet", controlled_by_name: rsName,
+      qos_class: qosClass,
+      created_at: daysAgo(randInt(0, 14)),
+      conditions: phase === "Running"
+        ? [{ type: "Ready", status: "True" }, { type: "ContainersReady", status: "True" }]
+        : [{ type: "Ready", status: "False" }],
+      labels: { app, tier: ns === "production" ? "backend" : ns },
       containers: [{
-        name: app,
-        restart_count: restarts,
-        resources: missingLimits ? {} : {
-          limits:   { cpu: "1000m",  memory: "1Gi" },
-          requests: { cpu: `${Math.max(10, cpuMilli - 50)}m`, memory: `${Math.max(32, memMi - 100)}Mi` },
-        },
+        name: app, restart_count: restarts,
+        ready: phase === "Running",
+        state: phase === "Running"  ? { status: "running" }
+             : phase === "Pending"  ? { status: "waiting", reason: "ContainerCreating" }
+             : { status: "terminated", reason: "Error", exit_code: 1 },
+        resources: missingLimits
+          ? { requests: { cpu: `${Math.max(1, Math.round(cpuMilli * 0.5))}m`, memory: `${Math.max(4, Math.round(memMi * 0.5))}Mi` } }
+          : {
+              limits:   { cpu: `${cpuMilli * 3}m`,                            memory: `${Math.round(memMi * 2)}Mi` },
+              requests: { cpu: `${Math.max(1, Math.round(cpuMilli * 0.4))}m`, memory: `${Math.max(4, Math.round(memMi * 0.6))}Mi` },
+            },
         readiness_probe: missingProbes ? undefined : { http_get: { path: "/health", port: 8080 } },
         liveness_probe:  missingProbes ? undefined : { http_get: { path: "/health", port: 8080 } },
       }],
@@ -171,11 +231,7 @@ function generatePods(
   const running = pods.filter(p => p.phase === "Running").length;
   const pending = pods.filter(p => p.phase === "Pending").length;
   const failed  = pods.filter(p => p.phase === "Failed").length;
-
-  return {
-    pods_summary: { total: pods.length, running, pending, failed },
-    pods_detail:  pods,
-  };
+  return { pods_summary: { total: pods.length, running, pending, failed }, pods_detail: pods };
 }
 
 // ─── Services generator ──────────────────────────────────────────────────────

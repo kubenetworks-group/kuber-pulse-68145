@@ -101,6 +101,14 @@ serve(async (req) => {
 
     console.log(`📊 Analyzing cluster ${cluster_id} for user ${userId}`);
 
+    // Fetch namespace whitelist from auto_heal_settings (null = all user namespaces)
+    const { data: healSettings } = await supabaseClient
+      .from('auto_heal_settings')
+      .select('allowed_namespaces')
+      .eq('cluster_id', cluster_id)
+      .maybeSingle();
+    const allowedNamespaces: string[] | null = healSettings?.allowed_namespaces ?? null;
+
     // Check for recent scan in last 3 minutes to avoid rate limiting
     const { data: recentScan } = await supabaseClient
       .from('scan_history')
@@ -568,7 +576,8 @@ Return ONLY valid JSON (no markdown fences):
         const firstResource = anomaly.affected_resources?.[0] || anomaly.affected_pods?.[0] || '';
         const namespace = firstResource.includes('/') ? firstResource.split('/')[0] : 'default';
 
-        const isSystemNamespace = SYSTEM_NAMESPACES.has(namespace);
+        const isSystemNamespace = SYSTEM_NAMESPACES.has(namespace) ||
+          (allowedNamespaces !== null && !allowedNamespaces.includes(namespace));
 
         // False-positive guard: pods that exited with code 0 (Completed) are healthy terminations
         // Do NOT auto-restart them — they're Jobs, init containers, or successful one-shot pods
@@ -635,7 +644,9 @@ Return ONLY valid JSON (no markdown fences):
       const needsActionIncidents = anomalies.filter((_: any, i: number) => {
         const firstResource = anomalies[i].affected_resources?.[0] || anomalies[i].affected_pods?.[0] || '';
         const ns = firstResource.includes('/') ? firstResource.split('/')[0] : 'default';
-        return SYSTEM_NAMESPACES.has(ns) || USER_ACTION_TYPES.has(anomalies[i].type) || !anomalies[i].auto_heal;
+        return SYSTEM_NAMESPACES.has(ns) ||
+          (allowedNamespaces !== null && !allowedNamespaces.includes(ns)) ||
+          USER_ACTION_TYPES.has(anomalies[i].type) || !anomalies[i].auto_heal;
       });
 
       const notifTitle = needsUserActionCount > 0

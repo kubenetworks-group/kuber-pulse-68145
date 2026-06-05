@@ -131,7 +131,8 @@ const AdminDashboard = () => {
     try {
       const { data, error } = await supabase
         .from('leads')
-        .select('id, email, company, cluster_size, utm_source, utm_campaign, created_at')
+        .select('id, email, company, cluster_size, utm_source, utm_campaign, status, created_at')
+        .neq('status', 'converted')   // converted leads appear in Métricas, not here
         .order('created_at', { ascending: false });
       if (error) throw error;
       setLeads(data || []);
@@ -671,13 +672,18 @@ const AdminDashboard = () => {
                     </TableHeader>
                     <TableBody>
                       {leads.map((lead) => {
-                        const alreadyInvited = invitedEmails.has(lead.email);
+                        const alreadyInvited = invitedEmails.has(lead.email) || lead.status === 'contacted';
                         return (
                           <TableRow key={lead.id}>
                             <TableCell>
                               <div className="flex items-center gap-2">
                                 <Building2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                                 <span className="font-medium">{lead.company || '—'}</span>
+                                {lead.status === 'contacted' && (
+                                  <Badge variant="outline" className="text-[10px] text-blue-600 border-blue-300">
+                                    Convidado
+                                  </Badge>
+                                )}
                               </div>
                             </TableCell>
                             <TableCell className="text-muted-foreground">{lead.email}</TableCell>

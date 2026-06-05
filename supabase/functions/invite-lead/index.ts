@@ -98,6 +98,21 @@ Deno.serve(async (req) => {
       return json({ error: `Resend error ${res.status}: ${body}` }, 502);
     }
 
+    // Mark lead as contacted so it stays visible but shows progress
+    if (lead_id) {
+      await admin
+        .from('leads')
+        .update({ status: 'contacted', updated_at: new Date().toISOString() })
+        .eq('id', lead_id)
+        .neq('status', 'converted');  // never downgrade a converted lead
+    } else {
+      await admin
+        .from('leads')
+        .update({ status: 'contacted', updated_at: new Date().toISOString() })
+        .eq('email', lead.email.toLowerCase())
+        .neq('status', 'converted');
+    }
+
     console.log(`✅ Invite sent to ${lead.email}`);
     return json({ success: true, email: lead.email });
 
