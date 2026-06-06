@@ -2899,6 +2899,9 @@ func executeCommands(clientset *kubernetes.Clientset, metricsClient *metricsv.Cl
 		case "patch_deployment":
 			log.Printf("   → Applying strategic merge patch to deployment...")
 			result, err = patchDeployment(clientset, cmd.CommandParams)
+		case "delete_serviceaccount":
+			log.Printf("   → Revoking cluster access (deleting ServiceAccount)...")
+			result, err = deleteServiceAccount(clientset, cmd.CommandParams)
 		default:
 				err = fmt.Errorf("unknown command type: %s", cmd.CommandType)
 				log.Printf("   ❌ Unknown command type!")
@@ -3064,6 +3067,80 @@ func deleteNamespace(clientset *kubernetes.Clientset, params map[string]interfac
 		"action":    "namespace_deleted",
 		"namespace": name,
 		"message":   fmt.Sprintf("Namespace '%s' deletion initiated", name),
+	}, nil
+}
+
+func deleteServiceAccount(clientset *kubernetes.Clientset, params map[string]interface{}) (map[string]interface{}, error) {
+	saName, _ := params["name"].(string)
+	saNamespace, _ := params["namespace"].(string)
+	roleName, _ := params["role_name"].(string)
+	bindingName, _ := params["binding_name"].(string)
+	secretName, _ := params["secret_name"].(string)
+	scopedNamespace, _ := params["scoped_namespace"].(string)
+	ctx := context.Background()
+
+	if saName == "" || saNamespace == "" {
+		return nil, fmt.Errorf("name and namespace are required")
+	}
+
+	deleted := []string{}
+	ignored := []string{}
+
+	// Delete Secret (token)
+	if secretName != "" {
+		if err := clientset.CoreV1().Secrets(saNamespace).Delete(ctx, secretName, metav1.DeleteOptions{}); err != nil {
+			ignored = append(ignored, "secret/"+secretName)
+		} else {
+			deleted = append(deleted, "secret/"+secretName)
+		}
+	}
+
+	// Delete ClusterRoleBinding or RoleBinding
+	if bindingName != "" {
+		if scopedNamespace != "" {
+			if err := clientset.RbacV1().RoleBindings(scopedNamespace).Delete(ctx, bindingName, metav1.DeleteOptions{}); err != nil {
+				ignored = append(ignored, "rolebinding/"+bindingName)
+			} else {
+				deleted = append(deleted, "rolebinding/"+bindingName)
+			}
+		} else {
+			if err := clientset.RbacV1().ClusterRoleBindings().Delete(ctx, bindingName, metav1.DeleteOptions{}); err != nil {
+				ignored = append(ignored, "clusterrolebinding/"+bindingName)
+			} else {
+				deleted = append(deleted, "clusterrolebinding/"+bindingName)
+			}
+		}
+	}
+
+	// Delete ClusterRole or Role
+	if roleName != "" {
+		if scopedNamespace != "" {
+			if err := clientset.RbacV1().Roles(scopedNamespace).Delete(ctx, roleName, metav1.DeleteOptions{}); err != nil {
+				ignored = append(ignored, "role/"+roleName)
+			} else {
+				deleted = append(deleted, "role/"+roleName)
+			}
+		} else {
+			if err := clientset.RbacV1().ClusterRoles().Delete(ctx, roleName, metav1.DeleteOptions{}); err != nil {
+				ignored = append(ignored, "clusterrole/"+roleName)
+			} else {
+				deleted = append(deleted, "clusterrole/"+roleName)
+			}
+		}
+	}
+
+	// Delete ServiceAccount
+	if err := clientset.CoreV1().ServiceAccounts(saNamespace).Delete(ctx, saName, metav1.DeleteOptions{}); err != nil {
+		return nil, fmt.Errorf("failed to delete ServiceAccount %s/%s: %v", saNamespace, saName, err)
+	}
+	deleted = append(deleted, "serviceaccount/"+saName)
+
+	log.Printf("✅ Access revoked: deleted %v (ignored not-found: %v)", deleted, ignored)
+	return map[string]interface{}{
+		"action":  "access_revoked",
+		"deleted": deleted,
+		"ignored": ignored,
+		"message": fmt.Sprintf("ServiceAccount '%s' and associated RBAC resources removed", saName),
 	}, nil
 }
 

@@ -27,6 +27,7 @@ import Costs from "./pages/Costs";
 import Storage from "./pages/Storage";
 import Settings from "./pages/Settings";
 import Agents from "./pages/Agents";
+import ClusterAccess from "./pages/ClusterAccess";
 import AISavings from "./pages/AISavings";
 import Observability from "./pages/Observability";
 import KubernetesPods from "./pages/KubernetesPods";
@@ -176,6 +177,14 @@ const App = () => (
                   element={
                     <ProtectedRoute>
                       <Agents />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/access"
+                  element={
+                    <ProtectedRoute>
+                      <ClusterAccess />
                     </ProtectedRoute>
                   }
                 />

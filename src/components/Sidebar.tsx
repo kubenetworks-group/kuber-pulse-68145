@@ -38,6 +38,7 @@ import {
   FileText,
   GitBranch,
   Lock,
+  KeyRound,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -163,6 +164,7 @@ export const Sidebar = ({ collapsed = false, onNavigate, onToggleCollapse, onCol
   const navigationAfter = [
     { name: t('common.aiMonitor'), href: "/ai-monitor", icon: Bot },
     { name: t('common.clusters'),  href: "/clusters",   icon: Server },
+    { name: "Acessos",             href: "/access",     icon: KeyRound },
     { name: t('common.agents'),    href: "/agents",     icon: Bot },
     { name: t('common.settings'),  href: "/settings",   icon: Settings },
     ...(isAdmin ? [{ name: "Admin", href: "/admin",     icon: Shield }] : []),
