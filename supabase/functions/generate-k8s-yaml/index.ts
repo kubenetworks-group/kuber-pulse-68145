@@ -41,7 +41,7 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const { cluster_id, description } = await req.json();
+    const { cluster_id, description, generate_type = "yaml", app_name, workload_type = "Deployment" } = await req.json();
 
     if (!cluster_id || !description) {
       return new Response(JSON.stringify({ error: "cluster_id e description são obrigatórios" }), {
@@ -119,6 +119,131 @@ ESTADO ATUAL DO CLUSTER:
 - Workloads em execução (exemplos): ${existingWorkloads.length > 0 ? existingWorkloads.join(", ") : "nenhum encontrado"}
 `;
 
+    // ── Helm chart mode ──────────────────────────────────────────────────────
+    if (generate_type === "helm") {
+      const helmName = (app_name || "my-app").toLowerCase().replace(/[^a-z0-9-]/g, "-");
+      const systemPromptHelm = `Você é um engenheiro Kubernetes sênior especialista em Helm charts para plataformas internas (IDP).
+
+Sua missão é gerar um Helm chart completo e production-ready para a aplicação descrita, usando as informações do cluster atual.
+
+${clusterContext}
+
+NOME DA APLICAÇÃO: ${helmName}
+TIPO DE WORKLOAD: ${workload_type}
+
+REGRAS:
+1. Gere um Helm chart completo com Chart.yaml, values.yaml e templates/
+2. No values.yaml: imagem, replicas, resources, service, ingress, autoscaling (todos configuráveis)
+3. Templates devem usar {{ .Values.* }} para todos os valores configuráveis
+4. Inclua labels padrão com {{ include "${helmName}.labels" . }}
+5. Para o tipo de workload solicitado (${workload_type}), gere o template correto
+6. Também gere um YAML já renderizado (com os valores defaults do values.yaml) para deploy imediato
+7. Use as informações do cluster para definir resources realistas
+
+FORMATO DE RESPOSTA OBRIGATÓRIO:
+CHART_YAML_START
+[conteúdo do Chart.yaml]
+CHART_YAML_END
+VALUES_YAML_START
+[conteúdo do values.yaml]
+VALUES_YAML_END
+TEMPLATES_START
+[todos os templates separados por # --- TEMPLATE: filename.yaml ---, ex: # --- TEMPLATE: deployment.yaml ---]
+TEMPLATES_END
+RENDERED_YAML_START
+[YAML já renderizado com os valores do values.yaml, pronto para kubectl apply]
+RENDERED_YAML_END
+EXPLANATION_START
+[Explicação em português: o que foi criado, como personalizar via values.yaml, e considerações importantes]
+EXPLANATION_END
+COMPONENTS_START
+[lista de recursos gerados, ex: Deployment, Service, HPA, Ingress]
+COMPONENTS_END`;
+
+      const userMessageHelm = `Gere um Helm chart para: "${description}"
+
+Nome da aplicação: ${helmName}
+Tipo de workload principal: ${workload_type}`;
+
+      const messagesHelm = [
+        { role: "system" as const, content: systemPromptHelm },
+        { role: "user" as const, content: userMessageHelm },
+      ];
+
+      console.log(`Generating Helm chart for cluster ${cluster_id}: "${description.substring(0, 80)}..."`);
+
+      const aiResultHelm = await callGemini(messagesHelm, user.id, "generate-k8s-yaml");
+      const contentHelm = aiResultHelm.content;
+
+      const chartYamlMatch = contentHelm.match(/CHART_YAML_START\s*([\s\S]*?)\s*CHART_YAML_END/);
+      const valuesYamlMatch = contentHelm.match(/VALUES_YAML_START\s*([\s\S]*?)\s*VALUES_YAML_END/);
+      const templatesMatch = contentHelm.match(/TEMPLATES_START\s*([\s\S]*?)\s*TEMPLATES_END/);
+      const renderedMatch = contentHelm.match(/RENDERED_YAML_START\s*([\s\S]*?)\s*RENDERED_YAML_END/);
+      const explanationHelmMatch = contentHelm.match(/EXPLANATION_START\s*([\s\S]*?)\s*EXPLANATION_END/);
+      const componentsHelmMatch = contentHelm.match(/COMPONENTS_START\s*([\s\S]*?)\s*COMPONENTS_END/);
+
+      const chartYaml = chartYamlMatch?.[1]?.trim() || "";
+      const valuesYaml = valuesYamlMatch?.[1]?.trim() || "";
+      const templatesRaw = templatesMatch?.[1]?.trim() || "";
+      const renderedYaml = renderedMatch?.[1]?.trim() || "";
+      const explanationHelm = explanationHelmMatch?.[1]?.trim() || "";
+      const componentsHelmRaw = componentsHelmMatch?.[1]?.trim() || "";
+      const componentsHelm = componentsHelmRaw.split(",").map((c: string) => c.trim()).filter(Boolean);
+
+      // Parse templates into { filename: content } map
+      const templates: Record<string, string> = {};
+      const templateParts = templatesRaw.split(/# --- TEMPLATE: ([^\s]+) ---/);
+      for (let i = 1; i < templateParts.length; i += 2) {
+        const filename = templateParts[i]?.trim();
+        const templateContent = templateParts[i + 1]?.trim();
+        if (filename && templateContent) {
+          templates[filename] = templateContent;
+        }
+      }
+
+      // Display YAML: combine all Helm files with comments for context
+      const displayYaml = [
+        `# Chart.yaml`,
+        chartYaml,
+        `\n# values.yaml`,
+        valuesYaml,
+        ...Object.entries(templates).map(([fn, content]) => `\n# templates/${fn}\n${content}`),
+      ].filter(Boolean).join("\n---\n");
+
+      await serviceSupabase.from("generated_yamls").insert({
+        user_id: user.id,
+        cluster_id,
+        user_description: description,
+        generated_yaml: displayYaml,
+        explanation: explanationHelm,
+        components: componentsHelm,
+        generate_type: "helm",
+        raw_data: {
+          chart_yaml: chartYaml,
+          values_yaml: valuesYaml,
+          templates,
+          rendered_yaml: renderedYaml,
+          app_name: helmName,
+          workload_type,
+        },
+      });
+
+      console.log(`✅ Helm chart generated: ${componentsHelm.join(", ")}`);
+
+      return new Response(
+        JSON.stringify({
+          yaml: displayYaml,
+          rendered_yaml: renderedYaml,
+          explanation: explanationHelm,
+          components: componentsHelm,
+          helm: { chart_yaml: chartYaml, values_yaml: valuesYaml, templates, app_name: helmName },
+          cluster_context: { name: cluster.name, provider: cluster.provider, namespaces, node_count: cluster.nodes },
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ── Standard K8s YAML mode ────────────────────────────────────────────────
     const systemPrompt = `Você é um engenheiro Kubernetes sênior especializado em plataformas de desenvolvimento interno (IDP - Internal Developer Platform).
 
 Sua missão é transformar descrições em linguagem natural de desenvolvedores em manifestos Kubernetes production-ready, respeitando as características e recursos do cluster atual.
@@ -195,6 +320,8 @@ Lembre-se de usar as informações do cluster atual (namespaces, recursos dispon
       generated_yaml: generatedYaml,
       explanation,
       components,
+      generate_type: "yaml",
+      raw_data: {},
     });
 
     console.log(`✅ YAML generated: ${components.join(", ") || "unknown components"}`);

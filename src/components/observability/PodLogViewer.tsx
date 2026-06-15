@@ -717,7 +717,7 @@ export const PodLogViewer = ({ pods: podsProp, onRefresh, loading: externalLoadi
       {/* ── Pod Info Dialog ───────────────────────────────────────────────── */}
       <Dialog open={podInfoOpen} onOpenChange={setPodInfoOpen}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto p-0 gap-0" style={{ background: "#161b22", border: "1px solid #30363d" }}>
-          <DialogHeader className="px-5 pt-4 pb-3 shrink-0" style={{ borderBottom: "1px solid #21262d" }}>
+          <DialogHeader className="px-5 pt-4 pb-3 pr-12 shrink-0" style={{ borderBottom: "1px solid #21262d" }}>
             <div className="flex items-start gap-3">
               <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5" style={{ background: "rgba(63,185,80,0.15)" }}>
                 <FileText className="w-4 h-4" style={{ color: "#3fb950" }} />
@@ -885,7 +885,7 @@ export const PodLogViewer = ({ pods: podsProp, onRefresh, loading: externalLoadi
           style={{ background: "#161b22", border: "1px solid #30363d" }}
         >
           {/* ── Top bar: pod name + container selector + actions ────────────── */}
-          <DialogHeader className="px-3 pt-2.5 pb-2.5 shrink-0" style={{ borderBottom: "1px solid #21262d" }}>
+          <DialogHeader className="px-3 pt-2.5 pb-2.5 pr-12 shrink-0" style={{ borderBottom: "1px solid #21262d" }}>
             <div className="flex items-center gap-2 min-w-0">
               <Terminal className="w-3.5 h-3.5 shrink-0" style={{ color: "#3fb950" }} />
               <DialogTitle className="text-xs font-mono min-w-0 flex-1 truncate" style={{ color: "#e6edf3" }}>

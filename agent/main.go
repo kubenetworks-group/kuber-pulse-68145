@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 	watchv "k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -3475,6 +3476,10 @@ func executeCommands(clientset *kubernetes.Clientset, metricsClient *metricsv.Cl
 		case "deploy_kubecost":
 			log.Printf("   → Deploying KubeCost for FinOps...")
 			result, err = deployKubecost(clientset, config, cmd.CommandParams)
+		case "apply_yaml":
+			log.Printf("   → Applying AI-generated YAML manifests...")
+			markCommandExecuting(config, cmd.ID)
+			result, err = applyYAML(clientset, cmd.CommandParams)
 		default:
 				err = fmt.Errorf("unknown command type: %s", cmd.CommandType)
 				log.Printf("   ❌ Unknown command type!")
@@ -5903,6 +5908,292 @@ func remapStorageClass(requested string, available map[string]bool, defaultClass
 		return k, fmt.Sprintf("%q not found on target; using first available StorageClass %q", requested, k)
 	}
 	return requested, fmt.Sprintf("no StorageClasses found on target; keeping %q (may fail)", requested)
+}
+
+// applyYAML applies raw YAML content (AI-generated manifests) to the cluster.
+// Params: yaml_content (raw YAML string), namespace (default namespace), source_id (optional)
+func applyYAML(clientset *kubernetes.Clientset, params map[string]interface{}) (map[string]interface{}, error) {
+	yamlContent, _ := params["yaml_content"].(string)
+	defaultNamespace, _ := params["namespace"].(string)
+	if defaultNamespace == "" {
+		defaultNamespace = "default"
+	}
+	if yamlContent == "" {
+		return nil, fmt.Errorf("yaml_content is required")
+	}
+
+	ctx := context.Background()
+	applied := 0
+	failed := 0
+	skipped := 0
+	applyLog := []map[string]interface{}{}
+
+	// Protected namespaces — never modify via user-generated YAML
+	protected := map[string]bool{
+		"kube-system": true, "kube-public": true, "kube-node-lease": true,
+		"kodo": true, "kodo-agent": true,
+	}
+
+	clearMeta := func(meta *metav1.ObjectMeta) {
+		meta.ResourceVersion = ""
+		meta.UID = ""
+		meta.CreationTimestamp = metav1.Time{}
+		meta.ManagedFields = nil
+	}
+
+	logEntry := func(kind, name, ns, status string, applyErr error) {
+		entry := map[string]interface{}{"kind": kind, "name": name, "namespace": ns, "status": status}
+		if applyErr != nil {
+			entry["error"] = applyErr.Error()
+		}
+		applyLog = append(applyLog, entry)
+	}
+
+	// Split on --- separator
+	docSep := regexp.MustCompile(`(?m)^---\s*$`)
+	docs := docSep.Split(yamlContent, -1)
+
+	for _, doc := range docs {
+		doc = strings.TrimSpace(doc)
+		if doc == "" {
+			continue
+		}
+
+		// Convert YAML → JSON so we can use standard json.Unmarshal with k8s typed structs
+		jsonBytes, err := k8syaml.ToJSON([]byte(doc))
+		if err != nil {
+			skipped++
+			continue
+		}
+
+		// Extract kind/name/namespace from TypeMeta + ObjectMeta
+		// (comment-only docs become null/empty JSON and are skipped by the kind check)
+		var meta struct {
+			Kind     string `json:"kind"`
+			Metadata struct {
+				Name      string `json:"name"`
+				Namespace string `json:"namespace"`
+			} `json:"metadata"`
+		}
+		if err := json.Unmarshal(jsonBytes, &meta); err != nil || meta.Kind == "" {
+			skipped++
+			continue
+		}
+
+		ns := meta.Metadata.Namespace
+		if ns == "" {
+			ns = defaultNamespace
+		}
+		name := meta.Metadata.Name
+		kind := meta.Kind
+
+		if protected[ns] {
+			skipped++
+			logEntry(kind, name, ns, "skipped", fmt.Errorf("protected namespace"))
+			continue
+		}
+
+		var applyErr error
+
+		switch kind {
+		case "Namespace":
+			var obj corev1.Namespace
+			if err := json.Unmarshal(jsonBytes, &obj); err == nil {
+				if !protected[obj.Name] {
+					clearMeta(&obj.ObjectMeta)
+					obj.Status = corev1.NamespaceStatus{}
+					_, applyErr = clientset.CoreV1().Namespaces().Create(ctx, &obj, metav1.CreateOptions{})
+					if applyErr != nil && strings.Contains(applyErr.Error(), "already exists") {
+						applyErr = nil
+					}
+					name = obj.Name
+				}
+			}
+
+		case "Deployment":
+			var obj appsv1.Deployment
+			if err := json.Unmarshal(jsonBytes, &obj); err == nil {
+				if obj.Namespace == "" {
+					obj.Namespace = ns
+				}
+				clearMeta(&obj.ObjectMeta)
+				_, applyErr = clientset.AppsV1().Deployments(obj.Namespace).Create(ctx, &obj, metav1.CreateOptions{})
+				if applyErr != nil && strings.Contains(applyErr.Error(), "already exists") {
+					b, _ := json.Marshal(obj)
+					_, applyErr = clientset.AppsV1().Deployments(obj.Namespace).Patch(ctx, obj.Name, types.MergePatchType, b, metav1.PatchOptions{})
+				}
+			}
+
+		case "StatefulSet":
+			var obj appsv1.StatefulSet
+			if err := json.Unmarshal(jsonBytes, &obj); err == nil {
+				if obj.Namespace == "" {
+					obj.Namespace = ns
+				}
+				clearMeta(&obj.ObjectMeta)
+				_, applyErr = clientset.AppsV1().StatefulSets(obj.Namespace).Create(ctx, &obj, metav1.CreateOptions{})
+				if applyErr != nil && strings.Contains(applyErr.Error(), "already exists") {
+					b, _ := json.Marshal(obj)
+					_, applyErr = clientset.AppsV1().StatefulSets(obj.Namespace).Patch(ctx, obj.Name, types.MergePatchType, b, metav1.PatchOptions{})
+				}
+			}
+
+		case "DaemonSet":
+			var obj appsv1.DaemonSet
+			if err := json.Unmarshal(jsonBytes, &obj); err == nil {
+				if obj.Namespace == "" {
+					obj.Namespace = ns
+				}
+				clearMeta(&obj.ObjectMeta)
+				_, applyErr = clientset.AppsV1().DaemonSets(obj.Namespace).Create(ctx, &obj, metav1.CreateOptions{})
+				if applyErr != nil && strings.Contains(applyErr.Error(), "already exists") {
+					b, _ := json.Marshal(obj)
+					_, applyErr = clientset.AppsV1().DaemonSets(obj.Namespace).Patch(ctx, obj.Name, types.MergePatchType, b, metav1.PatchOptions{})
+				}
+			}
+
+		case "Service":
+			var obj corev1.Service
+			if err := json.Unmarshal(jsonBytes, &obj); err == nil {
+				if obj.Namespace == "" {
+					obj.Namespace = ns
+				}
+				clearMeta(&obj.ObjectMeta)
+				obj.Spec.ClusterIP = ""
+				obj.Spec.ClusterIPs = nil
+				_, applyErr = clientset.CoreV1().Services(obj.Namespace).Create(ctx, &obj, metav1.CreateOptions{})
+				if applyErr != nil && strings.Contains(applyErr.Error(), "already exists") {
+					existing, getErr := clientset.CoreV1().Services(obj.Namespace).Get(ctx, obj.Name, metav1.GetOptions{})
+					if getErr == nil {
+						obj.Spec.ClusterIP = existing.Spec.ClusterIP
+						obj.Spec.ClusterIPs = existing.Spec.ClusterIPs
+						obj.ResourceVersion = existing.ResourceVersion
+						_, applyErr = clientset.CoreV1().Services(obj.Namespace).Update(ctx, &obj, metav1.UpdateOptions{})
+					}
+				}
+			}
+
+		case "ConfigMap":
+			var obj corev1.ConfigMap
+			if err := json.Unmarshal(jsonBytes, &obj); err == nil {
+				if obj.Namespace == "" {
+					obj.Namespace = ns
+				}
+				clearMeta(&obj.ObjectMeta)
+				_, applyErr = clientset.CoreV1().ConfigMaps(obj.Namespace).Create(ctx, &obj, metav1.CreateOptions{})
+				if applyErr != nil && strings.Contains(applyErr.Error(), "already exists") {
+					b, _ := json.Marshal(obj)
+					_, applyErr = clientset.CoreV1().ConfigMaps(obj.Namespace).Patch(ctx, obj.Name, types.MergePatchType, b, metav1.PatchOptions{})
+				}
+			}
+
+		case "Secret":
+			var obj corev1.Secret
+			if err := json.Unmarshal(jsonBytes, &obj); err == nil {
+				if obj.Namespace == "" {
+					obj.Namespace = ns
+				}
+				clearMeta(&obj.ObjectMeta)
+				_, applyErr = clientset.CoreV1().Secrets(obj.Namespace).Create(ctx, &obj, metav1.CreateOptions{})
+				if applyErr != nil && strings.Contains(applyErr.Error(), "already exists") {
+					b, _ := json.Marshal(obj)
+					_, applyErr = clientset.CoreV1().Secrets(obj.Namespace).Patch(ctx, obj.Name, types.MergePatchType, b, metav1.PatchOptions{})
+				}
+			}
+
+		case "ServiceAccount":
+			var obj corev1.ServiceAccount
+			if err := json.Unmarshal(jsonBytes, &obj); err == nil {
+				if obj.Namespace == "" {
+					obj.Namespace = ns
+				}
+				clearMeta(&obj.ObjectMeta)
+				_, applyErr = clientset.CoreV1().ServiceAccounts(obj.Namespace).Create(ctx, &obj, metav1.CreateOptions{})
+				if applyErr != nil && strings.Contains(applyErr.Error(), "already exists") {
+					applyErr = nil
+				}
+			}
+
+		case "HorizontalPodAutoscaler":
+			var obj autoscalingv2.HorizontalPodAutoscaler
+			if err := json.Unmarshal(jsonBytes, &obj); err == nil {
+				if obj.Namespace == "" {
+					obj.Namespace = ns
+				}
+				clearMeta(&obj.ObjectMeta)
+				_, applyErr = clientset.AutoscalingV2().HorizontalPodAutoscalers(obj.Namespace).Create(ctx, &obj, metav1.CreateOptions{})
+				if applyErr != nil && strings.Contains(applyErr.Error(), "already exists") {
+					b, _ := json.Marshal(obj)
+					_, applyErr = clientset.AutoscalingV2().HorizontalPodAutoscalers(obj.Namespace).Patch(ctx, obj.Name, types.MergePatchType, b, metav1.PatchOptions{})
+				}
+			}
+
+		case "Ingress":
+			var obj networkingv1.Ingress
+			if err := json.Unmarshal(jsonBytes, &obj); err == nil {
+				if obj.Namespace == "" {
+					obj.Namespace = ns
+				}
+				clearMeta(&obj.ObjectMeta)
+				_, applyErr = clientset.NetworkingV1().Ingresses(obj.Namespace).Create(ctx, &obj, metav1.CreateOptions{})
+				if applyErr != nil && strings.Contains(applyErr.Error(), "already exists") {
+					b, _ := json.Marshal(obj)
+					_, applyErr = clientset.NetworkingV1().Ingresses(obj.Namespace).Patch(ctx, obj.Name, types.MergePatchType, b, metav1.PatchOptions{})
+				}
+			}
+
+		case "CronJob":
+			var obj batchv1.CronJob
+			if err := json.Unmarshal(jsonBytes, &obj); err == nil {
+				if obj.Namespace == "" {
+					obj.Namespace = ns
+				}
+				clearMeta(&obj.ObjectMeta)
+				_, applyErr = clientset.BatchV1().CronJobs(obj.Namespace).Create(ctx, &obj, metav1.CreateOptions{})
+				if applyErr != nil && strings.Contains(applyErr.Error(), "already exists") {
+					b, _ := json.Marshal(obj)
+					_, applyErr = clientset.BatchV1().CronJobs(obj.Namespace).Patch(ctx, obj.Name, types.MergePatchType, b, metav1.PatchOptions{})
+				}
+			}
+
+		case "Job":
+			var obj batchv1.Job
+			if err := json.Unmarshal(jsonBytes, &obj); err == nil {
+				if obj.Namespace == "" {
+					obj.Namespace = ns
+				}
+				clearMeta(&obj.ObjectMeta)
+				_, applyErr = clientset.BatchV1().Jobs(obj.Namespace).Create(ctx, &obj, metav1.CreateOptions{})
+				if applyErr != nil && strings.Contains(applyErr.Error(), "already exists") {
+					b, _ := json.Marshal(obj)
+					_, applyErr = clientset.BatchV1().Jobs(obj.Namespace).Patch(ctx, obj.Name, types.MergePatchType, b, metav1.PatchOptions{})
+				}
+			}
+
+		default:
+			skipped++
+			logEntry(kind, name, ns, "skipped", fmt.Errorf("unsupported resource type"))
+			continue
+		}
+
+		if applyErr != nil {
+			failed++
+			logEntry(kind, name, ns, "failed", applyErr)
+		} else {
+			applied++
+			logEntry(kind, name, ns, "applied", nil)
+		}
+	}
+
+	log.Printf("🚀 apply_yaml: %d applied, %d failed, %d skipped", applied, failed, skipped)
+
+	return map[string]interface{}{
+		"applied": applied,
+		"failed":  failed,
+		"skipped": skipped,
+		"total":   applied + failed + skipped,
+		"log":     applyLog,
+	}, nil
 }
 
 // applyManifests downloads transformed manifests and applies them to the target cluster.
