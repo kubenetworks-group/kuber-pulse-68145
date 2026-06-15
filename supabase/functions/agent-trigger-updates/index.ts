@@ -45,17 +45,16 @@ serve(async (req) => {
 
     console.log(`Latest version: ${latestVersion.version}`);
 
-    // Find all clusters with outdated agents
-    // Only consider clusters that have reported a version (agent_version is not null)
-    // and haven't been seen in more than 5 minutes ago (to avoid updating inactive clusters)
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    // Find all clusters with outdated agents seen in the last 2 hours.
+    // Clusters offline >2h will get the update command on next startup via agent-report-startup.
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
 
     const { data: outdatedClusters, error: clustersError } = await supabase
       .from('clusters')
       .select('id, name, user_id, agent_version, agent_last_seen_at')
       .not('agent_version', 'is', null)
       .neq('agent_version', latestVersion.version)
-      .gte('agent_last_seen_at', fiveMinutesAgo);
+      .gte('agent_last_seen_at', twoHoursAgo);
 
     if (clustersError) {
       return new Response(

@@ -3,8 +3,12 @@ name: Build and Push Docker Image
 on:
   push:
     tags:
-      - "*"
+      - "v*"
   workflow_dispatch:
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   # ─────────────────────────────────────────────────────────────
