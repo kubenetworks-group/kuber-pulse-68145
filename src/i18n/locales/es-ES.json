@@ -164,7 +164,29 @@
     "tableView": "Tabla",
     "month": "Mes",
     "savingsPercent": "% Ahorro",
-    "aiSavingsDetails": "Detalles de Ahorro con IA"
+    "aiSavingsDetails": "Detalles de Ahorro con IA",
+    "kubecost": {
+      "connected": "KubeCost conectado",
+      "connectedSub": "datos de costo real por workload",
+      "notInstalled": "KubeCost no instalado",
+      "notInstalledSub": "Instala KubeCost para ver la asignación de costos real por namespace, deployment y pod.",
+      "install": "Instalar KubeCost",
+      "totalToday": "Costo Total Hoy",
+      "perMonth": "/mes (estimado)",
+      "idleCost": "Costo Idle (Desperdicio)",
+      "ofTotal": "% del total",
+      "efficiency": "Eficiencia General",
+      "efficiencySub": "uso real vs. asignado",
+      "byNamespace": "Costo por Namespace (hoy)",
+      "namespace": "Namespace",
+      "cpu": "CPU",
+      "memory": "Memoria",
+      "storage": "Almacenamiento",
+      "network": "Red",
+      "total": "Total",
+      "wastefulTitle": "Top Workloads con Baja Eficiencia (<40%)",
+      "efficiencyLabel": "eficiencia"
+    }
   },
   "clusters": {
     "title": "Gestión de Clústeres",
@@ -234,6 +256,23 @@
     "recentIncidents": "Incidentes Recientes",
     "noIncidents": "No hay incidentes recientes",
     "autoHealed": "Auto-recuperado"
+  },
+  "riskThreats": {
+    "blockAttacker": "Bloquear IP",
+    "generateReport": "Informe PDF",
+    "attackTrace": "Rastreo del Ataque",
+    "etpCaveat": "externalTrafficPolicy=Cluster: la IP visible puede ser la IP del nodo, no la del atacante real.",
+    "reportTitle": "Informe de Ataque HTTP",
+    "downloadPDF": "Descargar PDF",
+    "lateralMovement": "Movimiento Lateral",
+    "c2Server": "Servidor C2",
+    "decodedPayload": "Payload Decodificado",
+    "generateReportBtn": "Generar Informe de Ataque",
+    "generating": "Generando informe...",
+    "totalAttacks": "Total de Ataques",
+    "uniqueIPs": "IPs Únicas",
+    "mitigated": "Mitigados",
+    "active": "Activos"
   },
   "security": {
     "title": "Auditoría de Seguridad",

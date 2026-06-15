@@ -164,7 +164,29 @@
     "tableView": "Table",
     "month": "Month",
     "savingsPercent": "% Savings",
-    "aiSavingsDetails": "AI Savings Details"
+    "aiSavingsDetails": "AI Savings Details",
+    "kubecost": {
+      "connected": "KubeCost connected",
+      "connectedSub": "real cost data per workload",
+      "notInstalled": "KubeCost not installed",
+      "notInstalledSub": "Install KubeCost to see real cost allocation by namespace, deployment and pod.",
+      "install": "Install KubeCost",
+      "totalToday": "Total Cost Today",
+      "perMonth": "/month (estimated)",
+      "idleCost": "Idle Cost (Waste)",
+      "ofTotal": "% of total",
+      "efficiency": "Overall Efficiency",
+      "efficiencySub": "real usage vs. allocated",
+      "byNamespace": "Cost by Namespace (today)",
+      "namespace": "Namespace",
+      "cpu": "CPU",
+      "memory": "Memory",
+      "storage": "Storage",
+      "network": "Network",
+      "total": "Total",
+      "wastefulTitle": "Top Workloads with Low Efficiency (<40%)",
+      "efficiencyLabel": "efficiency"
+    }
   },
   "clusters": {
     "title": "Cluster Management",
@@ -234,6 +256,23 @@
     "recentIncidents": "Recent Incidents",
     "noIncidents": "No recent incidents",
     "autoHealed": "Auto-healed"
+  },
+  "riskThreats": {
+    "blockAttacker": "Block IP",
+    "generateReport": "PDF Report",
+    "attackTrace": "Attack Trace",
+    "etpCaveat": "externalTrafficPolicy=Cluster: the visible IP may be the node IP, not the real attacker IP.",
+    "reportTitle": "HTTP Attack Report",
+    "downloadPDF": "Download PDF",
+    "lateralMovement": "Lateral Movement",
+    "c2Server": "C2 Server",
+    "decodedPayload": "Decoded Payload",
+    "generateReportBtn": "Generate Attack Report",
+    "generating": "Generating report...",
+    "totalAttacks": "Total Attacks",
+    "uniqueIPs": "Unique IPs",
+    "mitigated": "Mitigated",
+    "active": "Active"
   },
   "security": {
     "title": "Security Audit",

@@ -165,7 +165,29 @@
     "tableView": "Tabela",
     "month": "Mês",
     "savingsPercent": "% Economia",
-    "aiSavingsDetails": "Detalhes de Economia com IA"
+    "aiSavingsDetails": "Detalhes de Economia com IA",
+    "kubecost": {
+      "connected": "KubeCost conectado",
+      "connectedSub": "dados de custo real por workload",
+      "notInstalled": "KubeCost não instalado",
+      "notInstalledSub": "Instale o KubeCost para ver alocação de custo real por namespace, deployment e pod.",
+      "install": "Instalar KubeCost",
+      "totalToday": "Custo Total Hoje",
+      "perMonth": "/mês (estimado)",
+      "idleCost": "Custo Idle (Desperdício)",
+      "ofTotal": "% do total",
+      "efficiency": "Eficiência Geral",
+      "efficiencySub": "utilização real vs. alocado",
+      "byNamespace": "Custo por Namespace (hoje)",
+      "namespace": "Namespace",
+      "cpu": "CPU",
+      "memory": "Memória",
+      "storage": "Storage",
+      "network": "Rede",
+      "total": "Total",
+      "wastefulTitle": "Top Workloads com Baixa Eficiência (<40%)",
+      "efficiencyLabel": "eficiência"
+    }
   },
   "clusters": {
     "title": "Gerenciamento de Clusters",
@@ -235,6 +257,23 @@
     "recentIncidents": "Incidentes Recentes",
     "noIncidents": "Nenhum incidente recente",
     "autoHealed": "Auto-recuperado"
+  },
+  "riskThreats": {
+    "blockAttacker": "Bloquear IP",
+    "generateReport": "Relatório PDF",
+    "attackTrace": "Rastreamento do Ataque",
+    "etpCaveat": "externalTrafficPolicy=Cluster: o IP visível pode ser o IP do nó, não o real do atacante.",
+    "reportTitle": "Relatório de Ataque HTTP",
+    "downloadPDF": "Baixar PDF",
+    "lateralMovement": "Movimento Lateral",
+    "c2Server": "Servidor C2",
+    "decodedPayload": "Payload Decodificado",
+    "generateReportBtn": "Gerar Relatório de Ataque",
+    "generating": "Gerando relatório...",
+    "totalAttacks": "Total de Ataques",
+    "uniqueIPs": "IPs Únicos",
+    "mitigated": "Mitigados",
+    "active": "Ativos"
   },
   "security": {
     "title": "Auditoria de Segurança",

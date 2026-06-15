@@ -160,6 +160,31 @@ spec:
         };
         break;
 
+      case 'block_attacker_ip': {
+        // Block a specific attacker IP via NetworkPolicy (allow-all-except-attacker).
+        // Requires source_ip in the threat record.
+        const attackerIP =
+          threat.source_ip ||
+          (threat.evidence as any)?.source_ip ||
+          (threat.raw_data as any)?.source_ip;
+        if (!attackerIP) {
+          return new Response(
+            JSON.stringify({ error: 'No source_ip found in threat — cannot block attacker IP' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        commandType = 'block_attacker_ip';
+        commandParams = {
+          namespace: threat.namespace || threat.affected_resources?.[0]?.namespace || 'default',
+          attacker_ip: attackerIP,
+          pod_labels: (threat.evidence as any)?.pod_labels || {},
+          external_traffic_policy: (threat.evidence as any)?.external_traffic_policy || 'Cluster',
+          threat_id,
+          trigger: 'manual_fix',
+        };
+        break;
+      }
+
       case 'auto_fix': {
         // Map threat_type to the appropriate command
         const threatTypeToCommand: Record<string, { type: string; params: any }> = {
@@ -296,6 +321,27 @@ spec:
             },
           },
         };
+
+        // HTTP attack types — auto-fix via IP blocking
+        const httpAttackTypes = ['shell_injection', 'sql_injection', 'path_traversal', 'brute_force', 'port_scan'];
+        if (httpAttackTypes.includes(threat.threat_type)) {
+          const attackerIP =
+            threat.source_ip ||
+            (threat.evidence as any)?.source_ip ||
+            (threat.raw_data as any)?.source_ip;
+          if (attackerIP) {
+            commandType = 'block_attacker_ip';
+            commandParams = {
+              namespace: threat.namespace || threat.affected_resources?.[0]?.namespace || 'default',
+              attacker_ip: attackerIP,
+              pod_labels: (threat.evidence as any)?.pod_labels || {},
+              external_traffic_policy: (threat.evidence as any)?.external_traffic_policy || 'Cluster',
+              threat_id,
+              trigger: 'auto_fix',
+            };
+            break;
+          }
+        }
 
         const mapped = threatTypeToCommand[threat.threat_type];
         if (!mapped) {

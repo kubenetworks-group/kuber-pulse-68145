@@ -4,19 +4,21 @@ import { CostTableView } from "@/components/CostTableView";
 import { AISavingsCard } from "@/components/AISavingsCard";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { DollarSign, TrendingDown, TrendingUp, Sparkles, BarChart3, Table as TableIcon, Bot } from "lucide-react";
+import { DollarSign, TrendingDown, TrendingUp, Sparkles, BarChart3, Table as TableIcon, Bot, Package, AlertTriangle, CheckCircle, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTranslation } from "react-i18next";
 import { useCurrency } from "@/hooks/useCurrency";
 import { useCluster } from "@/contexts/ClusterContext";
+import { useKubecostData } from "@/hooks/useKubecostData";
 
 const Costs = () => {
   const { user } = useAuth();
   const { t } = useTranslation();
   const { formatCurrency } = useCurrency();
   const { selectedClusterId } = useCluster();
+  const kubecost = useKubecostData(selectedClusterId);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'chart' | 'table'>('chart');
   const [currentMonthCost, setCurrentMonthCost] = useState(0);
@@ -377,6 +379,162 @@ const Costs = () => {
             </div>
           )}
         </Card>
+
+        {/* ── KubeCost FinOps Section ── */}
+        <div className="mt-6">
+          {/* Status banner */}
+          {!kubecost.loading && !kubecost.installed && (
+            <Card className="p-4 flex items-center justify-between gap-4 border-amber-500/30 bg-amber-500/5">
+              <div className="flex items-center gap-3">
+                <Package className="w-5 h-5 text-amber-500 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-medium">KubeCost não instalado</p>
+                  <p className="text-xs text-muted-foreground">Instale o KubeCost para ver alocação de custo real por namespace, deployment e pod.</p>
+                </div>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="flex-shrink-0 border-amber-500/50 text-amber-600 hover:bg-amber-500/10"
+                onClick={async () => {
+                  if (!selectedClusterId || !user) return;
+                  await supabase.from("agent_commands").insert({
+                    cluster_id: selectedClusterId,
+                    user_id: user.id,
+                    command_type: "deploy_kubecost",
+                    command_params: {},
+                    status: "pending",
+                  });
+                }}
+              >
+                <Zap className="w-3.5 h-3.5 mr-1" />
+                Instalar KubeCost
+              </Button>
+            </Card>
+          )}
+
+          {kubecost.installed && (
+            <>
+              {/* Connected banner */}
+              <div className="flex items-center gap-2 mb-4 text-sm text-emerald-600">
+                <CheckCircle className="w-4 h-4" />
+                <span className="font-medium">KubeCost conectado</span>
+                <span className="text-muted-foreground">— dados de custo real por workload</span>
+              </div>
+
+              {/* Summary cards */}
+              <div className="grid grid-cols-3 gap-4 mb-4">
+                <Card className="p-4">
+                  <p className="text-xs text-muted-foreground mb-1">Custo Total Hoje</p>
+                  <p className="text-2xl font-bold font-mono">{formatCurrency(kubecost.summary.total_cost)}</p>
+                  <p className="text-xs text-muted-foreground mt-1">≈ {formatCurrency(kubecost.summary.total_cost * 30)}/mês</p>
+                </Card>
+                <Card className="p-4">
+                  <p className="text-xs text-muted-foreground mb-1">Custo Idle (Desperdício)</p>
+                  <p className="text-2xl font-bold font-mono text-amber-500">{formatCurrency(kubecost.summary.idle_cost)}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {kubecost.summary.total_cost > 0
+                      ? `${Math.round((kubecost.summary.idle_cost / kubecost.summary.total_cost) * 100)}% do total`
+                      : "—"}
+                  </p>
+                </Card>
+                <Card className="p-4">
+                  <p className="text-xs text-muted-foreground mb-1">Eficiência Geral</p>
+                  <p className={`text-2xl font-bold font-mono ${
+                    (kubecost.summary.efficiency ?? 0) >= 70 ? "text-emerald-500"
+                    : (kubecost.summary.efficiency ?? 0) >= 40 ? "text-amber-500"
+                    : "text-destructive"
+                  }`}>
+                    {kubecost.summary.efficiency !== null ? `${kubecost.summary.efficiency}%` : "—"}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">utilização real vs. alocado</p>
+                </Card>
+              </div>
+
+              {/* Namespace breakdown table */}
+              {kubecost.byNamespace.length > 0 && (
+                <Card className="p-4 mb-4">
+                  <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                    <Package className="w-4 h-4" />
+                    Custo por Namespace (hoje)
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-border text-muted-foreground">
+                          <th className="text-left py-2 pr-4">Namespace</th>
+                          <th className="text-right py-2 px-2">CPU</th>
+                          <th className="text-right py-2 px-2">Memória</th>
+                          <th className="text-right py-2 px-2">Storage</th>
+                          <th className="text-right py-2 px-2">Rede</th>
+                          <th className="text-right py-2 px-2">Total</th>
+                          <th className="text-right py-2 pl-2">Eficiência</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {kubecost.byNamespace.slice(0, 15).map(ns => (
+                          <tr key={ns.id} className="border-b border-border/50 hover:bg-muted/30">
+                            <td className="py-2 pr-4 font-mono">{ns.resource_name}</td>
+                            <td className="text-right py-2 px-2 text-muted-foreground">{formatCurrency(ns.cpu_cost)}</td>
+                            <td className="text-right py-2 px-2 text-muted-foreground">{formatCurrency(ns.memory_cost)}</td>
+                            <td className="text-right py-2 px-2 text-muted-foreground">{formatCurrency(ns.pv_cost)}</td>
+                            <td className="text-right py-2 px-2 text-muted-foreground">{formatCurrency(ns.network_cost)}</td>
+                            <td className="text-right py-2 px-2 font-medium">{formatCurrency(ns.total_cost)}</td>
+                            <td className="text-right py-2 pl-2">
+                              {ns.efficiency !== null ? (
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <div className="w-16 h-1.5 rounded-full bg-muted overflow-hidden">
+                                    <div
+                                      className="h-full rounded-full"
+                                      style={{
+                                        width: `${Math.min(ns.efficiency, 100)}%`,
+                                        background: ns.efficiency >= 70 ? "#00E5A0" : ns.efficiency >= 40 ? "#F5C518" : "#FF2D2D",
+                                      }}
+                                    />
+                                  </div>
+                                  <span className={
+                                    ns.efficiency >= 70 ? "text-emerald-500" : ns.efficiency >= 40 ? "text-amber-500" : "text-destructive"
+                                  }>{ns.efficiency}%</span>
+                                </div>
+                              ) : "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
+              )}
+
+              {/* Top 5 wasteful workloads */}
+              {kubecost.byDeployment.filter(d => (d.efficiency ?? 100) < 40 && d.total_cost > 0.01).length > 0 && (
+                <Card className="p-4 border-amber-500/30 bg-amber-500/5">
+                  <h3 className="text-sm font-semibold mb-3 flex items-center gap-2 text-amber-600">
+                    <AlertTriangle className="w-4 h-4" />
+                    Top Workloads com Baixa Eficiência (&lt;40%)
+                  </h3>
+                  <div className="flex flex-col gap-2">
+                    {kubecost.byDeployment
+                      .filter(d => (d.efficiency ?? 100) < 40 && d.total_cost > 0.01)
+                      .slice(0, 5)
+                      .map(d => (
+                        <div key={d.id} className="flex items-center justify-between gap-4 p-2.5 rounded-lg bg-background border border-border/50">
+                          <div className="flex flex-col">
+                            <span className="font-mono text-xs font-medium">{d.resource_name}</span>
+                            <span className="text-[10px] text-muted-foreground">{d.namespace}</span>
+                          </div>
+                          <div className="flex items-center gap-4 text-xs">
+                            <span className="text-destructive font-medium">{d.efficiency ?? "?"}% eficiência</span>
+                            <span className="font-mono">{formatCurrency(d.total_cost)}/dia</span>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </Card>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </DashboardLayout>
   );

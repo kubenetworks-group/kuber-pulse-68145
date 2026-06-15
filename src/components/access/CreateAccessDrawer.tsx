@@ -71,7 +71,7 @@ export function CreateAccessDrawer({ open, onClose, onCreated, namespaces = [] }
 
   const [step, setStep] = useState<"form" | "success">("form");
   const [loading, setLoading] = useState(false);
-  const [generatedYaml, setGeneratedYaml] = useState("");
+  const [generatedScript, setGeneratedScript] = useState("");
   const [copied, setCopied] = useState(false);
 
   const [name, setName]     = useState("");
@@ -83,7 +83,7 @@ export function CreateAccessDrawer({ open, onClose, onCreated, namespaces = [] }
 
   function resetForm() {
     setStep("form");
-    setGeneratedYaml("");
+    setGeneratedScript("");
     setCopied(false);
     setName(""); setEmail(""); setRole("viewer");
     setNs("__all__"); setExpiry("none"); setNotes("");
@@ -121,29 +121,29 @@ export function CreateAccessDrawer({ open, onClose, onCreated, namespaces = [] }
       if (res.error) throw new Error(res.error.message);
       if (res.data?.error) throw new Error(res.data.error);
 
-      setGeneratedYaml(res.data.kubeconfig_yaml);
+      setGeneratedScript(res.data.setup_script);
       setStep("success");
       onCreated();
-    } catch (err: any) {
-      toast({ title: "Erro ao criar acesso", description: err.message, variant: "destructive" });
+    } catch (err) {
+      toast({ title: "Erro ao criar acesso", description: err instanceof Error ? err.message : "Erro desconhecido", variant: "destructive" });
     } finally {
       setLoading(false);
     }
   }
 
   async function handleCopy() {
-    await navigator.clipboard.writeText(generatedYaml);
+    await navigator.clipboard.writeText(generatedScript);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
     toast({ title: "Copiado para a área de transferência" });
   }
 
   function handleDownload() {
-    const blob = new Blob([generatedYaml], { type: "text/yaml" });
+    const blob = new Blob([generatedScript], { type: "text/x-sh" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `kodo-${name.toLowerCase().replace(/\s+/g, "-")}-kubeconfig.yaml`;
+    a.download = `kodo-${name.toLowerCase().replace(/\s+/g, "-")}-setup.sh`;
     a.click();
     URL.revokeObjectURL(url);
     toast({ title: "Download iniciado" });
@@ -294,32 +294,31 @@ export function CreateAccessDrawer({ open, onClose, onCreated, namespaces = [] }
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-green-500">
                 <CheckCircle2 className="w-5 h-5" />
-                Acesso criado com sucesso!
+                Script de acesso gerado!
               </DialogTitle>
               <DialogDescription>
-                Entregue o arquivo kubeconfig abaixo para <strong>{name}</strong>.
-                Este conteúdo só pode ser visualizado agora.
+                Execute o script abaixo em uma máquina com acesso admin ao cluster para criar o kubeconfig de <strong>{name}</strong>.
               </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-4 pt-2">
               <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200 text-sm">
                 <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                <span>Salve o kubeconfig antes de fechar. Você pode revogar o acesso depois, mas não recuperar o token.</span>
+                <span>Baixe o script e execute com <code className="font-mono bg-black/20 px-1 rounded">bash kodo-{name.toLowerCase().replace(/\s+/g, "-")}-setup.sh</code>. O kubeconfig será impresso no terminal.</span>
               </div>
 
               <pre className="text-[10px] font-mono bg-muted rounded-lg p-3 overflow-x-auto overflow-y-auto max-h-56 border border-border/50 text-muted-foreground leading-relaxed whitespace-pre">
-                {generatedYaml}
+                {generatedScript}
               </pre>
 
               <div className="flex gap-2">
                 <Button variant="outline" className="flex-1" onClick={handleCopy}>
                   {copied
                     ? <><CheckCircle2 className="w-4 h-4 mr-2 text-green-500" />Copiado!</>
-                    : <><Copy className="w-4 h-4 mr-2" />Copiar YAML</>}
+                    : <><Copy className="w-4 h-4 mr-2" />Copiar script</>}
                 </Button>
                 <Button className="flex-1" onClick={handleDownload}>
-                  <Download className="w-4 h-4 mr-2" />Baixar .yaml
+                  <Download className="w-4 h-4 mr-2" />Baixar .sh
                 </Button>
               </div>
 

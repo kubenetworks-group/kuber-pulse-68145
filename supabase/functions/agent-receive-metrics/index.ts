@@ -678,6 +678,135 @@ serve(async (req) => {
           });
         }
 
+        // HTTP attacks detected via container log scanning (agent_log_scan source)
+        // These have rich evidence: source_ip, lb_ingress, decoded_payload, C2 IP, etc.
+        const httpAttacks: any[] = threatData.http_attacks || [];
+        if (httpAttacks.length > 0) {
+          console.log(`🚨 Processing ${httpAttacks.length} HTTP attack events from log scan`);
+
+          // Deduplicate by source_ip + pod_name + threat_type within 24h
+          const { data: recentHTTPThreats } = await supabaseClient
+            .from('security_threats')
+            .select('source_ip, pod_name, threat_type')
+            .eq('cluster_id', cluster_id)
+            .eq('detection_source', 'agent_log_scan')
+            .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+
+          const existingHTTPSet = new Set(
+            (recentHTTPThreats || []).map((t: any) => `${t.source_ip}|${t.pod_name}|${t.threat_type}`)
+          );
+
+          const newHTTPAttacks = httpAttacks.filter((atk: any) => {
+            const key = `${atk.source_ip}|${atk.pod_name}|${atk.threat_type}`;
+            return !existingHTTPSet.has(key);
+          });
+
+          if (newHTTPAttacks.length > 0) {
+            const httpThreatsToInsert = newHTTPAttacks.slice(0, 20).map((atk: any) => ({
+              cluster_id,
+              user_id: userId,
+              threat_type: atk.threat_type || 'shell_injection',
+              severity: atk.internal_source ? 'critical' : (atk.threat_level || 'critical'),
+              is_attack: true,
+              status: 'active',
+              title: `HTTP Attack: ${(atk.threat_type || 'shell_injection').replace(/_/g, ' ')} from ${atk.source_ip || 'unknown'} on ${atk.pod_name}`,
+              description: atk.reason || `HTTP attack detected via container log scan on ${atk.pod_name}`,
+              source_ip: atk.source_ip || null,
+              destination_ip: atk.destination_ip || null,
+              pod_name: atk.pod_name,
+              container_name: atk.container_name,
+              namespace: atk.namespace,
+              affected_resources: [{
+                pod: atk.pod_name,
+                container: atk.container_name,
+                namespace: atk.namespace,
+                service: atk.service_name,
+                lb_ip: atk.lb_ingress,
+              }],
+              evidence: {
+                lb_ingress: atk.lb_ingress,
+                service_name: atk.service_name,
+                attack_url: atk.attack_url,
+                decoded_payload: atk.decoded_payload,
+                status_code: atk.status_code,
+                external_traffic_policy: atk.external_traffic_policy,
+                pod_labels: atk.pod_labels,
+                evidence_logs: atk.evidence_logs || [],
+                timestamp: atk.timestamp,
+                internal_source: atk.internal_source,
+                destination_ip: atk.destination_ip,
+              },
+              raw_data: atk,
+              detection_source: 'agent_log_scan',
+            }));
+
+            const { data: insertedThreats, error: httpInsertErr } = await supabaseClient
+              .from('security_threats')
+              .insert(httpThreatsToInsert)
+              .select('id, threat_type, source_ip, namespace');
+
+            if (httpInsertErr) {
+              console.error('Error storing HTTP attack threats:', httpInsertErr);
+            } else {
+              console.log(`✅ Stored ${httpThreatsToInsert.length} HTTP attack threats`);
+
+              // Check auto-heal settings for automatic IP blocking
+              const { data: healSettings } = await supabaseClient
+                .from('auto_heal_settings')
+                .select('enabled, auto_apply_security')
+                .eq('cluster_id', cluster_id)
+                .single();
+
+              if (healSettings?.enabled && healSettings?.auto_apply_security) {
+                const commandsToQueue = newHTTPAttacks
+                  .filter((atk: any) =>
+                    atk.source_ip &&
+                    ['shell_injection', 'sql_injection'].includes(atk.threat_type) &&
+                    atk.external_traffic_policy === 'Local' // only effective when ETP=Local
+                  )
+                  .slice(0, 5); // max 5 auto-mitigations per scan
+
+                for (const atk of commandsToQueue) {
+                  const insertedThreat = (insertedThreats || []).find(
+                    (t: any) => t.source_ip === atk.source_ip && t.namespace === atk.namespace
+                  );
+                  await supabaseClient.from('agent_commands').insert({
+                    cluster_id,
+                    user_id: userId,
+                    command_type: 'block_attacker_ip',
+                    command_params: {
+                      namespace: atk.namespace,
+                      attacker_ip: atk.source_ip,
+                      pod_labels: atk.pod_labels || {},
+                      external_traffic_policy: atk.external_traffic_policy || 'Cluster',
+                      threat_id: insertedThreat?.id || null,
+                      trigger: 'auto_heal_http_attack',
+                    },
+                    status: 'pending',
+                  });
+                }
+                if (commandsToQueue.length > 0) {
+                  console.log(`⚡ Queued ${commandsToQueue.length} auto-mitigation block_attacker_ip commands`);
+                }
+              }
+
+              // Notification for HTTP attacks
+              const uniqueAttackerIPs = [...new Set(newHTTPAttacks.map((a: any) => a.source_ip).filter(Boolean))];
+              const hasInternal = newHTTPAttacks.some((a: any) => a.internal_source);
+              await supabaseClient.from('notifications').insert({
+                user_id: userId,
+                title: hasInternal
+                  ? '🚨 LATERAL MOVEMENT: Ataque interno detectado!'
+                  : '🚨 Ataque HTTP detectado nos logs do container!',
+                message: `${newHTTPAttacks.length} ataque(s) HTTP detectado(s) no cluster ${clusterName}. IPs: ${uniqueAttackerIPs.slice(0, 3).join(', ')}${uniqueAttackerIPs.length > 3 ? ` +${uniqueAttackerIPs.length - 3}` : ''}`,
+                type: 'error',
+                related_entity_type: 'security_threat',
+                related_entity_id: cluster_id,
+              });
+            }
+          }
+        }
+
         if (allThreats.length > 0) {
           console.log(`🔒 Processing ${allThreats.length} security threats`);
           
@@ -760,6 +889,136 @@ serve(async (req) => {
     }
 
     console.log(`✅ Successfully stored ${metrics.length} metrics`);
+
+    // ── KubeCost FinOps data processing ──────────────────────────────────────
+    const kubecostMetric = metrics.find((m: any) => m.type === 'kubecost_costs');
+    if (kubecostMetric) {
+      const kc = kubecostMetric.data as any;
+      console.log('💰 Processing KubeCost cost allocation data');
+
+      const { data: clusterOwnerKc } = await supabaseClient
+        .from('clusters')
+        .select('user_id')
+        .eq('id', cluster_id)
+        .single();
+
+      if (clusterOwnerKc && kc.installed) {
+        // Mark cluster as having KubeCost
+        await supabaseClient
+          .from('clusters')
+          .update({ kubecost_installed: true, kubecost_url: kc.base_url })
+          .eq('id', cluster_id);
+
+        const today = new Date().toISOString().slice(0, 10);
+        const toUpsert: any[] = [];
+
+        // Summary record
+        if (kc.summary) {
+          const s = kc.summary?.data || kc.summary;
+          toUpsert.push({
+            cluster_id,
+            user_id: clusterOwnerKc.user_id,
+            window_date: today,
+            aggregate_type: 'summary',
+            resource_name: '__cluster__',
+            total_cost: s.totalCost ?? s.total ?? 0,
+            efficiency: s.efficiency ? Math.round(s.efficiency * 100) : null,
+            raw_data: kc.summary,
+          });
+        }
+
+        // Namespace allocations
+        const nsByNs = kc.by_namespace?.data || kc.by_namespace || {};
+        for (const [nsName, nsData] of Object.entries(nsByNs as Record<string, any>)) {
+          if (nsName === '__idle__' || nsName === '__unmounted__') continue;
+          toUpsert.push({
+            cluster_id,
+            user_id: clusterOwnerKc.user_id,
+            window_date: today,
+            aggregate_type: 'namespace',
+            resource_name: nsName,
+            namespace: nsName,
+            cpu_cost: nsData.cpuCost ?? 0,
+            memory_cost: nsData.ramCost ?? nsData.memoryCost ?? 0,
+            pv_cost: nsData.pvCost ?? 0,
+            network_cost: nsData.networkCost ?? 0,
+            total_cost: nsData.totalCost ?? 0,
+            efficiency: nsData.efficiency ? Math.round(nsData.efficiency * 100) : null,
+            raw_data: nsData,
+          });
+        }
+
+        // Deployment allocations
+        const byDeploy = kc.by_deployment?.data || kc.by_deployment || {};
+        for (const [key, depData] of Object.entries(byDeploy as Record<string, any>)) {
+          if (key.startsWith('__')) continue;
+          const parts = key.split('/');
+          const depNs = parts[0] || null;
+          const depName = parts[1] || key;
+          toUpsert.push({
+            cluster_id,
+            user_id: clusterOwnerKc.user_id,
+            window_date: today,
+            aggregate_type: 'deployment',
+            resource_name: depName,
+            namespace: depNs,
+            deployment: depName,
+            cpu_cost: (depData as any).cpuCost ?? 0,
+            memory_cost: (depData as any).ramCost ?? (depData as any).memoryCost ?? 0,
+            pv_cost: (depData as any).pvCost ?? 0,
+            network_cost: (depData as any).networkCost ?? 0,
+            total_cost: (depData as any).totalCost ?? 0,
+            efficiency: (depData as any).efficiency ? Math.round((depData as any).efficiency * 100) : null,
+            raw_data: depData,
+          });
+        }
+
+        if (toUpsert.length > 0) {
+          const { error: kcErr } = await supabaseClient
+            .from('kubecost_allocations')
+            .upsert(toUpsert, {
+              onConflict: 'cluster_id,window_date,aggregate_type,resource_name,namespace',
+              ignoreDuplicates: false,
+            });
+          if (kcErr) {
+            console.error('Error upserting kubecost_allocations:', kcErr);
+          } else {
+            console.log(`✅ KubeCost: upserted ${toUpsert.length} allocation records`);
+          }
+        }
+
+        // Update cluster monthly_cost with real KubeCost total (annualize from 1d)
+        const summaryData = kc.summary?.data || kc.summary;
+        if (summaryData?.totalCost) {
+          const monthlyEstimate = Math.round((summaryData.totalCost ?? 0) * 30 * 100) / 100;
+          await supabaseClient
+            .from('clusters')
+            .update({ monthly_cost: monthlyEstimate })
+            .eq('id', cluster_id);
+        }
+
+        // Flag wasteful namespaces (efficiency < 40%) as ai_cost_savings opportunities
+        const wastefulNS = toUpsert.filter(r =>
+          r.aggregate_type === 'namespace' &&
+          r.efficiency !== null &&
+          r.efficiency < 40 &&
+          r.total_cost > 0.01
+        );
+        if (wastefulNS.length > 0) {
+          const savingsToInsert = wastefulNS.slice(0, 10).map((ns: any) => ({
+            user_id: clusterOwnerKc.user_id,
+            cluster_id,
+            incident_id: cluster_id, // reuse cluster_id as placeholder
+            saving_type: 'idle_resource_waste',
+            estimated_savings: Math.round(ns.total_cost * (1 - ns.efficiency / 100) * 30 * 100) / 100,
+            downtime_avoided_minutes: 0,
+            cost_per_minute: 0,
+          }));
+          await supabaseClient.from('ai_cost_savings').upsert(savingsToInsert, { ignoreDuplicates: true });
+          console.log(`💡 KubeCost: flagged ${wastefulNS.length} wasteful namespaces`);
+        }
+      }
+    }
 
     // ── Auto-detect & capture container restarts ──────────────────────────────
     // Uses pod_details (restart counts + last_state) and pod_previous_logs

@@ -7,11 +7,12 @@ import {
 import {
   ShieldAlert, ShieldOff, CheckCircle, XCircle, ChevronDown, ChevronUp,
   RefreshCw, Shield, Clock, Target, Lightbulb, ChevronRight,
-  Wrench, Eye, Info, Sparkles, Zap, FileText,
+  Wrench, Eye, Info, Sparkles, Zap, FileText, Ban, Globe,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SecurityThreat, ThreatStats } from "@/hooks/useSecurityThreats";
 import { SecurityReportModal } from "./SecurityReportModal";
+import { HTTPAttackReportModal } from "./HTTPAttackReportModal";
 
 // ─── Status colors only (consistent across light/dark themes) ────────────────
 
@@ -45,7 +46,14 @@ const FIXABLE = new Set([
   "missing_security_context","writable_root_filesystem","suspicious_process",
   "root_container","container_as_root","run_as_root","suspicious_network",
   "excessive_rbac","overprivileged_rbac","resource_abuse","crypto_mining",
+  // HTTP attack types — fixed via block_attacker_ip
+  "shell_injection","sql_injection","path_traversal","brute_force","port_scan",
 ]);
+
+const HTTP_ATTACK_TYPES = new Set([
+  "shell_injection","sql_injection","path_traversal","brute_force","port_scan",
+]);
+const isHTTPAttack = (t: SecurityThreat) => HTTP_ATTACK_TYPES.has(t.threat_type);
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -144,8 +152,9 @@ function ThreatRow({ threat, idx, onMitigate, onMarkFalsePositive, onUpdateStatu
   onMarkFalsePositive: (id: string) => void;
   onUpdateStatus: (id: string, s: string) => void;
 }) {
-  const [open, setOpen]         = useState(false);
-  const [authorizing, setAuth]  = useState(false);
+  const [open, setOpen]           = useState(false);
+  const [authorizing, setAuth]    = useState(false);
+  const [showReport, setReport]   = useState(false);
 
   const sev     = SEV[threat.severity] ?? SEV.low;
   const ns      = getNS(threat);
@@ -155,6 +164,8 @@ function ThreatRow({ threat, idx, onMitigate, onMarkFalsePositive, onUpdateStatu
   const fixable = canFix(threat);
   const system  = isSys(threat);
   const pod     = res[0]?.pod || threat.pod_name || null;
+  const ev      = (threat.evidence || {}) as any;
+  const httpAtk = isHTTPAttack(threat);
 
   const authorize = async () => {
     setAuth(true);
@@ -260,6 +271,55 @@ function ThreatRow({ threat, idx, onMitigate, onMarkFalsePositive, onUpdateStatu
             </p>
           )}
 
+          {/* ── HTTP Attack Trace ── */}
+          {httpAtk && ev.lb_ingress && (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+                <Globe className="w-2.5 h-2.5" /> Trace do Ataque
+              </span>
+              <div className="font-mono text-xs px-3 py-2 rounded-md bg-muted border border-border text-foreground flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="text-muted-foreground">LB:</span>
+                <strong style={{ color: STATUS.critical }}>{ev.lb_ingress}</strong>
+                <ChevronRight className="w-3 h-3 text-muted-foreground" />
+                <span><span className="text-muted-foreground">svc/</span>{ev.service_name ?? "?"}</span>
+                <ChevronRight className="w-3 h-3 text-muted-foreground" />
+                <span><span className="text-muted-foreground">pod/</span>{threat.pod_name ?? "?"}</span>
+                {ev.attack_url && (
+                  <>
+                    <ChevronRight className="w-3 h-3 text-muted-foreground" />
+                    <span className="break-all text-[11px]" style={{ color: STATUS.high }}>
+                      {ev.attack_url.slice(0, 90)}{ev.attack_url.length > 90 ? "…" : ""}
+                    </span>
+                  </>
+                )}
+              </div>
+              {threat.source_ip && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Ban className="w-3 h-3" style={{ color: STATUS.critical }} />
+                  <span>IP do atacante: <strong className="font-mono" style={{ color: STATUS.critical }}>{threat.source_ip}</strong></span>
+                  {(threat as any).destination_ip && (
+                    <span className="ml-2">C2: <strong className="font-mono" style={{ color: STATUS.high }}>{(threat as any).destination_ip}</strong></span>
+                  )}
+                  {ev.internal_source && (
+                    <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium" style={{ background: STATUS.critDim, color: STATUS.critical, border: `1px solid ${STATUS.critBdr}` }}>
+                      ⚠ LATERAL MOVEMENT
+                    </span>
+                  )}
+                </div>
+              )}
+              {ev.decoded_payload && (
+                <div className="font-mono text-[10px] px-2 py-1.5 rounded bg-black/30 border border-border text-muted-foreground break-all">
+                  {ev.decoded_payload.slice(0, 200)}{ev.decoded_payload.length > 200 ? "…" : ""}
+                </div>
+              )}
+              {ev.external_traffic_policy === "Cluster" && (
+                <p className="text-[11px] m-0" style={{ color: STATUS.medium }}>
+                  ⚠ externalTrafficPolicy=Cluster: o IP exibido pode ser o IP do nó, não o IP real do atacante. Para bloqueio efetivo, configure externalTrafficPolicy=Local no Service.
+                </p>
+              )}
+            </div>
+          )}
+
           {(res.length > 0 || threat.pod_name) && (
             <div className="flex flex-col gap-1.5">
               <span className="text-[10px] text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
@@ -322,7 +382,18 @@ function ThreatRow({ threat, idx, onMitigate, onMarkFalsePositive, onUpdateStatu
 
           {threat.status === "active" && (
             <div className="flex flex-wrap gap-2 pt-1">
-              {fixable && <AIBtn label="Autorizar Correção" loading={authorizing} onClick={authorize} />}
+              {/* HTTP attack: block attacker IP */}
+              {httpAtk && threat.source_ip && (
+                <AIBtn
+                  label={`Bloquear ${threat.source_ip}`}
+                  loading={authorizing}
+                  onClick={authorize}
+                />
+              )}
+              {/* Non-HTTP fixable threats */}
+              {fixable && !httpAtk && (
+                <AIBtn label="Autorizar Correção" loading={authorizing} onClick={authorize} />
+              )}
               <button onClick={() => onMitigate(threat.id, "manual_review")}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-transparent border border-border text-muted-foreground hover:bg-muted transition-colors cursor-pointer outline-none"
                 style={{ color: STATUS.low }}
@@ -339,7 +410,26 @@ function ThreatRow({ threat, idx, onMitigate, onMarkFalsePositive, onUpdateStatu
               >
                 <XCircle className="w-3.5 h-3.5" />Falso positivo
               </button>
+              {/* HTTP attack: generate PDF report */}
+              {httpAtk && (
+                <button
+                  onClick={() => setReport(true)}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs bg-transparent border border-border text-muted-foreground hover:bg-muted transition-colors cursor-pointer outline-none"
+                >
+                  <FileText className="w-3.5 h-3.5" />Relatório PDF
+                </button>
+              )}
             </div>
+          )}
+
+          {/* HTTP attack report modal */}
+          {showReport && (
+            <HTTPAttackReportModal
+              open={showReport}
+              onClose={() => setReport(false)}
+              threatId={threat.id}
+              threat={threat}
+            />
           )}
         </div>
       )}

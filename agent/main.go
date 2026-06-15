@@ -8,8 +8,11 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -65,6 +68,92 @@ var dfCache = &pvcDfCache{
 // dfExecForbidden is set to true when pods/exec is denied by RBAC,
 // so we skip further exec attempts and only log the fix once per process run.
 var dfExecForbidden int32 // atomic: 0 = allowed, 1 = forbidden
+
+// ---------------------------------------------------------------------------
+// HTTP ATTACK DETECTION — pod log scanning for internet-exposed workloads
+// ---------------------------------------------------------------------------
+
+// HTTPAttackEvent holds a single detected attack from container log analysis.
+type HTTPAttackEvent struct {
+	SourceIP              string
+	Method                string
+	URL                   string
+	AttackType            string
+	DecodedPayload        string
+	DestinationIP         string // C2 server IP extracted from wget/curl URLs
+	StatusCode            int
+	RawLogLine            string
+	Timestamp             string
+	PodName               string
+	Namespace             string
+	ContainerName         string
+	ServiceName           string
+	LBIngress             string
+	ExternalTrafficPolicy string
+	PodLabels             map[string]string
+	InternalSource        bool // true when source_ip is RFC1918 (lateral movement)
+}
+
+// httpAttackCache deduplicates detections within a scan window.
+type httpAttackCache struct {
+	sync.RWMutex
+	seen map[string]time.Time
+	ttl  time.Duration
+}
+
+var attackCache = &httpAttackCache{
+	seen: make(map[string]time.Time),
+	ttl:  5 * time.Minute,
+}
+
+// Attack pattern regexes — compiled once at startup.
+var (
+	// Shell/command injection via query parameters
+	reShellCmd        = regexp.MustCompile(`(?i)[?&](cmd|exec|system|passthru|shell|command)=`)
+	reMiraiSignature  = regexp.MustCompile(`___S_O_S_T_R_E_A`)
+	reBusybox         = regexp.MustCompile(`(?i)busybox[^\s]*\s+(nc|telnet|wget|curl)`)
+	reUrlEncodedShell = regexp.MustCompile(`(?i)(%3B|%7C|%26%26|%60|%24%28)`)
+
+	// Mozi botnet & shell-in-URL attack family
+	reMozi          = regexp.MustCompile(`(?i)Mozi\.[a-zA-Z]`)
+	reWgetInURL     = regexp.MustCompile(`(?i)(wget|curl)\+?https?://`)
+	reChmod777      = regexp.MustCompile(`(?i)chmod\+?777`)
+	reRmRf          = regexp.MustCompile(`(?i)rm\+-?rf`)
+	reShellEndpoint = regexp.MustCompile(`(?i)^/shell[\?/]`)
+	reC2IP          = regexp.MustCompile(`(?:wget|curl)\+?https?://(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):?(\d+)?/`)
+
+	// SQL injection
+	reSQLInjection = regexp.MustCompile(`(?i)(union\s+.{0,20}select|'\s+or\s+'|SLEEP\s*\(|xp_cmdshell|DROP\s+TABLE)`)
+
+	// Path traversal
+	rePathTraversal = regexp.MustCompile(`(?i)(\.\.\/|%2e%2e%2f|%252e%252e)`)
+
+	// Remote file inclusion
+	reRFI = regexp.MustCompile(`(?i)[?&][^=]+=https?://`)
+
+	// Scanner user agents
+	reScannerUA = regexp.MustCompile(`(?i)(masscan|nikto|sqlmap|dirbuster|nmap|zgrab|acunetix|nuclei)`)
+
+	// Binary download (ARM/MIPS — IoT botnet payloads)
+	reBinaryDownload = regexp.MustCompile(`(?i)(arm[67]?|mips|x86_64|i686)[^\s]*\.(elf|sh|bin)`)
+
+	// Log format parsers
+	reNginxLog  = regexp.MustCompile(`^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\s+-\s+-\s+\[([^\]]+)\]\s+"(\w+)\s+([^\s"]+)[^"]*"\s+(\d{3})\s+\d+`)
+	rePHPFPMLog = regexp.MustCompile(`\[php-fpm:access\]\s+127\.0\.0\.1\s+-\s+[^\s]+\s+"(\w+)\s+([^\s"]+).*?"\s+(\d{3})\s+\d+`)
+
+	// RFC1918 private ranges — source IP in these ranges signals lateral movement
+	reRFC1918 = regexp.MustCompile(`^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)`)
+
+	// Brute-force tracking: namespace/pod/ip → recent 401/403 timestamps
+	bruteForceMu  sync.Mutex
+	bruteForceMap = make(map[string][]time.Time)
+)
+
+// kubecostDetected caches whether KubeCost was found in the cluster.
+var (
+	kubecostMu      sync.RWMutex
+	kubecostBaseURL string // empty = not detected/installed
+)
 
 // blockedNamespaces are system namespaces where we won't exec into containers
 var blockedNamespaces = map[string]bool{
@@ -421,6 +510,436 @@ func loadConfig() AgentConfig {
 // ---------------------------------------------
 // MAIN
 // ---------------------------------------------
+// ---------------------------------------------------------------------------
+// HTTP ATTACK DETECTION FUNCTIONS
+// ---------------------------------------------------------------------------
+
+// collectLoadBalancerPods returns all running pods that back a LoadBalancer service
+// with an assigned external IP. System namespaces are excluded.
+func collectLoadBalancerPods(clientset *kubernetes.Clientset) []map[string]interface{} {
+	ctx := context.Background()
+	svcs, err := clientset.CoreV1().Services("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		log.Printf("⚠️  HTTP attack scan: cannot list services: %v", err)
+		return nil
+	}
+
+	var result []map[string]interface{}
+	for _, svc := range svcs.Items {
+		if blockedNamespaces[svc.Namespace] {
+			continue
+		}
+		if svc.Spec.Type != corev1.ServiceTypeLoadBalancer {
+			continue
+		}
+		if len(svc.Status.LoadBalancer.Ingress) == 0 {
+			continue
+		}
+		lbIP := ""
+		for _, ing := range svc.Status.LoadBalancer.Ingress {
+			if ing.IP != "" {
+				lbIP = ing.IP
+				break
+			}
+			if ing.Hostname != "" {
+				lbIP = ing.Hostname
+				break
+			}
+		}
+		if lbIP == "" || len(svc.Spec.Selector) == 0 {
+			continue
+		}
+
+		etp := string(svc.Spec.ExternalTrafficPolicy)
+		if etp == "" {
+			etp = "Cluster"
+		}
+
+		labelSel := metav1.FormatLabelSelector(&metav1.LabelSelector{MatchLabels: svc.Spec.Selector})
+		pods, err := clientset.CoreV1().Pods(svc.Namespace).List(ctx, metav1.ListOptions{
+			LabelSelector: labelSel,
+			FieldSelector: "status.phase=Running",
+		})
+		if err != nil {
+			continue
+		}
+		for _, pod := range pods.Items {
+			containerName := ""
+			if len(pod.Spec.Containers) > 0 {
+				containerName = pod.Spec.Containers[0].Name
+			}
+			result = append(result, map[string]interface{}{
+				"pod_name":                pod.Name,
+				"namespace":               pod.Namespace,
+				"container_name":          containerName,
+				"labels":                  pod.Labels,
+				"service_name":            svc.Name,
+				"lb_ingress":              lbIP,
+				"external_traffic_policy": etp,
+			})
+		}
+	}
+	log.Printf("🌐 HTTP attack scan: %d pods behind LoadBalancer services", len(result))
+	return result
+}
+
+// analyzeLogsForAttacks parses container stdout logs and returns detected HTTP attack events.
+// logText is expected to contain nginx or php-fpm access log lines.
+func analyzeLogsForAttacks(logText, podName, namespace, containerName, serviceName, lbIngress, etp string, podLabels map[string]string) []HTTPAttackEvent {
+	var events []HTTPAttackEvent
+
+	lines := strings.Split(logText, "\n")
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+
+		var sourceIP, method, rawURL, timestamp string
+		var statusCode int
+
+		if m := reNginxLog.FindStringSubmatch(line); len(m) >= 6 {
+			sourceIP = m[1]
+			timestamp = m[2]
+			method = m[3]
+			rawURL = m[4]
+			statusCode, _ = strconv.Atoi(m[5])
+		} else if m := rePHPFPMLog.FindStringSubmatch(line); len(m) >= 4 {
+			method = m[1]
+			rawURL = m[2]
+			statusCode, _ = strconv.Atoi(m[3])
+		} else {
+			continue
+		}
+
+		// Brute force detection: count 401/403 per source IP within 30s
+		if sourceIP != "" && (statusCode == 401 || statusCode == 403) {
+			key := fmt.Sprintf("%s/%s/%s", namespace, podName, sourceIP)
+			bruteForceMu.Lock()
+			now := time.Now()
+			cutoff := now.Add(-30 * time.Second)
+			fresh := bruteForceMap[key][:0]
+			for _, t := range bruteForceMap[key] {
+				if t.After(cutoff) {
+					fresh = append(fresh, t)
+				}
+			}
+			fresh = append(fresh, now)
+			bruteForceMap[key] = fresh
+			count := len(fresh)
+			bruteForceMu.Unlock()
+			if count >= 5 {
+				events = append(events, HTTPAttackEvent{
+					SourceIP: sourceIP, Method: method, URL: rawURL,
+					StatusCode: statusCode, AttackType: "brute_force",
+					DecodedPayload: fmt.Sprintf("%d requests returning %d in 30s", count, statusCode),
+					RawLogLine: line, Timestamp: timestamp,
+					PodName: podName, Namespace: namespace, ContainerName: containerName,
+					ServiceName: serviceName, LBIngress: lbIngress, ExternalTrafficPolicy: etp,
+					PodLabels: podLabels, InternalSource: reRFC1918.MatchString(sourceIP),
+				})
+			}
+		}
+
+		// For non-brute-force attacks: only flag requests that returned HTTP 200
+		// (meaning the vulnerable endpoint actually processed the attack payload).
+		// Scanners are always flagged regardless of status.
+		if statusCode != 200 && !reScannerUA.MatchString(line) {
+			continue
+		}
+
+		// Decode both %XX and + encoding (botnet style uses + for spaces)
+		decoded, _ := url.QueryUnescape(strings.ReplaceAll(rawURL, "+", " "))
+
+		var attackType string
+		var c2IP string
+
+		switch {
+		case reMozi.MatchString(rawURL) || reMozi.MatchString(decoded):
+			attackType = "shell_injection"
+			if m := reC2IP.FindStringSubmatch(rawURL + " " + decoded); len(m) >= 2 {
+				c2IP = m[1]
+			}
+		case reWgetInURL.MatchString(rawURL) && (reRmRf.MatchString(rawURL) || reChmod777.MatchString(rawURL)):
+			attackType = "shell_injection"
+			if m := reC2IP.FindStringSubmatch(rawURL + " " + decoded); len(m) >= 2 {
+				c2IP = m[1]
+			}
+		case reShellEndpoint.MatchString(rawURL) && (reWgetInURL.MatchString(decoded) || reChmod777.MatchString(decoded)):
+			attackType = "shell_injection"
+			if m := reC2IP.FindStringSubmatch(decoded); len(m) >= 2 {
+				c2IP = m[1]
+			}
+		case reMiraiSignature.MatchString(rawURL) || reMiraiSignature.MatchString(decoded):
+			attackType = "shell_injection"
+		case reShellCmd.MatchString(rawURL) && (reUrlEncodedShell.MatchString(rawURL) || reUrlEncodedShell.MatchString(decoded)):
+			attackType = "shell_injection"
+		case reBusybox.MatchString(decoded) || reBinaryDownload.MatchString(decoded):
+			attackType = "shell_injection"
+		case reSQLInjection.MatchString(decoded):
+			attackType = "sql_injection"
+		case rePathTraversal.MatchString(rawURL):
+			attackType = "path_traversal"
+		case reRFI.MatchString(rawURL):
+			attackType = "shell_injection"
+		case reScannerUA.MatchString(line):
+			attackType = "port_scan"
+		}
+
+		if attackType == "" {
+			continue
+		}
+
+		// Truncate decoded payload for storage
+		payload := decoded
+		if len(payload) > 500 {
+			payload = payload[:500] + "..."
+		}
+
+		events = append(events, HTTPAttackEvent{
+			SourceIP: sourceIP, Method: method, URL: rawURL,
+			StatusCode: statusCode, AttackType: attackType,
+			DecodedPayload: payload, DestinationIP: c2IP,
+			RawLogLine: line, Timestamp: timestamp,
+			PodName: podName, Namespace: namespace, ContainerName: containerName,
+			ServiceName: serviceName, LBIngress: lbIngress, ExternalTrafficPolicy: etp,
+			PodLabels: podLabels, InternalSource: reRFC1918.MatchString(sourceIP),
+		})
+	}
+	return events
+}
+
+// collectHTTPAttackThreats reads logs from all LB-exposed pods and returns detected threats.
+func collectHTTPAttackThreats(clientset *kubernetes.Clientset) []map[string]interface{} {
+	lbPods := collectLoadBalancerPods(clientset)
+	if len(lbPods) == 0 {
+		return nil
+	}
+
+	var threats []map[string]interface{}
+	tailLines := int64(500)
+
+	for _, entry := range lbPods {
+		podName, _ := entry["pod_name"].(string)
+		namespace, _ := entry["namespace"].(string)
+		containerName, _ := entry["container_name"].(string)
+		serviceName, _ := entry["service_name"].(string)
+		lbIngress, _ := entry["lb_ingress"].(string)
+		etp, _ := entry["external_traffic_policy"].(string)
+		labelsRaw, _ := entry["labels"].(map[string]string)
+
+		logsReq := clientset.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{
+			Container: containerName,
+			TailLines: &tailLines,
+		})
+		stream, err := logsReq.Stream(context.Background())
+		if err != nil {
+			log.Printf("⚠️  HTTP attack scan: cannot read logs for %s/%s: %v", namespace, podName, err)
+			continue
+		}
+		buf := new(bytes.Buffer)
+		io.Copy(buf, stream)
+		stream.Close()
+
+		attacks := analyzeLogsForAttacks(buf.String(), podName, namespace, containerName, serviceName, lbIngress, etp, labelsRaw)
+		if len(attacks) == 0 {
+			continue
+		}
+
+		// Deduplicate within this scan cycle and against the 5-min cache
+		seen := make(map[string]bool)
+		for _, atk := range attacks {
+			cacheKey := fmt.Sprintf("%s/%s/%s/%s", namespace, podName, atk.SourceIP, atk.AttackType)
+			if seen[cacheKey] {
+				continue
+			}
+			seen[cacheKey] = true
+
+			attackCache.RLock()
+			lastSeen, exists := attackCache.seen[cacheKey]
+			attackCache.RUnlock()
+			if exists && time.Since(lastSeen) < attackCache.ttl {
+				continue
+			}
+			attackCache.Lock()
+			attackCache.seen[cacheKey] = time.Now()
+			attackCache.Unlock()
+
+			severity := "critical"
+			if atk.InternalSource {
+				severity = "critical" // lateral movement is always critical
+			}
+
+			threat := map[string]interface{}{
+				"pod_name":                podName,
+				"namespace":               namespace,
+				"container_name":          containerName,
+				"threat_type":             atk.AttackType,
+				"threat_level":            severity,
+				"is_attack":               true,
+				"internal_source":         atk.InternalSource,
+				"reason":                  fmt.Sprintf("HTTP %s attack on %s via LB %s (HTTP %d)", atk.AttackType, truncate(atk.URL, 80), lbIngress, atk.StatusCode),
+				"source_ip":               atk.SourceIP,
+				"destination_ip":          atk.DestinationIP,
+				"service_name":            serviceName,
+				"lb_ingress":              lbIngress,
+				"external_traffic_policy": etp,
+				"attack_url":              atk.URL,
+				"decoded_payload":         atk.DecodedPayload,
+				"status_code":             atk.StatusCode,
+				"pod_labels":              labelsRaw,
+				"evidence_logs":           []string{truncate(atk.RawLogLine, 300)},
+				"timestamp":               atk.Timestamp,
+			}
+			threats = append(threats, threat)
+			log.Printf("🚨 HTTP attack: %s → %s/%s src=%s type=%s c2=%s", lbIngress, namespace, podName, atk.SourceIP, atk.AttackType, atk.DestinationIP)
+		}
+	}
+	return threats
+}
+
+// sendHTTPAttackThreats posts detected HTTP attacks to agent-receive-metrics
+// using the existing security_threats metric type with an http_attacks sub-field.
+func sendHTTPAttackThreats(config AgentConfig, threats []map[string]interface{}) {
+	payload := map[string]interface{}{
+		"metrics": []map[string]interface{}{
+			{
+				"type": "security_threats",
+				"data": map[string]interface{}{
+					"http_attacks":           threats,
+					"network_anomalies":      []interface{}{},
+					"privileged_containers":  []interface{}{},
+					"host_network_pods":      []interface{}{},
+					"host_pid_pods":          []interface{}{},
+					"suspicious_pods":        []interface{}{},
+					"suspicious_events":      []interface{}{},
+					"resource_anomalies":     []interface{}{},
+					"rbac_threats":           []interface{}{},
+					"suspicious_jobs":        []interface{}{},
+					"network_policy_gaps":    []interface{}{},
+					"configmap_secrets":      []interface{}{},
+				},
+				"collected_at": time.Now().UTC().Format(time.RFC3339),
+			},
+		},
+	}
+	body, _ := json.Marshal(payload)
+	reqURL := fmt.Sprintf("%s/agent-receive-metrics", config.APIEndpoint)
+	req, err := http.NewRequest("POST", reqURL, bytes.NewBuffer(body))
+	if err != nil {
+		log.Printf("❌ sendHTTPAttackThreats: failed to build request: %v", err)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-agent-key", config.APIKey)
+	req.Header.Set("x-agent-version", AgentVersion)
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("❌ sendHTTPAttackThreats: request failed: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+	log.Printf("📤 HTTP attack threats sent: %d threats, status=%d", len(threats), resp.StatusCode)
+}
+
+// truncate shortens a string to max n runes, appending "..." if cut.
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "..."
+}
+
+// ---------------------------------------------------------------------------
+// KUBECOST FINOPS INTEGRATION
+// ---------------------------------------------------------------------------
+
+// detectKubecost checks if KubeCost is running in the cluster by probing its
+// in-cluster service endpoint. Returns the base URL if found, empty string otherwise.
+func detectKubecost(clientset *kubernetes.Clientset) string {
+	ctx := context.Background()
+	_, err := clientset.CoreV1().Services("kubecost").Get(ctx, "kubecost-cost-analyzer", metav1.GetOptions{})
+	if err != nil {
+		return ""
+	}
+	baseURL := "http://kubecost-cost-analyzer.kubecost:9090"
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(baseURL + "/model/summary?window=1d")
+	if err != nil || resp.StatusCode >= 500 {
+		log.Printf("⚠️  KubeCost service found but not responding: %v", err)
+		return ""
+	}
+	resp.Body.Close()
+	log.Printf("✅ KubeCost detected at %s", baseURL)
+	return baseURL
+}
+
+// collectKubecostData queries KubeCost API for cost allocation data.
+func collectKubecostData(baseURL string) map[string]interface{} {
+	client := &http.Client{Timeout: 15 * time.Second}
+
+	fetch := func(path string) map[string]interface{} {
+		resp, err := client.Get(baseURL + path)
+		if err != nil {
+			log.Printf("⚠️  KubeCost query failed for %s: %v", path, err)
+			return nil
+		}
+		defer resp.Body.Close()
+		var result map[string]interface{}
+		json.NewDecoder(resp.Body).Decode(&result)
+		return result
+	}
+
+	summary := fetch("/model/summary?window=1d")
+	byNamespace := fetch("/model/allocation?window=1d&aggregate=namespace")
+	byDeployment := fetch("/model/allocation?window=1d&aggregate=deployment")
+	byPod := fetch("/model/allocation?window=1d&aggregate=pod")
+	assets := fetch("/model/assets?window=1d")
+
+	return map[string]interface{}{
+		"installed":     true,
+		"base_url":      baseURL,
+		"window":        "1d",
+		"summary":       summary,
+		"by_namespace":  byNamespace,
+		"by_deployment": byDeployment,
+		"by_pod":        byPod,
+		"assets":        assets,
+		"collected_at":  time.Now().UTC().Format(time.RFC3339),
+	}
+}
+
+// sendKubecostMetrics sends KubeCost cost data as a kubecost_costs metric.
+func sendKubecostMetrics(config AgentConfig, data map[string]interface{}) {
+	payload := map[string]interface{}{
+		"metrics": []map[string]interface{}{
+			{
+				"type":         "kubecost_costs",
+				"data":         data,
+				"collected_at": time.Now().UTC().Format(time.RFC3339),
+			},
+		},
+	}
+	body, _ := json.Marshal(payload)
+	reqURL := fmt.Sprintf("%s/agent-receive-metrics", config.APIEndpoint)
+	req, err := http.NewRequest("POST", reqURL, bytes.NewBuffer(body))
+	if err != nil {
+		log.Printf("❌ sendKubecostMetrics: failed to build request: %v", err)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-agent-key", config.APIKey)
+	req.Header.Set("x-agent-version", AgentVersion)
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("❌ sendKubecostMetrics: request failed: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+	log.Printf("📤 KubeCost metrics sent: status=%d", resp.StatusCode)
+}
+
 func main() {
 	log.Printf("🚀 Kodo Agent %s starting...", AgentVersion)
 
@@ -472,6 +991,54 @@ func main() {
 		logTicker := time.NewTicker(5 * time.Minute)
 		for range logTicker.C {
 			pushAgentLogs(clientset, config)
+		}
+	}()
+
+	// HTTP attack detection via container log scanning — every 5 minutes
+	go func() {
+		time.Sleep(2 * time.Minute) // stagger from startup to let pods stabilise
+		httpScanTicker := time.NewTicker(5 * time.Minute)
+		for range httpScanTicker.C {
+			go func() {
+				threats := collectHTTPAttackThreats(clientset)
+				if len(threats) > 0 {
+					sendHTTPAttackThreats(config, threats)
+				} else {
+					log.Println("✅ HTTP attack scan: no threats detected")
+				}
+			}()
+		}
+	}()
+
+	// KubeCost FinOps data collection — every 15 minutes (only when installed)
+	go func() {
+		time.Sleep(3 * time.Minute)
+		// Initial detection
+		kubecostMu.Lock()
+		kubecostBaseURL = detectKubecost(clientset)
+		kubecostMu.Unlock()
+
+		kubecostTicker := time.NewTicker(15 * time.Minute)
+		for range kubecostTicker.C {
+			kubecostMu.RLock()
+			baseURL := kubecostBaseURL
+			kubecostMu.RUnlock()
+
+			if baseURL == "" {
+				// Re-probe periodically in case KubeCost was installed
+				kubecostMu.Lock()
+				kubecostBaseURL = detectKubecost(clientset)
+				baseURL = kubecostBaseURL
+				kubecostMu.Unlock()
+			}
+			if baseURL != "" {
+				go func(u string) {
+					data := collectKubecostData(u)
+					if data != nil {
+						sendKubecostMetrics(config, data)
+					}
+				}(baseURL)
+			}
 		}
 	}()
 
@@ -2902,6 +3469,12 @@ func executeCommands(clientset *kubernetes.Clientset, metricsClient *metricsv.Cl
 		case "delete_serviceaccount":
 			log.Printf("   → Revoking cluster access (deleting ServiceAccount)...")
 			result, err = deleteServiceAccount(clientset, cmd.CommandParams)
+		case "block_attacker_ip":
+			log.Printf("   → Blocking attacker IP via NetworkPolicy...")
+			result, err = blockAttackerIP(clientset, cmd.CommandParams)
+		case "deploy_kubecost":
+			log.Printf("   → Deploying KubeCost for FinOps...")
+			result, err = deployKubecost(clientset, config, cmd.CommandParams)
 		default:
 				err = fmt.Errorf("unknown command type: %s", cmd.CommandType)
 				log.Printf("   ❌ Unknown command type!")
@@ -2916,6 +3489,187 @@ func executeCommands(clientset *kubernetes.Clientset, metricsClient *metricsv.Cl
 			updateCommandStatus(config, cmd.ID, result, err)
 		}()
 	}
+}
+
+// ---------------------------------------------------------------------------
+// SECURITY MITIGATION COMMANDS
+// ---------------------------------------------------------------------------
+
+// blockAttackerIP creates a NetworkPolicy that allows all ingress EXCEPT from the
+// attacker's IP ("allow all minus one"). This keeps the service running for legitimate
+// traffic while blocking the specific attacker.
+//
+// CAVEAT: Effective only when externalTrafficPolicy=Local on the Service. With the
+// Kubernetes default (Cluster), the pod sees the node's IP instead of the real client IP,
+// so the policy blocks the node rather than the attacker.
+func blockAttackerIP(clientset *kubernetes.Clientset, params map[string]interface{}) (map[string]interface{}, error) {
+	namespace, _ := params["namespace"].(string)
+	attackerIP, _ := params["attacker_ip"].(string)
+	threatID, _ := params["threat_id"].(string)
+	etp, _ := params["external_traffic_policy"].(string)
+
+	if namespace == "" || attackerIP == "" {
+		return nil, fmt.Errorf("block_attacker_ip requires namespace and attacker_ip")
+	}
+	if net.ParseIP(attackerIP) == nil {
+		return nil, fmt.Errorf("invalid attacker IP: %s", attackerIP)
+	}
+	if etp == "" {
+		etp = "Cluster"
+	}
+	if strings.EqualFold(etp, "Cluster") {
+		log.Printf("⚠️  blockAttackerIP: externalTrafficPolicy=Cluster — NetworkPolicy will block node IP, not real client IP. Set externalTrafficPolicy=Local on the Service for effective blocking.")
+	}
+
+	// Build pod selector from params (optional — empty selector = all pods in namespace)
+	podSelector := metav1.LabelSelector{}
+	if labelsRaw, ok := params["pod_labels"].(map[string]interface{}); ok {
+		relevant := map[string]string{}
+		for k, v := range labelsRaw {
+			if s, ok := v.(string); ok {
+				if k == "app" || k == "app.kubernetes.io/name" || k == "version" || k == "tier" || k == "component" {
+					relevant[k] = s
+				}
+			}
+		}
+		if len(relevant) > 0 {
+			podSelector.MatchLabels = relevant
+		}
+	}
+
+	policyName := fmt.Sprintf("kodo-block-%s", strings.ReplaceAll(attackerIP, ".", "-"))
+
+	np := &networkingv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      policyName,
+			Namespace: namespace,
+			Labels: map[string]string{
+				"managed-by":  "kodo-agent",
+				"policy-type": "block-attacker",
+				"blocked-ip":  attackerIP,
+			},
+			Annotations: map[string]string{
+				"kodo.io/blocked-ip":   attackerIP,
+				"kodo.io/threat-id":    threatID,
+				"kodo.io/created-at":   time.Now().UTC().Format(time.RFC3339),
+				"kodo.io/etp-caveat":   fmt.Sprintf("externalTrafficPolicy=%s", etp),
+			},
+		},
+		Spec: networkingv1.NetworkPolicySpec{
+			PodSelector: podSelector,
+			PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeIngress},
+			Ingress: []networkingv1.NetworkPolicyIngressRule{
+				{
+					From: []networkingv1.NetworkPolicyPeer{
+						{
+							IPBlock: &networkingv1.IPBlock{
+								CIDR:   "0.0.0.0/0",
+								Except: []string{attackerIP + "/32"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	ctx := context.Background()
+	_, err := clientset.NetworkingV1().NetworkPolicies(namespace).Create(ctx, np, metav1.CreateOptions{})
+	if err != nil {
+		if strings.Contains(err.Error(), "already exists") {
+			return map[string]interface{}{
+				"action":      "block_attacker_ip",
+				"policy_name": policyName,
+				"attacker_ip": attackerIP,
+				"namespace":   namespace,
+				"status":      "already_exists",
+				"etp":         etp,
+				"message":     fmt.Sprintf("NetworkPolicy %s already exists (IP %s already blocked)", policyName, attackerIP),
+			}, nil
+		}
+		return nil, fmt.Errorf("failed to create NetworkPolicy %s: %v", policyName, err)
+	}
+
+	etpEffective := strings.EqualFold(etp, "Local")
+	etpMsg := "EFFECTIVE — real client IP is preserved"
+	if !etpEffective {
+		etpMsg = "WARNING: may not block real attacker — pod sees node IP instead. Set externalTrafficPolicy=Local on the Service."
+	}
+
+	return map[string]interface{}{
+		"action":        "block_attacker_ip",
+		"policy_name":   policyName,
+		"attacker_ip":   attackerIP,
+		"namespace":     namespace,
+		"status":        "created",
+		"cidr":          "0.0.0.0/0",
+		"except":        attackerIP + "/32",
+		"etp":           etp,
+		"etp_effective": etpEffective,
+		"etp_caveat":    fmt.Sprintf("externalTrafficPolicy=%s: %s", etp, etpMsg),
+		"message":       fmt.Sprintf("NetworkPolicy %s created: allow 0.0.0.0/0 except %s/32", policyName, attackerIP),
+	}, nil
+}
+
+// deployKubecost fetches the KubeCost manifest and applies it to the cluster.
+// Creates the kubecost namespace with managed-by: kodo label.
+func deployKubecost(clientset *kubernetes.Clientset, config AgentConfig, params map[string]interface{}) (map[string]interface{}, error) {
+	ctx := context.Background()
+	const kubecostNS = "kubecost"
+	const manifestURL = "https://raw.githubusercontent.com/kubecost/cost-analyzer-helm-chart/develop/kubecost.yaml"
+
+	// Create namespace if missing
+	_, err := clientset.CoreV1().Namespaces().Get(ctx, kubecostNS, metav1.GetOptions{})
+	if err != nil {
+		ns := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   kubecostNS,
+				Labels: map[string]string{"managed-by": "kodo"},
+			},
+		}
+		if _, err = clientset.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{}); err != nil {
+			return nil, fmt.Errorf("failed to create kubecost namespace: %v", err)
+		}
+		log.Printf("✅ Created namespace %s", kubecostNS)
+	}
+
+	// Fetch KubeCost manifest
+	httpClient := &http.Client{Timeout: 30 * time.Second}
+	resp, err := httpClient.Get(manifestURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch KubeCost manifest: %v", err)
+	}
+	defer resp.Body.Close()
+	manifestBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read KubeCost manifest: %v", err)
+	}
+
+	// Delegate to existing apply_manifests logic via params
+	applyParams := map[string]interface{}{
+		"migration_id": "kubecost-deploy",
+		"manifests": []map[string]interface{}{
+			{"content": string(manifestBytes), "namespace": kubecostNS},
+		},
+	}
+	result, err := applyManifests(clientset, applyParams)
+	if err != nil {
+		return nil, fmt.Errorf("failed to apply KubeCost manifests: %v", err)
+	}
+
+	// Update detection cache
+	kubecostMu.Lock()
+	kubecostBaseURL = "http://kubecost-cost-analyzer.kubecost:9090"
+	kubecostMu.Unlock()
+
+	if result == nil {
+		result = make(map[string]interface{})
+	}
+	result["kubecost_namespace"] = kubecostNS
+	result["manifest_url"] = manifestURL
+	result["status"] = "deploying"
+	result["message"] = "KubeCost manifests applied. Pods are starting — data will appear in FinOps within ~5 minutes."
+	return result, nil
 }
 
 // ---------------------------------------------
