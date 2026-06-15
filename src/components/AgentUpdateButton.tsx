@@ -105,6 +105,9 @@ export function AgentUpdateButton() {
       if (!latestVersion) return;
 
       const cmp = (v1: string, v2: string) => {
+        // 'dev' and 'unknown' are always considered outdated
+        if (!v1 || v1 === "dev" || v1 === "unknown") return -1;
+        if (!v2 || v2 === "unknown") return 0;
         const n = (v: string) => v.replace(/^v/, "").split(".").map(Number);
         const [a1, b1, c1] = n(v1), [a2, b2, c2] = n(v2);
         return a1 !== a2 ? a1 - a2 : b1 !== b2 ? b1 - b2 : c1 - c2;
@@ -113,6 +116,7 @@ export function AgentUpdateButton() {
       const needsUpdate = cmp(clusterData.agent_version, latestVersion.version) < 0;
 
       const releaseType = (cur: string, lat: string): "major" | "minor" | "patch" | null => {
+        if (!cur || cur === "dev" || cur === "unknown") return "patch";
         const n = (v: string) => v.replace(/^v/, "").split(".").map(Number);
         const [a1, b1] = n(cur), [a2, b2] = n(lat);
         return a1 !== a2 ? "major" : b1 !== b2 ? "minor" : "patch";

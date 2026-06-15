@@ -49,6 +49,7 @@ serve(async (req) => {
     // Clusters offline >2h will get the update command on next startup via agent-report-startup.
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
 
+    // Fetch clusters with outdated agents (includes 'dev'/'unknown' which are always outdated)
     const { data: outdatedClusters, error: clustersError } = await supabase
       .from('clusters')
       .select('id, name, user_id, agent_version, agent_last_seen_at')

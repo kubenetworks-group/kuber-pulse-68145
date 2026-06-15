@@ -95,6 +95,8 @@ jobs:
           load: true
           platforms: linux/amd64
           tags: kodo-agent-local:scan
+          build-args: |
+            VERSION=${{ github.ref_name }}
 
       # Scan image for OS + library CVEs before pushing
       - name: Scan image with Trivy
@@ -134,6 +136,8 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/kodo-agent:${{ github.ref_name }}
             ghcr.io/${{ github.repository_owner }}/kodo-agent:latest
+          build-args: |
+            VERSION=${{ github.ref_name }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -157,8 +161,10 @@ jobs:
         run: |
           VERSION="${{ github.ref_name }}"
           if [ -z "${SUPABASE_URL}" ] || [ -z "${ADMIN_API_KEY}" ]; then
-            echo "⚠️  Skipping: SUPABASE_URL or ADMIN_API_KEY secrets not configured."
-            exit 0
+            echo "::error::SUPABASE_URL or ADMIN_API_KEY secrets are not configured in this repository."
+            echo "::error::Go to Settings > Secrets and variables > Actions and add these secrets."
+            echo "::error::Without them, agent auto-update will NOT work for customers."
+            exit 1
           fi
           echo "📦 Publishing version ${VERSION} to Kodo backend..."
           RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "${SUPABASE_URL}/functions/v1/agent-publish-version" \
@@ -175,9 +181,10 @@ jobs:
           BODY=$(echo "$RESPONSE" | head -n-1)
           echo "Response (HTTP ${HTTP_CODE}): ${BODY}"
           if [ "$HTTP_CODE" != "200" ]; then
-            echo "⚠️  Backend responded with HTTP ${HTTP_CODE} — check ADMIN_API_KEY secret"
+            echo "::error::Backend responded with HTTP ${HTTP_CODE}. Check ADMIN_API_KEY value matches ADMIN_API_KEY env var in Supabase."
+            exit 1
           else
-            echo "✅ Version ${VERSION} published successfully"
+            echo "✅ Version ${VERSION} published — auto-update commands sent to all active clusters"
           fi
 
       - name: Security summary

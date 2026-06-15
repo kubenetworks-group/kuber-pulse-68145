@@ -82,18 +82,19 @@ serve(async (req) => {
 
     const latestVersion = latestVersionData?.version || 'unknown';
 
-    // Compare versions
+    // Compare versions — 'dev' and 'unknown' are always considered outdated
     const compareVersions = (v1: string, v2: string): number => {
+      if (!v1 || v1 === 'unknown' || v1 === 'dev') return -1;
+      if (!v2 || v2 === 'unknown') return 0;
       const normalize = (v: string) => v.replace(/^v/, '').split('.').map(Number);
       const [major1, minor1, patch1] = normalize(v1);
       const [major2, minor2, patch2] = normalize(v2);
-
       if (major1 !== major2) return major1 - major2;
       if (minor1 !== minor2) return minor1 - minor2;
       return patch1 - patch2;
     };
 
-    const needsUpdate = agentVersion !== 'unknown' && latestVersion !== 'unknown' &&
+    const needsUpdate = latestVersion !== 'unknown' &&
       compareVersions(agentVersion, latestVersion) < 0;
 
     return new Response(

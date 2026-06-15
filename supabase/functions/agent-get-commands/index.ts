@@ -192,29 +192,37 @@ serve(async (req) => {
       console.log(`♻️  Reset ${resetExecuting.length} stale executing commands: ${resetExecuting.map((c: any) => c.command_type).join(', ')}`);
     }
 
-    // Delete commands stuck >10 min (sent or pending) — unresolvable, clean up
-    // to avoid blocking the queue without needing an external broker (RabbitMQ etc).
-    const deleteThreshold = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-    const { data: deletedStale } = await supabaseClient
-      .from('agent_commands')
-      .delete()
-      .eq('cluster_id', cluster_id)
-      .in('status', ['sent', 'pending'])
-      .lt('created_at', deleteThreshold)
-      .select('id, command_type');
-
-    if (deletedStale && deletedStale.length > 0) {
-      console.log(`🗑️  Deleted ${deletedStale.length} stuck commands (>30 min): ${deletedStale.map((c: any) => c.command_type).join(', ')}`);
-    }
-
-    // Reset stale 'sent' commands (sent >5 min ago but never completed) back to pending
+    // Reset 'sent' commands stuck >5 min without completion back to pending.
+    // NOTE: we intentionally do NOT delete pending commands — they may have been queued
+    // while the agent was offline and should be delivered when it reconnects.
     const staleThreshold = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-    await supabaseClient
+    const { data: resetSent } = await supabaseClient
       .from('agent_commands')
       .update({ status: 'pending', executed_at: null })
       .eq('cluster_id', cluster_id)
       .eq('status', 'sent')
-      .lt('executed_at', staleThreshold);
+      .lt('executed_at', staleThreshold)
+      .select('id, command_type');
+
+    if (resetSent && resetSent.length > 0) {
+      console.log(`♻️  Reset ${resetSent.length} stale sent commands to pending: ${resetSent.map((c: any) => c.command_type).join(', ')}`);
+    }
+
+    // Clean up truly ancient commands (>24h) that are clearly abandoned,
+    // but preserve self_update commands which must survive long offline periods.
+    const ancientThreshold = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { data: deletedAncient } = await supabaseClient
+      .from('agent_commands')
+      .delete()
+      .eq('cluster_id', cluster_id)
+      .in('status', ['sent', 'pending'])
+      .not('command_type', 'in', '("self_update","agent_update")')
+      .lt('created_at', ancientThreshold)
+      .select('id, command_type');
+
+    if (deletedAncient && deletedAncient.length > 0) {
+      console.log(`🗑️  Deleted ${deletedAncient.length} ancient commands (>24h): ${deletedAncient.map((c: any) => c.command_type).join(', ')}`);
+    }
 
     // Get pending commands for this cluster (includes just-reset stale ones)
     const { data: commands, error: commandsError } = await supabaseClient
