@@ -9,7 +9,6 @@ import { CronJobsStatus } from "@/components/CronJobsStatus";
 import { ScanHistoryTab } from "@/components/ScanHistoryTab";
 import { AgentUpdateBanner } from "@/components/AgentUpdateBanner";
 import { AgentActivityPanel } from "@/components/AgentActivityPanel";
-import { AIActivityEmulator } from "@/components/AIActivityEmulator";
 import { useSecurityThreats } from "@/hooks/useSecurityThreats";
 import { Bot, Activity, CheckCircle, Shield, Zap, AlertCircle, History, ShieldAlert, Settings2, Clock, Server, AlertTriangle, RefreshCw, Search, FileText, Sliders, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -525,9 +524,6 @@ export default function AIMonitor() {
             />
           );
         })()}
-
-        {/* ── AI Activity Emulator ── */}
-        <AIActivityEmulator />
 
         {/* ── Tabs ── */}
         <Tabs defaultValue="anomalies" className="space-y-4">
