@@ -82,14 +82,14 @@ serve(async (req) => {
     for (const cluster of outdatedClusters) {
       console.log(`Processing cluster: ${cluster.name} (${cluster.id}) - current: ${cluster.agent_version}`);
 
-      // Check if there's already a pending update command for this cluster
+      // Check if there's already a pending or in-flight update command for this cluster
       const { data: existingCommand } = await supabase
         .from('agent_commands')
         .select('id')
         .eq('cluster_id', cluster.id)
         .eq('command_type', 'self_update')
-        .eq('status', 'pending')
-        .single();
+        .in('status', ['pending', 'sent'])
+        .maybeSingle();
 
       if (existingCommand) {
         console.log(`Cluster ${cluster.name} already has a pending update command`);

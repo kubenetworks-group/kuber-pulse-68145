@@ -4856,6 +4856,22 @@ func selfUpdate(clientset *kubernetes.Clientset, params map[string]interface{}) 
 	// Optional: new image tag
 	newImage, hasNewImage := params["new_image"].(string)
 
+	// Skip rollout if already on the target version (stale command re-delivered after reset)
+	if hasNewImage && newImage != "" && AgentVersion != "dev" {
+		parts := strings.Split(newImage, ":")
+		if len(parts) >= 2 {
+			targetVersion := parts[len(parts)-1]
+			if targetVersion == AgentVersion {
+				log.Printf("✅ Already on version %s, skipping self-update", AgentVersion)
+				return map[string]interface{}{
+					"action":  "skipped",
+					"reason":  "already_on_target_version",
+					"version": AgentVersion,
+				}, nil
+			}
+		}
+	}
+
 	log.Printf("🔄 Starting self-update for %s/%s (current version: %s)", namespace, deploymentName, AgentVersion)
 
 	// Get the deployment

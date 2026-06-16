@@ -130,20 +130,18 @@ serve(async (req) => {
     }
 
     // Queue self_update on startup if the agent is outdated.
-    // Check only for 'pending' (not 'sent') — a 'sent' command may be about to be
-    // reset to 'pending' by agent-get-commands, and we don't want to create a duplicate.
-    // We always upsert a fresh command so that even if an old one was deleted by cleanup,
-    // the agent will receive the update on this startup cycle.
+    // Check for both 'pending' and 'sent' — if a sent command exists, agent-get-commands
+    // will reset it to pending after 5 min, so we don't need to create a duplicate.
     if (updateStillNeeded && latestVersionData) {
-      const { data: existingPending } = await supabase
+      const { data: existingInFlight } = await supabase
         .from('agent_commands')
         .select('id')
         .eq('cluster_id', cluster_id)
         .in('command_type', ['self_update', 'agent_update'])
-        .eq('status', 'pending')
+        .in('status', ['pending', 'sent'])
         .maybeSingle();
 
-      if (!existingPending) {
+      if (!existingInFlight) {
         const { data: clusterRow } = await supabase
           .from('clusters')
           .select('user_id')
